@@ -1,0 +1,8 @@
+{
+  "name": "settings-dashboard-root",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "npm --prefix settings-dashboard run start",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
