@@ -11,7 +11,7 @@ RUN corepack enable
 
 # pnpm file first
 WORKDIR /app
-COPY mesh-dashboard/package.json /app/vnas-dashboard/
+COPY settings-dashboard/package.json /app/settings-dashboard/
 COPY dashboard-core/package.json /app/dashboard-core/
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /app/
 
