@@ -5,7 +5,7 @@ import {NextApiRequest, NextApiResponse} from "next";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.json({
-    message: 'You are authorized to access this route',
+    message: 'You are authorized',
   });
 }
 

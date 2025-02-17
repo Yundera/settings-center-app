@@ -34,6 +34,8 @@ try {
     Write-Host "Running the Docker container..."
     docker run -d `
     -p 4342:4321 `
+    -v ./compose:/app/compose `
+    -v /var/run/docker.sock:/var/run/docker.sock `
     --name $containerName $imageName
     #C:\Users\<YourUsername>\AppData\Local\Docker\wsl\data
     if ($LASTEXITCODE -ne 0) {

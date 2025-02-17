@@ -1,6 +1,6 @@
 // pages/api/core/[[...path]].ts
 import {NextApiRequest, NextApiResponse} from 'next';
-import {coreApiHandler} from "dashboard-core/backend/CoreApiHandler";
+import {coreApiHandler} from "dashboard-core/backend/config/CoreApiHandler";
 import {createHandlerConfig, genericApiHandler} from "dashboard-core/backend/ApiHandlerBuilder";
 
 export default async function handler(

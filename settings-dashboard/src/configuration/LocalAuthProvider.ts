@@ -1,18 +1,6 @@
 import {AuthProvider} from "ra-core";
 import axios from "axios";
-import {getConfig} from "@/configuration/getConfigBackend";
-
-/*(window as any).test = async ()=>{
-
-  const authToken = localStorage.getItem('authToken');
-  const headers = {
-    'Authorization': `Bearer ${authToken}`,
-    'Content-Type': 'application/json',
-  };
-  const response = await axios.post('/api/local/auth/protected-ping', {}, {
-    headers: headers
-  });
-}*/
+import {AuthProviderAPIAccess} from "dashboard-core/interface/AuthProviderAPIAccess";
 
 interface LocalUser{
   user: {
@@ -25,7 +13,7 @@ interface LocalUser{
   authToken: string
 }
 
-export const localAuthProvider : AuthProvider = {
+export const localAuthProvider : ( AuthProvider & AuthProviderAPIAccess)= {
   async listPermissions() {
     console.log('listPermissions');
     return {};
@@ -57,6 +45,19 @@ export const localAuthProvider : AuthProvider = {
     if (!localStorage.getItem('user')) {
       throw new Error('Not authenticated');
     }
+    // Prepare headers
+    const token = await this.getIdToken();
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+    const response = await axios.post('/api/local/auth/check-auth', {}, {
+      headers: headers
+    });
+    if(response.status !== 200){
+      localStorage.removeItem('user');//force user to login again
+      throw new Error('Not authenticated');
+    }
   },
   async logout() {
     localStorage.removeItem('user');
@@ -71,5 +72,9 @@ export const localAuthProvider : AuthProvider = {
       role: user.user.role,
       authToken: user.authToken
     };
+  },
+  async getIdToken(): Promise<string> {
+    const user = JSON.parse(localStorage.getItem('user') || '{user:{}}') as LocalUser;
+    return user.authToken;
   }
 };

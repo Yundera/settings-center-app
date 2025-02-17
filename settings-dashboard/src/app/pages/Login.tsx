@@ -8,7 +8,6 @@ import {Form, required, TextInput, useLogin, useNotify, useTranslate,} from 'rea
 export const Login = () => {
     const [loading, setLoading] = useState(false);
     const translate = useTranslate();
-    const navigate = useNavigate();
 
     const notify = useNotify();
     const login = useLogin();
