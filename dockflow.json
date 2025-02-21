@@ -1,5 +1,5 @@
 {
+  "registry": "nasselle",
   "image": "settings-center-app",
-  "registry": "rg.fr-par.scw.cloud/aptero",
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

@@ -1,116 +1,85 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Typography, CircularProgress, Alert, Stack, List, ListItem, ListItemText } from "@mui/material";
+import React from 'react';
+import { styled } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Grid from '@mui/material/Grid2';
+import Typography from '@mui/material/Typography';
 import { PageContainer } from "dashboard-core";
-import { apiRequest } from "@/core/authApi";
+import { Update } from "@/component/Update";
+import { YunderaDashboard } from "@/component/YunderaDahsboard";
 
-interface ImageUpdate {
-  image: string;
-  currentDigest: string;
-  availableDigest: string;
-}
-
-interface UpdateStatus {
-  updatesAvailable: boolean;
-  images: ImageUpdate[];
-}
+// Styled Item component for consistent styling across grid items
+const Item = styled(Paper)(({ theme }) => ({
+    backgroundColor: '#fff',
+    ...theme.typography.body2,
+    padding: theme.spacing(2),
+    color: theme.palette.text.secondary,
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    ...theme.applyStyles?.('dark', {
+        backgroundColor: '#1A2027',
+    }),
+}));
 
 export const Dashboard: React.FC = () => {
-  const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<boolean>(false);
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+    return (
+        <PageContainer>
+            <Typography variant="h4" gutterBottom>
+                Dashboard Overview
+            </Typography>
 
-  const checkUpdates = async () => {
-    setChecking(true);
-    setError(null);
+            <Box sx={{ flexGrow: 1 }}>
+                <Grid container spacing={2}>
+                    {/* First module - Updates */}
+                    <Grid size={4}>
+                        <Item>
+                            <Typography variant="h6" gutterBottom>
+                                Updates
+                            </Typography>
+                            <Box sx={{ flexGrow: 1 }}>
+                                <Update />
+                            </Box>
+                        </Item>
+                    </Grid>
 
-    try {
-      const response = await apiRequest<UpdateStatus>("/api/admin/docker-compose-update-check", "GET");
-      setUpdateStatus(response);
-    } catch (err: any) {
-      setError(err.message || "Failed to check for updates");
-    } finally {
-      setChecking(false);
-    }
-  };
+                    {/* Second module - Yundera Dashboard */}
+                    <Grid size={8}>
+                        <Item>
+                            <Typography variant="h6" gutterBottom>
+                                Yundera Dashboard
+                            </Typography>
+                            <Box sx={{ flexGrow: 1 }}>
+                                <YunderaDashboard />
+                            </Box>
+                        </Item>
+                    </Grid>
 
-  const handleUpdate = async () => {
-    setLoading(true);
-    setError(null);
-    setSuccess(false);
-
-    try {
-      await apiRequest("/api/admin/docker-compose-update", "POST");
-      setSuccess(true);
-      await checkUpdates(); // Refresh update status
-    } catch (err: any) {
-      setError(err.message || "Update failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    checkUpdates();
-  }, []);
-
-  return (
-    <PageContainer>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Updates
-      </Typography>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {success && <Alert severity="success" sx={{ mb: 2 }}>Update successful!</Alert>}
-
-      <Stack spacing={2}>
-        {updateStatus && (
-          <Alert
-            severity={updateStatus.updatesAvailable ? "warning" : "success"}
-            sx={{ mb: 2 }}
-          >
-            {updateStatus.updatesAvailable
-              ? "Updates available for the following images:"
-              : "All images are up to date"}
-          </Alert>
-        )}
-
-        {updateStatus?.updatesAvailable && (
-          <List>
-            {updateStatus.images.map((imageUpdate, index) => (
-              <ListItem key={index}>
-                <ListItemText
-                  primary={imageUpdate.image}
-                  secondary={
-                    <>
-                      Current: {imageUpdate.currentDigest === 'local-not-found' ? 'Not found locally' : imageUpdate.currentDigest}
-                      <br />
-                      Available: {imageUpdate.availableDigest}
-                    </>
-                  }
-                />
-              </ListItem>
-            ))}
-          </List>
-        )}
-
-        <Stack direction="row" spacing={2}>
-          { loading || checking ? <CircularProgress size={24} /> : <>
-          <Button
-            variant="outlined"
-            onClick={checkUpdates}
-            disabled={checking}
-          >Check Updates</Button>
-
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handleUpdate}
-            disabled={!updateStatus?.updatesAvailable}
-          >Apply Updates</Button></>}
-        </Stack>
-      </Stack>
-    </PageContainer>
-  );
+                    {/* You can add more grid items following the pattern in your example */}
+                    {/* For example:
+          <Grid size={8}>
+            <Item>
+              <Typography variant="h6" gutterBottom>
+                Another Module
+              </Typography>
+              <Box sx={{ flexGrow: 1 }}>
+                Content here
+              </Box>
+            </Item>
+          </Grid>
+          <Grid size={4}>
+            <Item>
+              <Typography variant="h6" gutterBottom>
+                Yet Another Module
+              </Typography>
+              <Box sx={{ flexGrow: 1 }}>
+                Content here
+              </Box>
+            </Item>
+          </Grid>
+          */}
+                </Grid>
+            </Box>
+        </PageContainer>
+    );
 };

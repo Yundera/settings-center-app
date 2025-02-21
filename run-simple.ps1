@@ -33,7 +33,7 @@ try {
     # Run the Docker container
     Write-Host "Running the Docker container..."
     docker run -d `
-    -p 4342:4321 `
+    -p 4342:80 `
     -v ./compose:/app/compose `
     -v /var/run/docker.sock:/var/run/docker.sock `
     --name $containerName $imageName

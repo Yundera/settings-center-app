@@ -13,7 +13,6 @@ RUN curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
 #same version as the one in CasaOS-UI package.json
 RUN corepack enable && corepack prepare pnpm@9.0.6 --activate
 
-
 # pnpm file first
 WORKDIR /app
 COPY settings-dashboard/package.json /app/settings-dashboard/
