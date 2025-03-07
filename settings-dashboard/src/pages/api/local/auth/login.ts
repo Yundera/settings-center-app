@@ -72,6 +72,15 @@ interface LoginResponse {
   authToken: string;
 }
 
+export function getAuthority(host:string):string{
+  if(getConfig("AUTHORITY_ENDPOINT")) {
+    return getConfig("AUTHORITY_ENDPOINT");
+  }
+  //return `https://${host.replace('admin-', 'casaos-')}`;//final
+  //return `https://${host.replace('admin-', '8080-casaos-')}`;
+  return `https://${host.replace('admin-', '')}`;//temp
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -88,8 +97,8 @@ export default async function handler(
         message: 'Username and password are required'
       });
     }
-
-    const authorityEndpoint = `${getConfig("AUTHORITY_ENDPOINT")}/login`;
+    const host = req.headers.host || '';
+    const authorityEndpoint = `${getAuthority(host)}/login`;
     if (!authorityEndpoint) {
       throw new Error('Authority endpoint not configured');
     }
@@ -113,7 +122,7 @@ export default async function handler(
           id: username,
           fullName: user.nickname || username,
           email: user.email,
-          avatar: `${getConfig("AUTHORITY_ENDPOINT")}/avatar?token=${avatarAccessToken}`,
+          avatar: `${getAuthority(host)}/avatar?token=${avatarAccessToken}`,
           role: user.role
         },
         authToken
