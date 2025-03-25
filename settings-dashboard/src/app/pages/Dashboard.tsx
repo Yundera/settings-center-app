@@ -2,7 +2,7 @@ import React from 'react';
 import { styled } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { PageContainer } from "dashboard-core";
 import { Update } from "@/component/Update";
@@ -30,21 +30,9 @@ export const Dashboard: React.FC = () => {
             </Typography>
 
             <Box sx={{ flexGrow: 1 }}>
-                <Grid container spacing={2}>
-                    {/* First module - Updates */}
-                    <Grid size={4}>
-                        <Item>
-                            <Typography variant="h6" gutterBottom>
-                                Updates
-                            </Typography>
-                            <Box sx={{ flexGrow: 1 }}>
-                                <Update />
-                            </Box>
-                        </Item>
-                    </Grid>
-
+                <Grid container spacing={2} direction="column">
                     {/* Second module - Yundera Dashboard */}
-                    <Grid size={8}>
+                    <Grid item xs={12}>
                         <Item>
                             <Typography variant="h6" gutterBottom>
                                 Yundera Dashboard
@@ -55,29 +43,41 @@ export const Dashboard: React.FC = () => {
                         </Item>
                     </Grid>
 
+                    {/* First module - Updates */}
+                    <Grid item xs={12}>
+                        <Item>
+                            <Typography variant="h6" gutterBottom>
+                                Updates
+                            </Typography>
+                            <Box sx={{ flexGrow: 1 }}>
+                                <Update />
+                            </Box>
+                        </Item>
+                    </Grid>
+
                     {/* You can add more grid items following the pattern in your example */}
                     {/* For example:
-          <Grid size={8}>
-            <Item>
-              <Typography variant="h6" gutterBottom>
-                Another Module
-              </Typography>
-              <Box sx={{ flexGrow: 1 }}>
-                Content here
-              </Box>
-            </Item>
-          </Grid>
-          <Grid size={4}>
-            <Item>
-              <Typography variant="h6" gutterBottom>
-                Yet Another Module
-              </Typography>
-              <Box sx={{ flexGrow: 1 }}>
-                Content here
-              </Box>
-            </Item>
-          </Grid>
-          */}
+                    <Grid item xs={12}>
+                        <Item>
+                            <Typography variant="h6" gutterBottom>
+                                Another Module
+                            </Typography>
+                            <Box sx={{ flexGrow: 1 }}>
+                                Content here
+                            </Box>
+                        </Item>
+                    </Grid>
+                    <Grid item xs={12}>
+                        <Item>
+                            <Typography variant="h6" gutterBottom>
+                                Yet Another Module
+                            </Typography>
+                            <Box sx={{ flexGrow: 1 }}>
+                                Content here
+                            </Box>
+                        </Item>
+                    </Grid>
+                    */}
                 </Grid>
             </Box>
         </PageContainer>
