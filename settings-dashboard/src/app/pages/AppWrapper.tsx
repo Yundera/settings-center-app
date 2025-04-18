@@ -9,10 +9,9 @@ import {
   UserMenu,
   useStore
 } from 'react-admin';
-import {CustomRoutes} from "ra-core";
+import {AuthProvider, CustomRoutes} from "ra-core";
 import {
   appConfigContext,
-  EmailAuthProviderInterface,
   i18nProvider,
   PanelInterface,
   Logo,
@@ -26,7 +25,7 @@ import {Login} from "@/app/pages/Login";
 interface AppProps {
   children?: ReactNode;
   dashboard: React.ComponentType<any>;
-  authProvider: EmailAuthProviderInterface;
+  authProvider: AuthProvider;
   dataProvider: DataProvider;
   themeList: Theme[];
   panels: PanelInterface[];

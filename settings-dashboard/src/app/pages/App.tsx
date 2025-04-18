@@ -9,20 +9,19 @@ import {
   radiantDarkTheme,
   radiantLightTheme
 } from 'react-admin';
-import {
-  EmailAuthProviderInterface,
-} from 'dashboard-core';
 import {softDarkTheme, softLightTheme} from "@/app/pages/softTheme";
 import {Dashboard} from "@/app/pages/Dashboard";
 import {AppWrapper} from "@/app/pages/AppWrapper";
+import {securityPanel} from "@/panels/security/Config";
+import {AuthProvider} from "ra-core";
 
 const MyApp = ({authProvider, dataProvider, permissions}: {
-  authProvider: EmailAuthProviderInterface,
+  authProvider:AuthProvider,
   dataProvider: any,
   permissions: Record<string, boolean>
 }) => {
 
-  let availablePanels: any[] = []
+  let availablePanels: any[] = [securityPanel]
   let panels: any[] = [];
   for (const availablePanel of availablePanels) {
     if (availablePanel.permissions && !!permissions[availablePanel.permissions]) {
