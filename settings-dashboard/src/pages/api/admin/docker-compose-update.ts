@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { authMiddleware } from "@/backend/auth/middleware";
-import { execute } from "@/backend/cmd/executor";
+import { execute } from "@/backend/cmd/Executor";
 import { getConfig } from "@/configuration/getConfigBackend";
 
 async function handler(

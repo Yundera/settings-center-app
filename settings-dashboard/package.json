@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "start": "next dev -p 4342",
+    "start": "tsx server.ts",
     "build": "next build",
-    "prod": "next start -p 80 -H 0.0.0.0",
+    "prod": "NODE_ENV=production tsx server.ts",
     "lint": "next lint"
   },
   "dependencies": {
@@ -39,6 +39,7 @@
     "react-hook-form": "^7.53.1",
     "react-router": "^6.27.0",
     "react-router-dom": "^6.27.0",
+    "tsx": "^4.19.4",
     "typescript": "^5.6.3"
   },
   "devDependencies": {
