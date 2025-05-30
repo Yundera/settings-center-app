@@ -9,12 +9,14 @@ services:
     environment:
       AUTHORITY_ENDPOINT: "https://8080-casaos-%DOMAIN%/v1/users"
     volumes:
+      # This gives the admin app ssh root access (used to update the system)
+      - type: bind
+        source: /root/.ssh/authorized_keys
+        target: /host_authorized_keys
+      # This gives the admin app access to its own data (used to update itself)
       - type: bind
         source: /DATA/AppData/casaos/apps/yundera/
-        target: /app/compose
-      - type: bind
-        source: /var/run/docker.sock
-        target: /var/run/docker.sock
+        target: /app/data
     expose:
       - "80"
     networks:

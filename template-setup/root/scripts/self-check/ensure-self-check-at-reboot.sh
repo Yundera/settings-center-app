@@ -1,0 +1,23 @@
+#!/bin/bash
+# Script to ensure @reboot cron job is configured
+
+set -e  # Exit on any error
+
+remoteFolder="/DATA/AppData/casaos/apps/yundera/scripts"
+scriptFile="$remoteFolder/self-check-os.sh"
+CRON_ENTRY="@reboot $scriptFile"
+
+# Check if cron job already exists
+if crontab -l 2>/dev/null | grep -q "$scriptFile"; then
+    echo "@reboot cron job exists"
+else
+    echo "Adding @reboot cron job for start.sh"
+
+    # Add the cron job
+    if (crontab -l 2>/dev/null || echo "") | { cat; echo "$CRON_ENTRY"; } | crontab -; then
+        echo "@reboot cron job added successfully"
+    else
+        echo "ERROR: Failed to add @reboot cron job"
+        exit 1
+    fi
+fi

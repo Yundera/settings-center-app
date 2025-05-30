@@ -9,9 +9,6 @@ ENV NEXT_PUBLIC_BASE_PATH=$BASE_PATH
 
 RUN apt update && apt install -y iproute2
 
-# install docker https://docs.docker.com/engine/install/ubuntu/
-RUN curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
-
 #same version as the one in CasaOS-UI package.json
 RUN corepack enable && corepack prepare pnpm@9.0.6 --activate
 

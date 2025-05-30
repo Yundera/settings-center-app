@@ -1,5 +1,4 @@
 #!/bin/bash
-echo "Step 4: Cleaning image for template use"
 
 set -e  # Exit on any error
 
@@ -49,8 +48,3 @@ history -c
 
 # Log successful execution
 echo "$(date): os-init-cleanup executed successfully" >> "/DATA/AppData/casaos/apps/yundera/yundera.log"
-
-echo "===== VM preparation complete ====="
-echo "The VM is now configured to support vertical scaling (CPU and RAM hotplug)."
-echo "You can now shut down this VM and convert it to a template using the Proxmox GUI."
-echo "Note: After cloning a VM from this template, you must run 'sudo dpkg-reconfigure openssh-server' to generate new SSH host keys."

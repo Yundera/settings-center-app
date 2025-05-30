@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -e
+
+SCRIPT_DIR="/DATA/AppData/casaos/apps/yundera/scripts"
+source ${SCRIPT_DIR}/library/common.sh
+
+mkdir -p /DATA/AppData/casaos/apps/yundera/scripts
+chown -R pcs:pcs /DATA/AppData/casaos/apps/yundera/scripts
+echo "" > ${LOG_FILE}
+chown pcs:pcs ${LOG_FILE}
+
+log "=== Template-init Starting ==="
+
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root" >&2
+    exit 1
+fi
+
+# Make scripts executable
+chmod +x $SCRIPT_DIR/tools/make-executable.sh
+execute_script_with_logging $SCRIPT_DIR/tools/make-executable.sh
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-pcs-user.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-data-partition.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-data-partition-size.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-ubuntu-up-to-date.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-common-tools-installed.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-ssh.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-qemu-agent.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-vm-scalable.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-swap.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-self-check-at-reboot.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-docker-installed.sh;
+
+# those script are user specific and should not be called in template init (keep this comments)
+#$SCRIPT_DIR/self-check/ensure-user-docker-compose-updated.sh;
+#$SCRIPT_DIR/self-check/ensure-user-compose-stack-up.sh
+
+log "=== Template-init completed successfully ==="

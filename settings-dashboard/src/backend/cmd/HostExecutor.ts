@@ -18,7 +18,6 @@ async function detectHostIP(): Promise<string> {
         const hostIP = result.stdout.trim();
 
         if (hostIP && hostIP.match(/^\d+\.\d+\.\d+\.\d+$/)) {
-            console.log(`Detected host IP: ${hostIP}`);
             return hostIP;
         }
 
@@ -31,12 +30,10 @@ async function detectHostIP(): Promise<string> {
             const networkParts = dockerNetwork.split('/')[0].split('.');
             networkParts[3] = '1';
             const gatewayIP = networkParts.join('.');
-            console.log(`Detected host IP via docker0: ${gatewayIP}`);
             return gatewayIP;
         }
 
         // Last resort fallback
-        console.warn('Could not detect host IP, falling back to host.docker.internal');
         return 'host.docker.internal';
 
     } catch (error) {
@@ -107,8 +104,6 @@ export async function executeHostCommand(
             host = 'host.docker.internal'; // fallback
         }
 
-        console.log(`Connecting to host: ${host}`);
-
         // Ensure the private key has correct permissions
         await execute(`chmod 600 ${keyPath}`);
 
@@ -130,8 +125,7 @@ export async function executeHostCommand(
         return result;
 
     } catch (error) {
-        console.error('Error executing host command:', error);
-        throw new Error(`Failed to execute host command: ${error}`);
+        throw new Error(`Failed to execute host command: ${ error.message || error}`);
     }
 }
 
