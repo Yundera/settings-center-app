@@ -2,6 +2,7 @@ import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import {getConfig} from "@/configuration/getConfigBackend";
 
 interface SelfCheckResult {
     success: boolean;
@@ -24,7 +25,7 @@ let selfCheckStatus: SelfCheckStatus = {
     scripts: {}
 };
 
-const SCRIPT_DIR = '/app/data/scripts';
+const REMOTE_SCRIPT_DIR = `${getConfig("COMPOSE_FOLDER_PATH")}/scripts`;
 const REFERENCE_DIR = '/app/template-setup/root';
 const TARGET_DIR = '/app/data';
 const IGNORE_FILE = path.join(TARGET_DIR, '.ignore');
@@ -64,7 +65,7 @@ export async function runSelfCheck(): Promise<void> {
     console.log('Starting self-check process...');
 
     for (const scriptName of SELF_CHECK_SCRIPTS) {
-        const scriptPath = path.join(SCRIPT_DIR, 'self-check', scriptName);
+        const scriptPath = path.join(REMOTE_SCRIPT_DIR, 'self-check', scriptName);
         const startTime = Date.now();
 
         try {

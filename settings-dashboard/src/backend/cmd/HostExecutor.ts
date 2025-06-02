@@ -1,10 +1,11 @@
 import { execute } from "@/backend/cmd/Executor";
 import { promises as fs } from 'fs';
 import path from 'path';
+import {getConfig} from "@/configuration/getConfigBackend";
 
 const adminKeyComment = 'local-admin-access';
-const defaultAuthorizedKeysPath = '/host_authorized_keys';
-const defaultPrivateKeyPath = './container_ssh_key';
+const defaultAuthorizedKeysPath = '/host_ssh/authorized_keys';
+const defaultPrivateKeyPath = '/app/container_ssh_key';
 const defaultHostUser = 'root';
 
 /**
@@ -12,9 +13,12 @@ const defaultHostUser = 'root';
  * @returns Promise<string> - Host IP address
  */
 async function detectHostIP(): Promise<string> {
+    if(getConfig("HOST_ADDRESS")){
+        return getConfig("HOST_ADDRESS");
+    }
     try {
         // Try to get the default gateway IP (works on Linux)
-        const result = await execute("ip route show default | awk '/default/ {print $3}'");
+        const result = await execute("ip route show default | awk '/default/ {print $3}'",false);
         const hostIP = result.stdout.trim();
 
         if (hostIP && hostIP.match(/^\d+\.\d+\.\d+\.\d+$/)) {
@@ -22,7 +26,7 @@ async function detectHostIP(): Promise<string> {
         }
 
         // Fallback: try to parse docker0 interface
-        const dockerResult = await execute("ip route | grep docker0 | awk '{print $1}' | head -1");
+        const dockerResult = await execute("ip route | grep docker0 | awk '{print $1}' | head -1",false);
         const dockerNetwork = dockerResult.stdout.trim();
 
         if (dockerNetwork) {
@@ -54,7 +58,7 @@ export async function generateSSHKey(): Promise<{publicKey: string, privateKeyPa
         // Execute ssh-keygen command
         const sshKeygenCmd = `ssh-keygen -t ed25519 -f ${defaultPrivateKeyPath} -N "${passphrase}" -C "${adminKeyComment}-$(date +%s)"`;
 
-        await execute(sshKeygenCmd);
+        await execute(sshKeygenCmd,false);
 
         // Read the generated public key
         const publicKeyContent = await fs.readFile(`${defaultPrivateKeyPath}.pub`, 'utf8');
@@ -105,14 +109,14 @@ export async function executeHostCommand(
         }
 
         // Ensure the private key has correct permissions
-        await execute(`chmod 600 ${keyPath}`);
+        await execute(`chmod 600 ${keyPath}`,false);
 
         // SSH command with options
         const sshCmd = [
             'ssh',
             '-i', keyPath,
             '-o', 'StrictHostKeyChecking=no',
-            '-o', 'UserKnownHostsFile=/dev/null',
+            //'-o', 'UserKnownHostsFile=/dev/null',
             '-o', `ConnectTimeout=${Math.floor(timeout / 1000)}`,
             '-o', 'BatchMode=yes',
             `${user}@${host}`,
@@ -120,12 +124,12 @@ export async function executeHostCommand(
         ].join(' ');
 
         // Execute the SSH command
-        const result = await execute(sshCmd);
+        const result = await execute(sshCmd,false);
 
         return result;
 
     } catch (error) {
-        throw new Error(`Failed to execute host command: ${ error.message || error}`);
+        throw new Error(`Failed to execute host command "${command}" : ${ error.message || error}`);
     }
 }
 
@@ -144,7 +148,6 @@ export async function testSSHConnection(options?: {
         const result = await executeHostCommand('echo "SSH connection test successful"', options);
         return result.stdout.includes('SSH connection test successful');
     } catch (error) {
-        console.error('SSH connection test failed:', error);
         return false;
     }
 }
@@ -257,6 +260,45 @@ export async function clearAdminKeysOnly(options?: {
 }
 
 /**
+ * Waits for SSH connection to be established with retry logic
+ * @param options - Configuration options
+ * @returns Promise<void> - Resolves when connection is successful
+ * @throws Error if connection fails after all retries
+ */
+export async function waitForSSHConnection(options?: {
+    host?: string;
+    user?: string;
+    keyPath?: string;
+    autoDetectHost?: boolean;
+    maxRetries?: number;
+    retryDelay?: number; // in milliseconds
+}): Promise<void> {
+    const {
+        maxRetries = 10,
+        retryDelay = 2000, // 2 seconds
+        ...sshOptions
+    } = options || {};
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`Attempting SSH connection (${attempt}/${maxRetries})...`);
+
+        const isConnected = await testSSHConnection(sshOptions);
+
+        if (isConnected) {
+            console.log(`SSH connection established successfully on attempt ${attempt}`);
+            return;
+        }
+
+        if (attempt < maxRetries) {
+            console.log(`SSH connection failed, retrying in ${retryDelay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+    }
+
+    throw new Error(`Failed to establish SSH connection after ${maxRetries} attempts`);
+}
+
+/**
  * Complete workflow to generate key and setup SSH access
  * This automatically cleans up existing admin keys before adding the new one
  */
@@ -268,13 +310,11 @@ export async function initializeSSHAccess(): Promise<void> {
         // Step 2: Setup SSH access (includes cleanup of existing admin keys)
         await setupSSHAccess(publicKey, { cleanupExisting: true });
 
-        // Step 3: Test the connection
-        const connectionTest = await testSSHConnection();
-        if (connectionTest) {
-            console.log('SSH access initialized and tested successfully');
-        } else {
-            console.warn('SSH access initialized but connection test failed');
-        }
+        // Step 3: Test the connection Wait for SSH connection to be established
+        await waitForSSHConnection({
+            maxRetries: 100,
+            retryDelay: 3000 // 3 seconds between retries
+        });
 
     } catch (error) {
         console.error('Failed to initialize SSH access:', error);

@@ -18,6 +18,11 @@ echo "Starting data partition setup script..."
 # Change to root directory to avoid issues if script is run from /DATA
 cd /
 
+if [ -f /.dockerenv ]; then
+    echo "Inside Docker - dev environment detected. Skipping setup."
+    exit 42
+fi
+
 # Install rsync only if not already present
 command -v rsync &> /dev/null || {
     echo "Installing rsync..."

@@ -1,54 +1,30 @@
 # Define variables
-$imageName = "settings-app"
-$containerName = "settings-dev"
-$dockerfilePath = "./"
-$originalPath = Get-Location
+$composePath = "./dev/run"
 
-# Change to the Dockerfile directory
-Push-Location $dockerfilePath
+# Change to the compose directory
+Push-Location $composePath
 
 try {
-    # Build the Docker image
-    Write-Host "Building the Docker image..."
-    docker build -t $imageName .
+    Write-Host "Starting Docker Compose services..."
+
+    # Stop and remove existing containers and volumes
+    # docker-compose down -v
+
+    # Build and run the services
+    docker-compose up -d --build
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Docker build failed. Exiting."
+        throw "Docker Compose failed. Exiting."
     }
 
-    # Check if a container with the same name is already running
-    Write-Host "Checking for existing container..."
-    $existingContainer = docker ps -aq --filter "name=$containerName"
-
-    if ($existingContainer) {
-        Write-Host "Stopping and removing existing container..."
-        docker stop $containerName
-        docker rm $containerName
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to stop and remove existing container. Exiting."
-        }
-    }
-
-    # Run the Docker container
-    Write-Host "Running the Docker container..."
-    docker run -d `
-    -p 4342:80 `
-    -v ./compose:/app/compose `
-    -v /var/run/docker.sock:/var/run/docker.sock `
-    --name $containerName $imageName
-    #C:\Users\<YourUsername>\AppData\Local\Docker\wsl\data
-    if ($LASTEXITCODE -ne 0) {
-        throw "Docker run failed. Exiting."
-    }
-
-    Write-Host "Docker container $containerName is up and running."
+    Write-Host "Docker Compose services are up and running."
+    Write-Host "Main app available at: http://localhost:4342"
 }
 catch {
-    Write-Host $_
+    Write-Host "Error: $_"
     exit $LASTEXITCODE
 }
 finally {
-    # Ensure to return to the original path
+    # Return to original path
     Pop-Location
 }

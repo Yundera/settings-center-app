@@ -4,6 +4,11 @@ set -e
 
 # Install and configure OpenSSH server
 
+if [ -f /.dockerenv ]; then
+    echo "Inside Docker - dev environment detected. Skipping setup."
+    exit 42
+fi
+
 # Install openssh-server only if not already installed
 dpkg-query -W openssh-server >/dev/null 2>&1 || apt-get install -qq -y openssh-server
 

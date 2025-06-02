@@ -34,7 +34,7 @@ execute_script_with_logging $SCRIPT_DIR/self-check/ensure-self-check-at-reboot.s
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-docker-installed.sh;
 
 # those script are user specific and should not be called in template init (keep this comments)
-#$SCRIPT_DIR/self-check/ensure-user-docker-compose-updated.sh;
-#$SCRIPT_DIR/self-check/ensure-user-compose-stack-up.sh
+#$SCRIPT_DIR/self-check/ensure-user-docker-dev-updated.sh;
+#$SCRIPT_DIR/self-check/ensure-user-dev-stack-up.sh
 
 log "=== Template-init completed successfully ==="

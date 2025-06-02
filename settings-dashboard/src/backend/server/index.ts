@@ -1,4 +1,9 @@
-import {executeHostCommand, initializeSSHAccess, listAuthorizedKeys} from "@/backend/cmd/HostExecutor";
+import {
+    executeHostCommand,
+    initializeSSHAccess,
+    listAuthorizedKeys,
+    waitForSSHConnection
+} from "@/backend/cmd/HostExecutor";
 import cron from 'node-cron';
 import {checkForUpdates, dockerUpdate} from "@/backend/server/DockerUpdate";
 import {checkSelfIntegrity, runSelfCheck} from "@/backend/server/SelfCheck";
@@ -38,5 +43,4 @@ export async function start() {
     cron.schedule('0 3 * * *', async ()=> {
         await check();
     });
-
 }

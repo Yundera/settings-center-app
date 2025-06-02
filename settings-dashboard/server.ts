@@ -23,8 +23,10 @@ app.prepare().then(async () => {
     await start();
 
     server.listen(port, hostname, () => {
+        console.log('####################################################');
         console.log(`> Server ready on http://${hostname}:${port}`)
         console.log(`> Environment: ${dev ? 'development' : 'production'}`)
+        console.log('####################################################');
     })
 }).catch((error) => {
     console.error('Error starting server:', error)

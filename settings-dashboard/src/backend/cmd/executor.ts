@@ -1,8 +1,10 @@
 import { spawn } from 'child_process';
 import { Readable } from 'stream';
 
-export async function execute(cmd: string): Promise<{ stdout: string, stderr: string }> {
-    console.log(`Executing command: ${cmd}`);
+export async function execute(cmd: string,verbose=true): Promise<{ stdout: string, stderr: string }> {
+    if(verbose){
+        console.log(`Executing command: ${cmd}`);
+    }
 
     const child = spawn('/bin/sh', ['-c', cmd]);
 
@@ -25,7 +27,9 @@ export async function execute(cmd: string): Promise<{ stdout: string, stderr: st
             for await (const chunk of child.stdout) {
                 const text = chunk.toString();
                 stdout += text;
-                process.stdout.write(text);
+                if(verbose) {
+                    process.stdout.write(text);
+                }
             }
         })(),
         // Process stderr
@@ -33,7 +37,9 @@ export async function execute(cmd: string): Promise<{ stdout: string, stderr: st
             for await (const chunk of child.stderr) {
                 const text = chunk.toString();
                 stderr += text;
-                process.stderr.write(text);
+                if(verbose) {
+                    process.stderr.write(text);
+                }
             }
         })()
     ]);

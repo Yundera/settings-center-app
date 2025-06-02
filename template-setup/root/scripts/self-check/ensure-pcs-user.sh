@@ -7,6 +7,8 @@ set -e
 
 USER_NAME="pcs"
 
+dpkg-query -W sudo >/dev/null 2>&1 || apt-get install -qq -y sudo
+
 # Create user if it doesn't exist
 if ! id "$USER_NAME" &>/dev/null; then
     sudo useradd -m -s /bin/bash "$USER_NAME"

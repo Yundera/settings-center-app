@@ -4,6 +4,11 @@ set -e
 
 # Script to ensure swap is configured properly
 
+if [ -f /.dockerenv ]; then
+    echo "Inside Docker - dev environment detected. Skipping setup."
+    exit 42
+fi
+
 SWAP_FILE="/swap.img"
 SWAP_SIZE="4G"
 SWAPPINESS_VALUE="10"

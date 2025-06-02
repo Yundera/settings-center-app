@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Define SSH config file path
+SSH_CONFIG="/etc/ssh/sshd_config"
+
 # Update SSH config to disable password authentication
 sed -i 's/^#*PasswordAuthentication yes/PasswordAuthentication no/' "$SSH_CONFIG"
 sed -i 's/^#*ChallengeResponseAuthentication yes/ChallengeResponseAuthentication no/' "$SSH_CONFIG"

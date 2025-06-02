@@ -3,6 +3,11 @@
 
 set -e  # Exit on any error
 
+if [ -f /.dockerenv ]; then
+    echo "Inside Docker - dev environment detected. Skipping setup."
+    exit 42
+fi
+
 remoteFolder="/DATA/AppData/casaos/apps/yundera/scripts"
 scriptFile="$remoteFolder/self-check-os.sh"
 CRON_ENTRY="@reboot $scriptFile"

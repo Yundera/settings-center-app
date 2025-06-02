@@ -5,6 +5,7 @@ type Config = {
   JWT_SECRET: string;
   AUTHORITY_ENDPOINT: string;
   COMPOSE_FOLDER_PATH: string;
+  HOST_ADDRESS: string; //optional, used for host commands
   MOCK: string;
 } & BaseConfig;
 

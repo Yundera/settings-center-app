@@ -5,6 +5,11 @@ set -e
 # Ensure QEMU Guest Agent Script
 # This script ensures QEMU guest agent is installed and running
 
+if [ -f /.dockerenv ]; then
+    echo "Inside Docker - dev environment detected. Skipping setup."
+    exit 42
+fi
+
 # Install QEMU guest agent
 dpkg-query -W qemu-guest-agent >/dev/null 2>&1 || apt-get install -qq -y qemu-guest-agent
 

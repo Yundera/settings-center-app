@@ -6,6 +6,11 @@ set -e
 
 UDEV_RULES_FILE="/lib/udev/rules.d/80-hotplug-cpu-mem.rules"
 
+if [ -f /.dockerenv ]; then
+    echo "Inside Docker - dev environment detected. Skipping setup."
+    exit 42
+fi
+
 # Create rules directory if it doesn't exist
 mkdir -p /lib/udev/rules.d/
 

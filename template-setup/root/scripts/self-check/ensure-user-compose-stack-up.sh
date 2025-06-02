@@ -1,6 +1,5 @@
 #!/bin/bash
 # Script to ensure Docker Compose services are running
-
 set -e  # Exit on any error
 
 COMPOSE_FILE="/DATA/AppData/casaos/apps/yundera/docker-compose.yml"
@@ -12,7 +11,7 @@ if [ ! -f "$COMPOSE_FILE" ]; then
 fi
 
 # Stop any existing containers (with error suppression)
-# docker compose -f "$COMPOSE_FILE" down 2>/dev/null || true
+#docker compose -f "$COMPOSE_FILE" down 2>/dev/null || true
 
 # Start containers
 if docker compose -f "$COMPOSE_FILE" up --quiet-pull -d; then

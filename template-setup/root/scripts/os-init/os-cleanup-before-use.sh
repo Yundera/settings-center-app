@@ -9,7 +9,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Clean apt cache
-apt clean
+apt-get clean
 
 # Delete temp files
 rm -rf /tmp/*

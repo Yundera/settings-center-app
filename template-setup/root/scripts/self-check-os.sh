@@ -3,7 +3,7 @@
 #These scripts ensure VM basic functionalities.
 #Basic functionalities are:
 #1. Connectivity of the VM (VM should be accessible to the user in all cases)
-#2. Docker and the admin compose stack should always be up and running
+#2. Docker and the admin dev stack should always be up and running
 #3. The self-check script should always ensure these 3 points
 
 set -e

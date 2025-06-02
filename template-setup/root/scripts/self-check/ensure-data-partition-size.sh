@@ -12,6 +12,11 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+if [ -f /.dockerenv ]; then
+    echo "Inside Docker - dev environment detected. Skipping setup."
+    exit 42
+fi
+
 # Check if the DATA volume exists
 if ! lvdisplay /dev/data_vg/data_lv &>/dev/null; then
     echo "DATA LVM volume not found. Please run the setup script first."

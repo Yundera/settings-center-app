@@ -4,6 +4,8 @@
 
 set -e  # Exit on any error
 
+USER=pcs
+
 # Function to check if Docker is installed and working
 check_docker() {
     if command -v docker >/dev/null 2>&1; then
@@ -36,10 +38,10 @@ install_docker() {
     echo "Installing Docker..."
 
     # Update package index
-    sudo apt-get update >/dev/null 2>&1
+    sudo apt-get -qq update
 
     # Install prerequisites
-    sudo apt-get install -y ca-certificates curl >/dev/null 2>&1
+    sudo apt-get install -qq -y ca-certificates curl
 
     # Create directory for keyrings
     sudo install -m 0755 -d /etc/apt/keyrings
@@ -55,30 +57,33 @@ install_docker() {
       sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
     # Update package index again
-    sudo apt-get update >/dev/null 2>&1
+    sudo apt-get -qq update
 
     # Install Docker packages
     echo "Installing Docker packages..."
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+    sudo apt-get install -qq -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
     # Add current user to docker group
     sudo usermod -aG docker $USER
 
     # Start and enable Docker service
-    sudo systemctl start docker
-    sudo systemctl enable docker
+    if [ -f /.dockerenv ]; then
+        echo "Inside Docker - dev environment detected. Skipping systemctl."
+    else
+      sudo systemctl start docker
+      sudo systemctl enable docker
+    fi
 
     # Check Docker version
     local docker_version=$(docker --version)
     echo "Docker version: $docker_version"
 
     # Check Docker Compose version
-    local compose_version=$(docker compose version)
+    local compose_version=$(docker dev version)
     echo "Docker Compose version: $compose_version"
 
     echo "Docker installation completed"
 }
-
 
 # Main execution
 if ! check_docker; then
