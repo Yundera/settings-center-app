@@ -4,7 +4,7 @@ set -e
 
 # Script to ensure Ubuntu is up to date
 
-# Update package list
+# DockerUpdate package list
 apt-get update -qq
 
 # Show available upgrades (optional)

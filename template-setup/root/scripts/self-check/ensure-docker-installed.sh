@@ -37,7 +37,7 @@ check_docker() {
 install_docker() {
     echo "Installing Docker..."
 
-    # Update package index
+    # DockerUpdate package index
     sudo apt-get -qq update
 
     # Install prerequisites
@@ -56,7 +56,7 @@ install_docker() {
       $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
       sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-    # Update package index again
+    # DockerUpdate package index again
     sudo apt-get -qq update
 
     # Install Docker packages

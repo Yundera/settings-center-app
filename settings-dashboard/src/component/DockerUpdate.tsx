@@ -1,25 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Typography, CircularProgress, Alert, Stack, List, ListItem, ListItemText } from "@mui/material";
-import { PageContainer } from "dashboard-core";
 import { apiRequest } from "@/core/authApi";
 import {useNotify} from "react-admin";
+import {LastUpdateStatus} from "@/backend/server/LastUpdateStatus";
 
-interface ImageUpdate {
-    image: string;
-    currentDigest: string;
-    availableDigest: string;
-}
-
-interface UpdateStatus {
-    updatesAvailable: boolean;
-    images: ImageUpdate[];
-}
-
-export const Update: React.FC = () => {
+export const DockerUpdate: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [checking, setChecking] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+    const [updateStatus, setUpdateStatus] = useState<LastUpdateStatus | null>(null);
     const notify = useNotify();
 
     const checkUpdates = async () => {
@@ -27,7 +16,7 @@ export const Update: React.FC = () => {
         setError(null);
 
         try {
-            const response = await apiRequest<UpdateStatus>("/api/admin/docker-compose-update-check", "GET");
+            const response = await apiRequest<LastUpdateStatus>("/api/admin/docker-compose-update-check", "GET");
             setUpdateStatus(response);
         } catch (err: any) {
             setError(err.message || "Failed to check for updates");
@@ -42,10 +31,10 @@ export const Update: React.FC = () => {
 
         try {
             await apiRequest("/api/admin/docker-compose-update", "POST");
-            notify('Update successful');
+            notify('DockerUpdate successful');
             await checkUpdates(); // Refresh update status
         } catch (err: any) {
-            setError(err.message || "Update failed");
+            setError(err.message || "DockerUpdate failed");
         } finally {
             setLoading(false);
         }
@@ -66,18 +55,18 @@ export const Update: React.FC = () => {
             <Stack spacing={2}>
                 {updateStatus && (
                     <Alert
-                        severity={updateStatus.updatesAvailable ? "warning" : "success"}
+                        severity={updateStatus.hasUpdates ? "warning" : "success"}
                         sx={{ mb: 2 }}
                     >
-                        {updateStatus.updatesAvailable
+                        {updateStatus.hasUpdates
                             ? "Updates available for the following images:"
                             : "All images are up to date"}
                     </Alert>
                 )}
 
-                {updateStatus?.updatesAvailable && (
+                {updateStatus?.hasUpdates && (
                     <List>
-                        {updateStatus.images.map((imageUpdate, index) => (
+                        {updateStatus.updatesFound.map((imageUpdate, index) => (
                             <ListItem key={index}>
                                 <ListItemText
                                     primary={imageUpdate.image}
@@ -106,7 +95,7 @@ export const Update: React.FC = () => {
                             variant="contained"
                             color="primary"
                             onClick={handleUpdate}
-                            disabled={!updateStatus?.updatesAvailable}
+                            disabled={!updateStatus?.hasUpdates}
                         >Update</Button></>}
                 </Stack>
             </Stack>

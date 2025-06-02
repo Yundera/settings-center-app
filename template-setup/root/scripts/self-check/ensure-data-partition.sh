@@ -161,7 +161,7 @@ START_NUM=$(echo "$SUITABLE_START" | sed 's/MB//')
 END_NUM=$((START_NUM + TARGET_SIZE))
 parted -s /dev/sda unit MB mkpart primary ${START_NUM}MB ${END_NUM}MB
 
-# Update kernel to see the new partition
+# DockerUpdate kernel to see the new partition
 partprobe /dev/sda
 
 # Smart wait for the partition to become available

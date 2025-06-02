@@ -1,25 +1,27 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
-import {checkForUpdates, getLastUpdateStatus} from "@/backend/server/DockerUpdate";
-
+import {runSelfCheck} from "@/backend/server/SelfCheck";
 
 async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
-    if (req.method !== 'GET') {
+    if (req.method !== 'POST') {
         return res.status(405).json({error: 'Method not allowed'})
     }
 
     try {
-        // Check each image for updates
-        const updates = getLastUpdateStatus();
+        // Run the self-check scripts
+        await runSelfCheck();
 
-        res.status(200).json(updates);
+        res.status(200).json({
+            status: 'success',
+            message: 'Self-check completed successfully'
+        });
 
     } catch (error) {
         res.status(500).json({
-            error: 'Failed to check for updates',
+            error: 'Self-check failed',
             details: error instanceof Error ? error.message : String(error)
         });
     }

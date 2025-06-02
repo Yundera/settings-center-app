@@ -6,13 +6,11 @@ import {
 } from "@/backend/cmd/HostExecutor";
 import cron from 'node-cron';
 import {checkForUpdates, dockerUpdate} from "@/backend/server/DockerUpdate";
-import {checkSelfIntegrity, runSelfCheck} from "@/backend/server/SelfCheck";
+import { runSelfCheck} from "@/backend/server/SelfCheck";
 
 async function check(){
     try {
         console.log(`Update at ${new Date().toISOString()}`);
-        //- file integrity check (ensure the self-check script are up to date and not modified)
-        await checkSelfIntegrity();
         //- run self check
         await runSelfCheck();
 

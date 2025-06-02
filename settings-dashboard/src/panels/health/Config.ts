@@ -4,7 +4,7 @@ import {customEnglishMessages} from "./i18n/en";
 import DeveloperBoardIcon from "@mui/icons-material/DeveloperBoard";
 import {PanelInterface} from "dashboard-core";
 
-export const securityPanel:PanelInterface = {
+export const healthPanel:PanelInterface = {
     name: resourceName,
     route: {
         routes

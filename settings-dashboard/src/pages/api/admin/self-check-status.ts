@@ -1,7 +1,6 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
-import {checkForUpdates, getLastUpdateStatus} from "@/backend/server/DockerUpdate";
-
+import {getSelfCheckStatus} from "@/backend/server/SelfCheck";
 
 async function handler(
     req: NextApiRequest,
@@ -12,14 +11,14 @@ async function handler(
     }
 
     try {
-        // Check each image for updates
-        const updates = getLastUpdateStatus();
+        // Get current self-check status
+        const status = getSelfCheckStatus();
 
-        res.status(200).json(updates);
+        res.status(200).json(status);
 
     } catch (error) {
         res.status(500).json({
-            error: 'Failed to check for updates',
+            error: 'Failed to get self-check status',
             details: error instanceof Error ? error.message : String(error)
         });
     }

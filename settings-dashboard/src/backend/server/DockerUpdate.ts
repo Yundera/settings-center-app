@@ -1,12 +1,14 @@
 import {getConfig} from "@/configuration/getConfigBackend";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
-import { spawn } from 'child_process';
+import {spawn} from 'child_process';
+import {LastUpdateStatus, UpdateInfo} from "@/backend/server/LastUpdateStatus";
 
-
-interface UpdateInfo {
-    image: string;
-    currentDigest: string;
-    availableDigest: string;
+// In-memory storage for last update status
+let lastUpdateStatus: LastUpdateStatus = {
+    timestamp: new Date(),
+    updatesFound: [],
+    totalImages: 0,
+    hasUpdates: false
 }
 
 export async function dockerUpdate() {
@@ -35,69 +37,95 @@ export async function dockerUpdate() {
     return { pid: child.pid, detached: true };
 }
 
-export async function checkForUpdates():Promise<UpdateInfo[]> {
+export async function checkForUpdates(): Promise<UpdateInfo[]> {
     const composePath = getConfig("COMPOSE_FOLDER_PATH");
-
     const cdCommand = `cd ${composePath}`;
 
-    // Get list of current images
-    const { stdout: localImages } = await executeHostCommand(
-        `${cdCommand} && docker compose config --images`
-    );
+    try {
+        // Get list of current images
+        const { stdout: localImages } = await executeHostCommand(
+            `${cdCommand} && docker compose config --images`
+        );
 
-    // Check each image for updates
-    const updates: UpdateInfo[] = [];
-    for (const image of localImages.split('\n').filter(Boolean)) {
-        try {
-            // Get currently running container's image digest
-            let currentDigest = "local-not-found";
+        const imageList = localImages.split('\n').filter(Boolean);
+
+        // Check each image for updates
+        const updates: UpdateInfo[] = [];
+        for (const image of imageList) {
             try {
-                // Find container ID using the image name
-                const { stdout: containerIds } = await executeHostCommand(
-                    `${cdCommand} && docker compose ps -q | xargs docker inspect -f '{{if eq .Config.Image "${image}"}}{{.Id}}{{end}}'`
-                );
-
-                // Get first non-empty container ID
-                const containerId = containerIds
-                    .split('\n')
-                    .map(line => line.trim())
-                    .filter(line => line.length > 0)[0];
-
-                if (containerId) {
-                    // Get image digest from the running container
-                    const { stdout: containerImageId } = await executeHostCommand(
-                        `docker inspect --format '{{.Image}}' ${containerId.trim()}`
+                // Get currently running container's image digest
+                let currentDigest = "local-not-found";
+                try {
+                    // Find container ID using the image name
+                    const { stdout: containerIds } = await executeHostCommand(
+                        `${cdCommand} && docker compose ps -q | xargs docker inspect -f '{{if eq .Config.Image "${image}"}}{{.Id}}{{end}}'`
                     );
-                    currentDigest = containerImageId.trim();
+
+                    // Get first non-empty container ID
+                    const containerId = containerIds
+                        .split('\n')
+                        .map(line => line.trim())
+                        .filter(line => line.length > 0)[0];
+
+                    if (containerId) {
+                        // Get image digest from the running container
+                        const { stdout: containerImageId } = await executeHostCommand(
+                            `docker inspect --format '{{.Image}}' ${containerId.trim()}`
+                        );
+                        currentDigest = containerImageId.trim();
+                    }
+                } catch (error) {
+                    console.warn(`Warning: Couldn't get digest for running container of ${image}: ${error.message}`);
+                }
+
+                // Pull the latest image to get its digest
+                await executeHostCommand(`docker pull ${image} --quiet`);
+                const { stdout: latestDigest } = await executeHostCommand(
+                    `docker image inspect ${image} --format '{{.Id}}'`
+                );
+                const availableDigest = latestDigest.trim();
+
+                // Compare digests
+                if (currentDigest !== availableDigest) {
+                    updates.push({
+                        image,
+                        currentDigest,
+                        availableDigest
+                    });
                 }
             } catch (error) {
-                console.warn(`Warning: Couldn't get digest for running container of ${image}: ${error.message}`);
-            }
-
-            // Pull the latest image to get its digest
-            await executeHostCommand(`docker pull ${image} --quiet`);
-            const { stdout: latestDigest } = await executeHostCommand(
-                `docker image inspect ${image} --format '{{.Id}}'`
-            );
-            const availableDigest = latestDigest.trim();
-
-            // Compare digests
-            if (currentDigest !== availableDigest) {
+                console.error(`Error processing image ${image}: ${error.message}`);
                 updates.push({
                     image,
-                    currentDigest,
-                    availableDigest
+                    currentDigest: "local-not-found",
+                    availableDigest: "remote-not-found"
                 });
             }
-        } catch (error) {
-            console.error(`Error processing image ${image}: ${error.message}`);
-            updates.push({
-                image,
-                currentDigest: "local-not-found",
-                availableDigest: "remote-not-found"
-            });
         }
-    }
 
-    return updates;
+        // Store the status of this check
+        lastUpdateStatus = {
+            timestamp: new Date(),
+            updatesFound: updates,
+            totalImages: imageList.length,
+            hasUpdates: updates.length > 0
+        };
+
+        return updates;
+    } catch (error) {
+        // Store error status
+        lastUpdateStatus = {
+            timestamp: new Date(),
+            updatesFound: [],
+            totalImages: 0,
+            hasUpdates: false,
+            error: error.message
+        };
+
+        throw error;
+    }
+}
+
+export function getLastUpdateStatus(): LastUpdateStatus {
+    return lastUpdateStatus;
 }

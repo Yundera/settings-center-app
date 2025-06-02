@@ -3,21 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import {getConfig} from "@/configuration/getConfigBackend";
-
-interface SelfCheckResult {
-    success: boolean;
-    message: string;
-    timestamp: Date;
-    duration?: number;
-}
-
-interface SelfCheckStatus {
-    lastRun?: Date;
-    isRunning: boolean;
-    overallStatus: 'success' | 'failure' | 'partial' | 'never_run';
-    scripts: Record<string, SelfCheckResult>;
-    integrityCheck?: SelfCheckResult;
-}
+import {SelfCheckStatus} from "@/backend/server/SelfCheckTypes";
 
 let selfCheckStatus: SelfCheckStatus = {
     isRunning: false,
@@ -54,6 +40,8 @@ export async function runSelfCheck(): Promise<void> {
     if (selfCheckStatus.isRunning) {
         throw new Error('Self-check is already running');
     }
+
+    await checkSelfIntegrity();
 
     selfCheckStatus.isRunning = true;
     selfCheckStatus.lastRun = new Date();
@@ -115,7 +103,7 @@ export async function runSelfCheck(): Promise<void> {
     console.log(`Overall status: ${selfCheckStatus.overallStatus}`);
 }
 
-export async function checkSelfIntegrity(): Promise<void> {
+async function checkSelfIntegrity(): Promise<void> {
     const startTime = Date.now();
 
     try {
