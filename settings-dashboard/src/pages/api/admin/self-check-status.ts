@@ -1,6 +1,7 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
-import {getSelfCheckStatus} from "@/backend/server/SelfCheck";
+import {getSelfCheckStatusAsync} from "@/backend/server/SelfCheck";
+import SharedContext from "@/backend/server/SharedContext";
 
 async function handler(
     req: NextApiRequest,
@@ -11,8 +12,11 @@ async function handler(
     }
 
     try {
-        // Get current self-check status
-        const status = getSelfCheckStatus();
+        // Ensure shared context is initialized for API requests
+        SharedContext.getInstance();
+
+        // Get current self-check status from shared context
+        const status = await getSelfCheckStatusAsync();
 
         res.status(200).json(status);
 

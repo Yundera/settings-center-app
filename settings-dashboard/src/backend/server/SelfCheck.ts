@@ -4,12 +4,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import {getConfig} from "@/configuration/getConfigBackend";
 import {SelfCheckStatus} from "@/backend/server/SelfCheckTypes";
-
-let selfCheckStatus: SelfCheckStatus = {
-    isRunning: false,
-    overallStatus: 'never_run',
-    scripts: {}
-};
+import SharedContext from "./SharedContext";
 
 const REMOTE_SCRIPT_DIR = `${getConfig("COMPOSE_FOLDER_PATH")}/scripts`;
 const REFERENCE_DIR = '/app/template-setup/root';
@@ -33,19 +28,34 @@ const SELF_CHECK_SCRIPTS = [
 ];
 
 export function getSelfCheckStatus(): SelfCheckStatus {
-    return { ...selfCheckStatus };
+    const sharedContext = SharedContext.getInstance();
+    return { ...sharedContext.getSelfCheckStatusSync() };
+}
+
+// Async version for when you can use await
+export async function getSelfCheckStatusAsync(): Promise<SelfCheckStatus> {
+    const sharedContext = SharedContext.getInstance();
+    return await sharedContext.getSelfCheckStatus();
 }
 
 export async function runSelfCheck(): Promise<void> {
-    if (selfCheckStatus.isRunning) {
+    const sharedContext = SharedContext.getInstance();
+    const currentStatus = await sharedContext.getSelfCheckStatus();
+
+    if (currentStatus.isRunning) {
         throw new Error('Self-check is already running');
     }
 
     await checkSelfIntegrity();
 
-    selfCheckStatus.isRunning = true;
-    selfCheckStatus.lastRun = new Date();
-    selfCheckStatus.scripts = {};
+    // Update status to running
+    const runningStatus: SelfCheckStatus = {
+        isRunning: true,
+        lastRun: new Date(),
+        overallStatus: 'never_run',
+        scripts: {}
+    };
+    await sharedContext.setSelfCheckStatus(runningStatus);
 
     let successCount = 0;
     let totalCount = SELF_CHECK_SCRIPTS.length;
@@ -63,12 +73,15 @@ export async function runSelfCheck(): Promise<void> {
             const result = await executeHostCommand(scriptPath);
             const duration = Date.now() - startTime;
 
-            selfCheckStatus.scripts[scriptName] = {
+            // Update the status with this script's result
+            const updatedStatus = await sharedContext.getSelfCheckStatus();
+            updatedStatus.scripts[scriptName] = {
                 success: true,
                 message: `Script completed successfully`,
                 timestamp: new Date(),
                 duration
             };
+            await sharedContext.setSelfCheckStatus(updatedStatus);
 
             successCount++;
             console.log(`✓ ${scriptName} completed in ${duration}ms`);
@@ -77,33 +90,39 @@ export async function runSelfCheck(): Promise<void> {
             const duration = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : String(error);
 
-            selfCheckStatus.scripts[scriptName] = {
+            // Update the status with this script's error
+            const updatedStatus = await sharedContext.getSelfCheckStatus();
+            updatedStatus.scripts[scriptName] = {
                 success: false,
                 message: `Script failed: ${errorMessage}`,
                 timestamp: new Date(),
                 duration
             };
+            await sharedContext.setSelfCheckStatus(updatedStatus);
 
             console.error(`✗ ${scriptName} failed: ${errorMessage}`);
         }
     }
 
-    // Determine overall status
+    // Determine overall status and mark as not running
+    const finalStatus = await sharedContext.getSelfCheckStatus();
     if (successCount === totalCount) {
-        selfCheckStatus.overallStatus = 'success';
+        finalStatus.overallStatus = 'success';
     } else if (successCount === 0) {
-        selfCheckStatus.overallStatus = 'failure';
+        finalStatus.overallStatus = 'failure';
     } else {
-        selfCheckStatus.overallStatus = 'partial';
+        finalStatus.overallStatus = 'partial';
     }
+    finalStatus.isRunning = false;
 
-    selfCheckStatus.isRunning = false;
+    await sharedContext.setSelfCheckStatus(finalStatus);
 
     console.log(`Self-check completed: ${successCount}/${totalCount} scripts succeeded`);
-    console.log(`Overall status: ${selfCheckStatus.overallStatus}`);
+    console.log(`Overall status: ${finalStatus.overallStatus}`);
 }
 
 async function checkSelfIntegrity(): Promise<void> {
+    const sharedContext = SharedContext.getInstance();
     const startTime = Date.now();
 
     try {
@@ -187,7 +206,9 @@ async function checkSelfIntegrity(): Promise<void> {
         const duration = Date.now() - startTime;
         const success = errors.length === 0;
 
-        selfCheckStatus.integrityCheck = {
+        // Update the integrity check result in shared context
+        const currentStatus = await sharedContext.getSelfCheckStatus();
+        currentStatus.integrityCheck = {
             success,
             message: success
                 ? `Integrity check completed: ${filesFixed} files fixed, ${filesRemoved} files removed`
@@ -195,6 +216,7 @@ async function checkSelfIntegrity(): Promise<void> {
             timestamp: new Date(),
             duration
         };
+        await sharedContext.setSelfCheckStatus(currentStatus);
 
         console.log(`Integrity check completed in ${duration}ms`);
         console.log(`Files fixed: ${filesFixed}, Files removed: ${filesRemoved}, Errors: ${errors.length}`);
@@ -203,12 +225,15 @@ async function checkSelfIntegrity(): Promise<void> {
         const duration = Date.now() - startTime;
         const errorMessage = error instanceof Error ? error.message : String(error);
 
-        selfCheckStatus.integrityCheck = {
+        // Update the integrity check error in shared context
+        const currentStatus = await sharedContext.getSelfCheckStatus();
+        currentStatus.integrityCheck = {
             success: false,
             message: `Integrity check failed: ${errorMessage}`,
             timestamp: new Date(),
             duration
         };
+        await sharedContext.setSelfCheckStatus(currentStatus);
 
         console.error(`Integrity check failed: ${errorMessage}`);
         throw error;

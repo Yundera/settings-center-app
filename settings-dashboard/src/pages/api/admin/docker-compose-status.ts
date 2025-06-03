@@ -13,7 +13,7 @@ async function handler(
 
     try {
         // Ensure shared context is initialized for API requests
-        const sharedContext = SharedContext.getInstance();
+        SharedContext.getInstance();
 
         // Get the last update status from shared context
         const updates = await getLastUpdateStatusAsync();

@@ -1,9 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { LastUpdateStatus } from './DockerUpdateStatus';
+import { SelfCheckStatus } from './SelfCheckTypes';
 
 interface SharedContextData {
     lastUpdateStatus: LastUpdateStatus;
+    selfCheckStatus: SelfCheckStatus;
     // Add other shared state here as needed
 }
 
@@ -22,6 +24,11 @@ class SharedContext {
                 images: [],
                 totalImages: 0,
                 hasUpdates: false
+            },
+            selfCheckStatus: {
+                isRunning: false,
+                overallStatus: 'never_run',
+                scripts: {}
             }
         };
     }
@@ -87,13 +94,25 @@ class SharedContext {
         await this.writeToFile(data);
     }
 
-    // Method to get status synchronously (for backward compatibility)
-    public getLastUpdateStatusSync(): LastUpdateStatus {
+    // Self Check Status methods
+    public async getSelfCheckStatus(): Promise<SelfCheckStatus> {
+        const data = await this.getData();
+        return data.selfCheckStatus;
+    }
+
+    public async setSelfCheckStatus(status: SelfCheckStatus): Promise<void> {
+        const data = await this.getData();
+        data.selfCheckStatus = status;
+        await this.writeToFile(data);
+    }
+
+    // Method to get self check status synchronously (for backward compatibility)
+    public getSelfCheckStatusSync(): SelfCheckStatus {
         if (this.cache) {
-            return this.cache.lastUpdateStatus;
+            return this.cache.selfCheckStatus;
         }
         // Return default if cache is not available
-        return this.defaultData.lastUpdateStatus;
+        return this.defaultData.selfCheckStatus;
     }
 
     // Initialize the context (call this during server startup)
