@@ -1,7 +1,7 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
-import {checkForUpdates, getLastUpdateStatus} from "@/backend/server/DockerUpdate";
-
+import {getLastUpdateStatusAsync} from "@/backend/server/DockerUpdate";
+import SharedContext from "@/backend/server/SharedContext";
 
 async function handler(
     req: NextApiRequest,
@@ -12,14 +12,17 @@ async function handler(
     }
 
     try {
-        // Check each image for updates
-        const updates = getLastUpdateStatus();
+        // Ensure shared context is initialized for API requests
+        const sharedContext = SharedContext.getInstance();
+
+        // Get the last update status from shared context
+        const updates = await getLastUpdateStatusAsync();
 
         res.status(200).json(updates);
 
     } catch (error) {
         res.status(500).json({
-            error: 'Failed to check for updates',
+            error: 'Failed to get update status',
             details: error instanceof Error ? error.message : String(error)
         });
     }

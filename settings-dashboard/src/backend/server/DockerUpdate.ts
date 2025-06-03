@@ -1,45 +1,78 @@
 import {getConfig} from "@/configuration/getConfigBackend";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
-import {spawn} from 'child_process';
 import {ImageStatus, LastUpdateStatus} from "@/backend/server/DockerUpdateStatus";
-
-// In-memory storage for last update status
-let lastUpdateStatus: LastUpdateStatus = {
-    timestamp: new Date(),
-    images: [],
-    totalImages: 0,
-    hasUpdates: false
-}
+import SharedContext from "./SharedContext";
 
 export async function dockerUpdate() {
     const composePath = getConfig("COMPOSE_FOLDER_PATH");
 
-    // Run docker commands in detached process
-    const child = spawn('bash', ['-c', `cd ${composePath} && docker compose pull && docker compose up -d`], {
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-    });
+    try {
+        console.log('Pulling latest images...');
+        const pullResult = await executeHostCommand(
+            `cd ${composePath} && docker compose pull`
+        );
 
-    // Log the process ID for tracking
-    console.log(`Docker update started in detached process: PID ${child.pid}`);
+        // Since this container might be updated/killed during the process,
+        // we'll execute the commands in a way that doesn't require our process to stay alive
 
-    // Optionally capture output before detaching
-    child.stdout?.on('data', (data) => {
-        console.log(`Docker update: ${data}`);
-    });
+        // Create a script that will run the update commands
+        const updateScript = `
+            cd ${composePath} &&  
+            docker compose up -d && 
+            echo "Docker update completed successfully"
+        `;
 
-    child.stderr?.on('data', (data) => {
-        console.error(`Docker update error: ${data}`);
-    });
+        console.log('Starting Docker update on host system...');
 
-    child.unref(); // Allow parent to exit
+        // Execute the update on the host
+        // Note: This might kill our own container, so we use a fire-and-forget approach
+        const logFile = '/tmp/docker_update.log';
+        const result = await executeHostCommand(
+            `nohup bash -c '${updateScript.replace(/'/g, "'\\''")}' > ${logFile} 2>&1 &`
+        );
 
-    return { pid: child.pid, detached: true };
+        console.log('Docker update command dispatched to host');
+        console.log('Update will continue in background even if this container restarts');
+
+        return {
+            status: 'initiated',
+            message: 'Docker update started on host system',
+            logPath: logFile
+        };
+
+    } catch (error) {
+        console.error('Failed to initiate Docker update on host:', error);
+
+        // Fallback: try a simpler approach without nohup
+        try {
+            console.log('Attempting fallback update method...');
+
+            const fallbackResult = await executeHostCommand(
+                `cd ${composePath} && docker compose pull && docker compose up -d`,
+                {
+                    timeout: 120000 // 2 minutes timeout for fallback
+                }
+            );
+
+            console.log('Fallback update completed:', fallbackResult.stdout);
+
+            return {
+                status: 'completed',
+                message: 'Docker update completed via fallback method',
+                output: fallbackResult.stdout
+            };
+
+        } catch (fallbackError) {
+            console.error('Fallback update also failed:', fallbackError);
+            throw new Error(`Docker update failed: ${error.message}. Fallback also failed: ${fallbackError.message}`);
+        }
+    }
 }
 
 export async function checkForUpdates(): Promise<ImageStatus[]> {
     const composePath = getConfig("COMPOSE_FOLDER_PATH");
     const cdCommand = `cd ${composePath}`;
+    const sharedContext = SharedContext.getInstance();
 
     try {
         // Get list of current images
@@ -108,18 +141,20 @@ export async function checkForUpdates(): Promise<ImageStatus[]> {
             }
         }
 
-        // Store the status of this check
-        lastUpdateStatus = {
+        // Store the status of this check in shared context
+        const lastUpdateStatus: LastUpdateStatus = {
             timestamp: new Date(),
             images: imageStatuses,
             totalImages: imageList.length,
             hasUpdates: imageStatuses.some(img => img.hasUpdate)
         };
 
+        await sharedContext.setLastUpdateStatus(lastUpdateStatus);
+
         return imageStatuses;
     } catch (error) {
-        // Store error status
-        lastUpdateStatus = {
+        // Store error status in shared context
+        const errorStatus: LastUpdateStatus = {
             timestamp: new Date(),
             images: [],
             totalImages: 0,
@@ -127,15 +162,19 @@ export async function checkForUpdates(): Promise<ImageStatus[]> {
             error: error.message
         };
 
+        await sharedContext.setLastUpdateStatus(errorStatus);
+
         throw error;
     }
 }
 
 export function getLastUpdateStatus(): LastUpdateStatus {
-    return lastUpdateStatus;
+    const sharedContext = SharedContext.getInstance();
+    return sharedContext.getLastUpdateStatusSync();
 }
 
-// Backward compatibility - return only images with updates
-export function getUpdatesFound(): ImageStatus[] {
-    return lastUpdateStatus.images.filter(img => img.hasUpdate);
+// Async version for when you can use await
+export async function getLastUpdateStatusAsync(): Promise<LastUpdateStatus> {
+    const sharedContext = SharedContext.getInstance();
+    return await sharedContext.getLastUpdateStatus();
 }

@@ -19,8 +19,12 @@ app.prepare().then(async () => {
         handle(req, res, parsedUrl)
     })
 
-    // Start background tasks
-    await start();
+    // Start background tasks (don't await this)
+    start().then(() => {
+        console.log('Background tasks started successfully')
+    }).catch((error) => {
+        console.error('Error starting background tasks:', error)
+    });
 
     server.listen(port, hostname, () => {
         console.log('####################################################');

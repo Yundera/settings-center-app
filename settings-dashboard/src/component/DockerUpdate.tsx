@@ -161,9 +161,6 @@ export const DockerUpdate: React.FC = () => {
 
     return (
         <div>
-            <Typography variant="h4" component="h1" gutterBottom>
-                Docker Updates
-            </Typography>
 
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 

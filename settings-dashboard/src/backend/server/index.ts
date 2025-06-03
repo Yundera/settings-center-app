@@ -7,6 +7,7 @@ import {
 import cron from 'node-cron';
 import {checkForUpdates, dockerUpdate} from "@/backend/server/DockerUpdate";
 import { runSelfCheck} from "@/backend/server/SelfCheck";
+import SharedContext from "@/backend/server/SharedContext";
 
 async function check(){
     try {
@@ -30,6 +31,10 @@ async function check(){
 }
 
 export async function start() {
+    // Initialize shared context first
+    const sharedContext = SharedContext.getInstance();
+    await sharedContext.initialize();
+    console.log('Shared context initialized');
 
     await initializeSSHAccess();
 

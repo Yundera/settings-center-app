@@ -1,7 +1,7 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
 import {checkForUpdates} from "@/backend/server/DockerUpdate";
-
+import SharedContext from "@/backend/server/SharedContext";
 
 async function handler(
     req: NextApiRequest,
@@ -12,8 +12,11 @@ async function handler(
     }
 
     try {
-        // Check each image for updates
-        const updates = checkForUpdates();
+        // Ensure shared context is initialized for API requests
+        SharedContext.getInstance();
+
+        // Check for updates (this will automatically update the shared context)
+        const updates = await checkForUpdates();
 
         res.status(200).json(updates);
 

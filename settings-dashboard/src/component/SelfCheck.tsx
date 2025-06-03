@@ -98,10 +98,6 @@ export const SelfCheck: React.FC = () => {
 
     return (
         <div>
-            <Typography variant="h4" component="h1" gutterBottom>
-                System Self-Check
-            </Typography>
-
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
             <Stack spacing={3}>
