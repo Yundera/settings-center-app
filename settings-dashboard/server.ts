@@ -2,6 +2,7 @@ import { createServer } from 'http'
 import { parse } from 'url'
 import next from 'next'
 import {start} from "@/backend/server";
+import {initializeAllContexts} from "@/backend/server/initializeAllContexts";
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = dev ? 'localhost' : '0.0.0.0'
@@ -18,6 +19,8 @@ app.prepare().then(async () => {
         // Handle all routes with Next.js
         handle(req, res, parsedUrl)
     })
+
+    await initializeAllContexts();
 
     // Start background tasks (don't await this)
     start().then(() => {

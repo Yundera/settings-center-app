@@ -1,10 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
 
 interface LockInfo {
     pid: number;
     timestamp: number;
     hostname?: string;
+    lockId: string; // Add unique lock identifier
 }
 
 export abstract class FileMutexContext<T> {
@@ -16,8 +18,9 @@ export abstract class FileMutexContext<T> {
 
     // Lock configuration
     private readonly LOCK_TIMEOUT = 30000; // 30 seconds
-    private readonly RETRY_DELAY = 100; // 100ms
+    private readonly RETRY_DELAY = 100; // 100ms base delay
     private readonly MAX_RETRIES = 300; // 30 seconds total
+    private readonly MAX_RETRY_JITTER = 50; // Add randomization
 
     constructor(fileName: string, baseDir: string = process.cwd()) {
         this.dataFilePath = path.join(baseDir, `${fileName}.json`);
@@ -29,12 +32,24 @@ export abstract class FileMutexContext<T> {
     protected abstract serializeData(data: T): any;
     protected abstract deserializeData(data: any): T;
 
+    // Generate unique lock ID for this acquisition attempt
+    private generateLockId(): string {
+        return `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    }
+
+    // Add jitter to reduce thundering herd
+    private getRetryDelay(): number {
+        return this.RETRY_DELAY + Math.floor(Math.random() * this.MAX_RETRY_JITTER);
+    }
+
     // File-based mutex implementation
     private async acquireLock(): Promise<() => Promise<void>> {
+        const lockId = this.generateLockId();
         const lockInfo: LockInfo = {
             pid: process.pid,
             timestamp: Date.now(),
-            hostname: process.env.HOSTNAME || 'unknown'
+            hostname: process.env.HOSTNAME || 'unknown',
+            lockId
         };
 
         let retries = 0;
@@ -48,32 +63,20 @@ export abstract class FileMutexContext<T> {
                 );
 
                 // Successfully acquired lock
-                return async () => this.releaseLock();
+                return async () => this.releaseLock(lockId);
 
             } catch (error: any) {
                 if (error.code === 'EEXIST') {
                     // Lock file exists, check if it's stale
-                    try {
-                        const existingLockData = await fs.readFile(this.lockFilePath, 'utf-8');
-                        const existingLock: LockInfo = JSON.parse(existingLockData);
+                    const staleLockRemoved = await this.handleExistingLock();
 
-                        // Check if lock is stale (older than timeout)
-                        if (Date.now() - existingLock.timestamp > this.LOCK_TIMEOUT) {
-                            console.warn(`Removing stale lock from PID ${existingLock.pid} (${Date.now() - existingLock.timestamp}ms old)`);
-                            await this.forceReleaseLock();
-                            // Try again immediately
-                            continue;
-                        }
-
-                        // Lock is active, wait and retry
-                        await this.sleep(this.RETRY_DELAY);
+                    if (staleLockRemoved) {
+                        // If we removed a stale lock, add extra delay to avoid immediate collision
+                        await this.sleep(this.getRetryDelay() * 2);
+                    } else {
+                        // Lock is active, wait normally
+                        await this.sleep(this.getRetryDelay());
                         retries++;
-
-                    } catch (parseError) {
-                        // Corrupted lock file, remove it
-                        console.warn('Removing corrupted lock file');
-                        await this.forceReleaseLock();
-                        continue;
                     }
                 } else {
                     throw error;
@@ -84,8 +87,82 @@ export abstract class FileMutexContext<T> {
         throw new Error(`Failed to acquire lock after ${this.MAX_RETRIES} retries (${this.MAX_RETRIES * this.RETRY_DELAY}ms)`);
     }
 
-    private async releaseLock(): Promise<void> {
+    private async handleExistingLock(): Promise<boolean> {
         try {
+            const existingLockData = await fs.readFile(this.lockFilePath, 'utf-8');
+            const existingLock: LockInfo = JSON.parse(existingLockData);
+
+            // Check if lock is stale (older than timeout)
+            const lockAge = Date.now() - existingLock.timestamp;
+            if (lockAge > this.LOCK_TIMEOUT) {
+                console.warn(`Attempting to remove stale lock from PID ${existingLock.pid} (${lockAge}ms old)`);
+
+                // Use a more careful removal strategy
+                return await this.removeStaleHolderIfExists(existingLock);
+            }
+
+            return false; // Lock is not stale
+
+        } catch (parseError) {
+            // Corrupted lock file, remove it
+            console.warn('Removing corrupted lock file');
+            await this.forceReleaseLock();
+            return true;
+        }
+    }
+
+    private async removeStaleHolderIfExists(existingLock: LockInfo): Promise<boolean> {
+        try {
+            // Double-check by re-reading the lock file to ensure it's still the same
+            const currentLockData = await fs.readFile(this.lockFilePath, 'utf-8');
+            const currentLock: LockInfo = JSON.parse(currentLockData);
+
+            // Verify this is still the same lock we detected as stale
+            if (currentLock.lockId === existingLock.lockId &&
+                currentLock.pid === existingLock.pid &&
+                currentLock.timestamp === existingLock.timestamp) {
+
+                // Check age again in case time has passed
+                const currentAge = Date.now() - currentLock.timestamp;
+                if (currentAge > this.LOCK_TIMEOUT) {
+                    await fs.unlink(this.lockFilePath);
+                    console.warn(`Removed stale lock from PID ${existingLock.pid}`);
+                    return true;
+                }
+            }
+
+            // Lock changed or is no longer stale
+            return false;
+
+        } catch (error: any) {
+            if (error.code === 'ENOENT') {
+                // Lock file was already removed by another process
+                return true;
+            }
+            // Some other error occurred, don't remove the lock
+            console.warn('Failed to verify stale lock:', error.message);
+            return false;
+        }
+    }
+
+    private async releaseLock(expectedLockId?: string): Promise<void> {
+        try {
+            // Verify we're releasing our own lock
+            if (expectedLockId) {
+                try {
+                    const lockData = await fs.readFile(this.lockFilePath, 'utf-8');
+                    const lockInfo: LockInfo = JSON.parse(lockData);
+
+                    if (lockInfo.lockId !== expectedLockId) {
+                        console.warn(`Lock ID mismatch during release. Expected: ${expectedLockId}, Found: ${lockInfo.lockId}`);
+                        return; // Don't release someone else's lock
+                    }
+                } catch (readError) {
+                    // Lock file might have been removed already
+                    return;
+                }
+            }
+
             await fs.unlink(this.lockFilePath);
         } catch (error: any) {
             if (error.code !== 'ENOENT') {
@@ -108,7 +185,7 @@ export abstract class FileMutexContext<T> {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // File operations
+    // File operations with better error handling
     private async ensureFileExists(): Promise<void> {
         try {
             await fs.access(this.dataFilePath);
@@ -145,7 +222,7 @@ export abstract class FileMutexContext<T> {
 
     private async writeToFileInternal(data: T): Promise<void> {
         try {
-            const tempFile = `${this.dataFilePath}.tmp`;
+            const tempFile = `${this.dataFilePath}.tmp.${Date.now()}.${process.pid}`;
             const serializedData = this.serializeData(data);
             await fs.writeFile(tempFile, JSON.stringify(serializedData, null, 2), 'utf-8');
 
@@ -229,5 +306,31 @@ export abstract class FileMutexContext<T> {
     // Cleanup method
     public async cleanup(): Promise<void> {
         await this.forceReleaseLock();
+    }
+
+    // Debug method to check lock status
+    public async getLockStatus(): Promise<{
+        exists: boolean;
+        info?: LockInfo;
+        age?: number;
+        isStale?: boolean;
+    }> {
+        try {
+            const lockData = await fs.readFile(this.lockFilePath, 'utf-8');
+            const lockInfo: LockInfo = JSON.parse(lockData);
+            const age = Date.now() - lockInfo.timestamp;
+
+            return {
+                exists: true,
+                info: lockInfo,
+                age,
+                isStale: age > this.LOCK_TIMEOUT
+            };
+        } catch (error: any) {
+            if (error.code === 'ENOENT') {
+                return { exists: false };
+            }
+            throw error;
+        }
     }
 }

@@ -1,3 +1,4 @@
+// Updated SelfCheck.ts with safe initialization
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -29,13 +30,34 @@ const SELF_CHECK_SCRIPTS = [
 
 // Internal context instance - not exposed to external APIs
 let internalContext: SelfCheckContext | null = null;
+let initializationPromise: Promise<SelfCheckContext> | null = null;
 
 async function getInternalContext(): Promise<SelfCheckContext> {
-    if (!internalContext) {
-        internalContext = SelfCheckContext.getInstance();
-        await internalContext.initialize();
+    if (internalContext) {
+        return internalContext;
     }
-    return internalContext;
+
+    if (initializationPromise) {
+        return await initializationPromise;
+    }
+
+    initializationPromise = (async () => {
+        try {
+            console.log('Initializing SelfCheckContext...');
+            const context = SelfCheckContext.getInstance();
+            await context.initialize();
+            internalContext = context;
+            console.log('SelfCheckContext initialized');
+            return context;
+        } catch (error) {
+            // Reset promise so initialization can be retried
+            initializationPromise = null;
+            console.error('Failed to initialize SelfCheckContext:', error);
+            throw error;
+        }
+    })();
+
+    return await initializationPromise;
 }
 
 // =====  EXISTING PUBLIC API - NO CHANGES REQUIRED BY API LAYER =====
@@ -73,10 +95,11 @@ export async function runSelfCheck(): Promise<void> {
     let totalCount = SELF_CHECK_SCRIPTS.length;
 
     try {
-        console.log('Starting self-check process...');
+        console.log('Starting file integrity check...');
 
         // Run file integrity check first
         await checkSelfIntegrity();
+        console.log('✓ File integrity check completed');
 
         // Run all self-check scripts
         for (const scriptName of SELF_CHECK_SCRIPTS) {
@@ -337,11 +360,11 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
 
 // ===== CLEANUP AND UTILITIES =====
 
-// Optional: Export for manual cleanup if needed
 export async function cleanupSelfCheckContext(): Promise<void> {
     if (internalContext) {
         await internalContext.cleanup();
         internalContext = null;
+        initializationPromise = null;
     }
 }
 

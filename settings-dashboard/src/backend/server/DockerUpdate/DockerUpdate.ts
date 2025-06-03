@@ -5,13 +5,34 @@ import DockerUpdateContext, { DockerImageInfo } from "./DockerUpdateContext";
 
 // Internal context instance - not exposed to external APIs
 let internalContext: DockerUpdateContext | null = null;
+let initializationPromise: Promise<DockerUpdateContext> | null = null;
 
 async function getInternalContext(): Promise<DockerUpdateContext> {
-    if (!internalContext) {
-        internalContext = DockerUpdateContext.getInstance();
-        await internalContext.initialize();
+    if (internalContext) {
+        return internalContext;
     }
-    return internalContext;
+
+    if (initializationPromise) {
+        return await initializationPromise;
+    }
+
+    initializationPromise = (async () => {
+        try {
+            console.log('Initializing DockerUpdateContext...');
+            const context = DockerUpdateContext.getInstance();
+            await context.initialize();
+            internalContext = context;
+            console.log('DockerUpdateContext initialized');
+            return context;
+        } catch (error) {
+            // Reset promise so initialization can be retried
+            initializationPromise = null;
+            console.error('Failed to initialize DockerUpdateContext:', error);
+            throw error;
+        }
+    })();
+
+    return await initializationPromise;
 }
 
 // ===== EXISTING PUBLIC API - NO CHANGES REQUIRED BY API LAYER =====
@@ -283,6 +304,7 @@ export async function cleanupDockerUpdateContext(): Promise<void> {
     if (internalContext) {
         await internalContext.cleanup();
         internalContext = null;
+        initializationPromise = null;
     }
 }
 
