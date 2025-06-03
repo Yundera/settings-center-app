@@ -1,12 +1,12 @@
 import {getConfig} from "@/configuration/getConfigBackend";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 import {spawn} from 'child_process';
-import {LastUpdateStatus, UpdateInfo} from "@/backend/server/LastUpdateStatus";
+import {ImageStatus, LastUpdateStatus} from "@/backend/server/DockerUpdateStatus";
 
 // In-memory storage for last update status
 let lastUpdateStatus: LastUpdateStatus = {
     timestamp: new Date(),
-    updatesFound: [],
+    images: [],
     totalImages: 0,
     hasUpdates: false
 }
@@ -37,7 +37,7 @@ export async function dockerUpdate() {
     return { pid: child.pid, detached: true };
 }
 
-export async function checkForUpdates(): Promise<UpdateInfo[]> {
+export async function checkForUpdates(): Promise<ImageStatus[]> {
     const composePath = getConfig("COMPOSE_FOLDER_PATH");
     const cdCommand = `cd ${composePath}`;
 
@@ -48,9 +48,9 @@ export async function checkForUpdates(): Promise<UpdateInfo[]> {
         );
 
         const imageList = localImages.split('\n').filter(Boolean);
+        const imageStatuses: ImageStatus[] = [];
 
         // Check each image for updates
-        const updates: UpdateInfo[] = [];
         for (const image of imageList) {
             try {
                 // Get currently running container's image digest
@@ -85,20 +85,25 @@ export async function checkForUpdates(): Promise<UpdateInfo[]> {
                 );
                 const availableDigest = latestDigest.trim();
 
-                // Compare digests
-                if (currentDigest !== availableDigest) {
-                    updates.push({
-                        image,
-                        currentDigest,
-                        availableDigest
-                    });
-                }
+                // Compare digests and create status
+                const hasUpdate = currentDigest !== availableDigest;
+                imageStatuses.push({
+                    image,
+                    currentDigest,
+                    availableDigest,
+                    hasUpdate,
+                    status: hasUpdate ? 'update-available' : 'up-to-date'
+                });
+
             } catch (error) {
                 console.error(`Error processing image ${image}: ${error.message}`);
-                updates.push({
+                imageStatuses.push({
                     image,
                     currentDigest: "local-not-found",
-                    availableDigest: "remote-not-found"
+                    availableDigest: "remote-not-found",
+                    hasUpdate: false,
+                    status: 'error',
+                    error: error.message
                 });
             }
         }
@@ -106,17 +111,17 @@ export async function checkForUpdates(): Promise<UpdateInfo[]> {
         // Store the status of this check
         lastUpdateStatus = {
             timestamp: new Date(),
-            updatesFound: updates,
+            images: imageStatuses,
             totalImages: imageList.length,
-            hasUpdates: updates.length > 0
+            hasUpdates: imageStatuses.some(img => img.hasUpdate)
         };
 
-        return updates;
+        return imageStatuses;
     } catch (error) {
         // Store error status
         lastUpdateStatus = {
             timestamp: new Date(),
-            updatesFound: [],
+            images: [],
             totalImages: 0,
             hasUpdates: false,
             error: error.message
@@ -128,4 +133,9 @@ export async function checkForUpdates(): Promise<UpdateInfo[]> {
 
 export function getLastUpdateStatus(): LastUpdateStatus {
     return lastUpdateStatus;
+}
+
+// Backward compatibility - return only images with updates
+export function getUpdatesFound(): ImageStatus[] {
+    return lastUpdateStatus.images.filter(img => img.hasUpdate);
 }

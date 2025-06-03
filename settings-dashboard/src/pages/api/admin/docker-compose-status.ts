@@ -1,6 +1,6 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
-import {checkForUpdates} from "@/backend/server/DockerUpdate";
+import {checkForUpdates, getLastUpdateStatus} from "@/backend/server/DockerUpdate";
 
 
 async function handler(
@@ -13,7 +13,7 @@ async function handler(
 
     try {
         // Check each image for updates
-        const updates = checkForUpdates();
+        const updates = getLastUpdateStatus();
 
         res.status(200).json(updates);
 
