@@ -1,7 +1,6 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
-import {checkForUpdates} from "@/backend/server/DockerUpdate";
-import SharedContext from "@/backend/server/SharedContext";
+import {checkForUpdates} from "@/backend/server/DockerUpdate/DockerUpdate";
 
 async function handler(
     req: NextApiRequest,
@@ -12,8 +11,6 @@ async function handler(
     }
 
     try {
-        // Ensure shared context is initialized for API requests
-        SharedContext.getInstance();
 
         // Check for updates (this will automatically update the shared context)
         const updates = await checkForUpdates();

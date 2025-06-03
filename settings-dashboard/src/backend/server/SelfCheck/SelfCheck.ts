@@ -3,8 +3,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import {getConfig} from "@/configuration/getConfigBackend";
-import {SelfCheckStatus} from "@/backend/server/SelfCheckTypes";
-import SharedContext from "./SharedContext";
+import {SelfCheckStatus, SelfCheckResult} from "@/backend/server/SelfCheck/SelfCheckTypes";
+import SelfCheckContext from "./SelfCheckContext";
 
 const REMOTE_SCRIPT_DIR = `${getConfig("COMPOSE_FOLDER_PATH")}/scripts`;
 const REFERENCE_DIR = '/app/template-setup/root';
@@ -27,102 +27,125 @@ const SELF_CHECK_SCRIPTS = [
     'ensure-user-compose-stack-up.sh'
 ];
 
+// Internal context instance - not exposed to external APIs
+let internalContext: SelfCheckContext | null = null;
+
+async function getInternalContext(): Promise<SelfCheckContext> {
+    if (!internalContext) {
+        internalContext = SelfCheckContext.getInstance();
+        await internalContext.initialize();
+    }
+    return internalContext;
+}
+
+// =====  EXISTING PUBLIC API - NO CHANGES REQUIRED BY API LAYER =====
+
 export function getSelfCheckStatus(): SelfCheckStatus {
-    const sharedContext = SharedContext.getInstance();
-    return { ...sharedContext.getSelfCheckStatusSync() };
+    // Try to get from internal context first, fallback to default
+    if (internalContext) {
+        return internalContext.getDataSync();
+    }
+
+    // Return default status if context not initialized yet
+    return {
+        isRunning: false,
+        overallStatus: 'never_run',
+        scripts: {}
+    };
 }
 
 // Async version for when you can use await
 export async function getSelfCheckStatusAsync(): Promise<SelfCheckStatus> {
-    const sharedContext = SharedContext.getInstance();
-    return await sharedContext.getSelfCheckStatus();
+    const context = await getInternalContext();
+    return await context.getData();
 }
 
 export async function runSelfCheck(): Promise<void> {
-    const sharedContext = SharedContext.getInstance();
-    const currentStatus = await sharedContext.getSelfCheckStatus();
+    const context = await getInternalContext();
 
-    if (currentStatus.isRunning) {
+    // Atomically check and set running state using the internal context
+    const wasAbleToStart = await context.tryStartSelfCheck();
+    if (!wasAbleToStart) {
         throw new Error('Self-check is already running');
     }
-
-    await checkSelfIntegrity();
-
-    // Update status to running
-    const runningStatus: SelfCheckStatus = {
-        isRunning: true,
-        lastRun: new Date(),
-        overallStatus: 'never_run',
-        scripts: {}
-    };
-    await sharedContext.setSelfCheckStatus(runningStatus);
 
     let successCount = 0;
     let totalCount = SELF_CHECK_SCRIPTS.length;
 
-    console.log('Starting self-check process...');
+    try {
+        console.log('Starting self-check process...');
 
-    for (const scriptName of SELF_CHECK_SCRIPTS) {
-        const scriptPath = path.join(REMOTE_SCRIPT_DIR, 'self-check', scriptName);
-        const startTime = Date.now();
+        // Run file integrity check first
+        await checkSelfIntegrity();
 
-        try {
-            console.log(`Running: ${scriptName}`);
+        // Run all self-check scripts
+        for (const scriptName of SELF_CHECK_SCRIPTS) {
+            const scriptPath = path.join(REMOTE_SCRIPT_DIR, 'self-check', scriptName);
+            const startTime = Date.now();
 
-            // Execute the script
-            const result = await executeHostCommand(scriptPath);
-            const duration = Date.now() - startTime;
+            try {
+                console.log(`Running: ${scriptName}`);
 
-            // Update the status with this script's result
-            const updatedStatus = await sharedContext.getSelfCheckStatus();
-            updatedStatus.scripts[scriptName] = {
-                success: true,
-                message: `Script completed successfully`,
-                timestamp: new Date(),
-                duration
-            };
-            await sharedContext.setSelfCheckStatus(updatedStatus);
+                // Execute the script
+                const result = await executeHostCommand(scriptPath);
+                const duration = Date.now() - startTime;
 
-            successCount++;
-            console.log(`✓ ${scriptName} completed in ${duration}ms`);
+                // Atomically update this script's result using the internal context
+                const scriptResult: SelfCheckResult = {
+                    success: true,
+                    message: `Script completed successfully`,
+                    timestamp: new Date(),
+                    duration
+                };
 
-        } catch (error) {
-            const duration = Date.now() - startTime;
-            const errorMessage = error instanceof Error ? error.message : String(error);
+                await context.updateScriptResult(scriptName, scriptResult);
+                successCount++;
+                console.log(`✓ ${scriptName} completed in ${duration}ms`);
 
-            // Update the status with this script's error
-            const updatedStatus = await sharedContext.getSelfCheckStatus();
-            updatedStatus.scripts[scriptName] = {
-                success: false,
-                message: `Script failed: ${errorMessage}`,
-                timestamp: new Date(),
-                duration
-            };
-            await sharedContext.setSelfCheckStatus(updatedStatus);
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                const errorMessage = error instanceof Error ? error.message : String(error);
 
-            console.error(`✗ ${scriptName} failed: ${errorMessage}`);
+                // Atomically update this script's error result using the internal context
+                const scriptResult: SelfCheckResult = {
+                    success: false,
+                    message: `Script failed: ${errorMessage}`,
+                    timestamp: new Date(),
+                    duration
+                };
+
+                await context.updateScriptResult(scriptName, scriptResult);
+                console.error(`✗ ${scriptName} failed: ${errorMessage}`);
+            }
         }
+
+        // Determine overall status and mark as not running
+        let overallStatus: 'success' | 'failure' | 'partial';
+        if (successCount === totalCount) {
+            overallStatus = 'success';
+        } else if (successCount === 0) {
+            overallStatus = 'failure';
+        } else {
+            overallStatus = 'partial';
+        }
+
+        // Atomically finalize the self-check using the internal context
+        await context.finalizeSelfCheck(overallStatus);
+
+        console.log(`Self-check completed: ${successCount}/${totalCount} scripts succeeded`);
+        console.log(`Overall status: ${overallStatus}`);
+
+    } catch (error) {
+        // Ensure we clear the running state even if something goes wrong
+        await context.finalizeSelfCheck('failure');
+        throw error;
     }
-
-    // Determine overall status and mark as not running
-    const finalStatus = await sharedContext.getSelfCheckStatus();
-    if (successCount === totalCount) {
-        finalStatus.overallStatus = 'success';
-    } else if (successCount === 0) {
-        finalStatus.overallStatus = 'failure';
-    } else {
-        finalStatus.overallStatus = 'partial';
-    }
-    finalStatus.isRunning = false;
-
-    await sharedContext.setSelfCheckStatus(finalStatus);
-
-    console.log(`Self-check completed: ${successCount}/${totalCount} scripts succeeded`);
-    console.log(`Overall status: ${finalStatus.overallStatus}`);
 }
 
+// ===== INTERNAL HELPER FUNCTIONS =====
+
 async function checkSelfIntegrity(): Promise<void> {
-    const sharedContext = SharedContext.getInstance();
+    const context = await getInternalContext();
     const startTime = Date.now();
 
     try {
@@ -206,9 +229,8 @@ async function checkSelfIntegrity(): Promise<void> {
         const duration = Date.now() - startTime;
         const success = errors.length === 0;
 
-        // Update the integrity check result in shared context
-        const currentStatus = await sharedContext.getSelfCheckStatus();
-        currentStatus.integrityCheck = {
+        // Atomically update the integrity check result using the internal context
+        const integrityResult: SelfCheckResult = {
             success,
             message: success
                 ? `Integrity check completed: ${filesFixed} files fixed, ${filesRemoved} files removed`
@@ -216,24 +238,30 @@ async function checkSelfIntegrity(): Promise<void> {
             timestamp: new Date(),
             duration
         };
-        await sharedContext.setSelfCheckStatus(currentStatus);
+
+        // Use the internal context method for setting integrity check result
+        await context.setIntegrityCheckResult(integrityResult);
 
         console.log(`Integrity check completed in ${duration}ms`);
         console.log(`Files fixed: ${filesFixed}, Files removed: ${filesRemoved}, Errors: ${errors.length}`);
+
+        if (!success) {
+            throw new Error(`Integrity check failed with ${errors.length} errors`);
+        }
 
     } catch (error) {
         const duration = Date.now() - startTime;
         const errorMessage = error instanceof Error ? error.message : String(error);
 
-        // Update the integrity check error in shared context
-        const currentStatus = await sharedContext.getSelfCheckStatus();
-        currentStatus.integrityCheck = {
+        // Atomically update the integrity check error using the internal context
+        const integrityResult: SelfCheckResult = {
             success: false,
             message: `Integrity check failed: ${errorMessage}`,
             timestamp: new Date(),
             duration
         };
-        await sharedContext.setSelfCheckStatus(currentStatus);
+
+        await context.setIntegrityCheckResult(integrityResult);
 
         console.error(`Integrity check failed: ${errorMessage}`);
         throw error;
@@ -305,4 +333,19 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
     }
 
     return files;
+}
+
+// ===== CLEANUP AND UTILITIES =====
+
+// Optional: Export for manual cleanup if needed
+export async function cleanupSelfCheckContext(): Promise<void> {
+    if (internalContext) {
+        await internalContext.cleanup();
+        internalContext = null;
+    }
+}
+
+// Optional: Get context instance for advanced operations (internal use)
+export async function getSelfCheckContext(): Promise<SelfCheckContext> {
+    return await getInternalContext();
 }

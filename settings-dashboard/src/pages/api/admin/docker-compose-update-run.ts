@@ -1,6 +1,6 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
-import {dockerUpdate} from "@/backend/server/DockerUpdate";
+import {dockerUpdate} from "@/backend/server/DockerUpdate/DockerUpdate";
 
 async function handler(
     req: NextApiRequest,

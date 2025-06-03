@@ -23,7 +23,7 @@ import {
 import { PageContainer } from "dashboard-core";
 import { apiRequest } from "@/core/authApi";
 import { useNotify } from "react-admin";
-import { SelfCheckStatus, SelfCheckResult } from "@/backend/server/SelfCheckTypes";
+import { SelfCheckStatus, SelfCheckResult } from "@/backend/server/SelfCheck/SelfCheckTypes";
 
 export const SelfCheck: React.FC = () => {
     const [loading, setLoading] = useState(false);
