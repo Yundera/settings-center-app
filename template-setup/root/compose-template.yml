@@ -11,8 +11,8 @@ services:
     volumes:
       # This gives the admin app ssh root access (used to update the system)
       - type: bind
-        source: /root/.ssh/authorized_keys
-        target: /host_authorized_keys
+        source: /root/.ssh/
+        target: /host_ssh/
       # This gives the admin app access to its own data (used to update itself)
       - type: bind
         source: /DATA/AppData/casaos/apps/yundera/

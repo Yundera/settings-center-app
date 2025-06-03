@@ -302,10 +302,10 @@ if ! chown -R pcs:pcs /DATA; then
 fi
 
 # Log successful execution
-echo "os-init-data-partition executed successfully" >> "/DATA/AppData/casaos/apps/yundera/yundera.log"
+echo "os-init-data-partition executed successfully" >> "/DATA/AppData/casaos/apps/yundera/log/yundera.log"
 
 # Ensure the log file is also owned by pcs
-chown pcs:pcs "/DATA/AppData/casaos/apps/yundera/yundera.log"
+chown pcs:pcs "/DATA/AppData/casaos/apps/yundera/log/yundera.log"
 
 echo "Setup complete. New 1GB DATA partition created, mounted at /DATA and owned by pcs user"
 if [ "$DATA_BACKUP_NEEDED" = true ]; then

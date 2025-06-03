@@ -79,7 +79,7 @@ install_docker() {
     echo "Docker version: $docker_version"
 
     # Check Docker Compose version
-    local compose_version=$(docker dev version)
+    local compose_version=$(docker compose version)
     echo "Docker Compose version: $compose_version"
 
     echo "Docker installation completed"

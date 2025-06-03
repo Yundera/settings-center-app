@@ -23,4 +23,12 @@ if ! groups "$USER_NAME" | grep -q "\bsudo\b"; then
     sudo usermod -aG sudo "$USER_NAME"
 fi
 
+# Ensure basic folders exist
+mkdir -p /DATA/AppData/casaos/apps/yundera/scripts
+mkdir -p /DATA/AppData/casaos/apps/yundera/log
+
+touch /DATA/AppData/casaos/apps/yundera/log/yundera.log
+
+chown -R pcs:pcs /DATA/AppData/casaos/apps/yundera/
+
 echo "User '$USER_NAME' exist and has sudo privileges."

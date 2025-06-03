@@ -47,4 +47,4 @@ done
 history -c
 
 # Log successful execution
-echo "$(date): os-init-cleanup executed successfully" >> "/DATA/AppData/casaos/apps/yundera/yundera.log"
+echo "$(date): os-init-cleanup executed successfully" >> "/DATA/AppData/casaos/apps/yundera/log/yundera.log"
