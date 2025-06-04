@@ -1,6 +1,6 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
-import {getSelfCheckStatusAsync} from "@/backend/server/SelfCheck/SelfCheck";
+import {getSelfCheckStatus} from "@/backend/server/SelfCheck/SelfCheck";
 
 async function handler(
     req: NextApiRequest,
@@ -13,7 +13,7 @@ async function handler(
     try {
 
         // Get current self-check status from shared context
-        const status = await getSelfCheckStatusAsync();
+        const status = await getSelfCheckStatus();
 
         res.status(200).json(status);
 

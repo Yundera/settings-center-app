@@ -4,6 +4,8 @@
 
 set -e  # Exit on any error
 
+export DEBIAN_FRONTEND=noninteractive
+
 USER=pcs
 
 # Function to check if Docker is installed and working

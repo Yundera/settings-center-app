@@ -21,7 +21,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /app/
 # pnpm install
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
-COPY . /app/
+COPY .eslintrc.json /app/.eslintrc.json
+COPY ./dashboard-core /app/dashboard-core
+COPY ./settings-dashboard /app/settings-dashboard
+COPY ./template-setup /app/template-setup
 
 #recursive build
 RUN pnpm -r build

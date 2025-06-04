@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+export DEBIAN_FRONTEND=noninteractive
 
 # Ensure QEMU Guest Agent Script
 # This script ensures QEMU guest agent is installed and running

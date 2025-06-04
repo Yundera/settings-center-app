@@ -7,6 +7,8 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
+export DEBIAN_FRONTEND=noninteractive
+
 # Check if running as root
 if [ "$(id -u)" -ne 0 ]; then
     echo "This script must be run as root" >&2

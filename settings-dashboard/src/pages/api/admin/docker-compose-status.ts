@@ -1,6 +1,6 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
-import {getLastUpdateStatusAsync} from "@/backend/server/DockerUpdate/DockerUpdate";
+import {getLastUpdateStatus} from "@/backend/server/DockerUpdate/DockerUpdate";
 
 async function handler(
     req: NextApiRequest,
@@ -13,7 +13,7 @@ async function handler(
     try {
 
         // Get the last update status from shared context
-        const updates = await getLastUpdateStatusAsync();
+        const updates = await getLastUpdateStatus();
 
         res.status(200).json(updates);
 

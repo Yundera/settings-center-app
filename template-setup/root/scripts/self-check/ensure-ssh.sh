@@ -2,6 +2,8 @@
 
 set -e
 
+export DEBIAN_FRONTEND=noninteractive
+
 # Install and configure OpenSSH server
 
 if [ -f /.dockerenv ]; then

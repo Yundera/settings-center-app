@@ -1,12 +1,12 @@
-// Updated SelfCheck.ts with safe initialization
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import {getConfig} from "@/configuration/getConfigBackend";
-import {SelfCheckStatus, SelfCheckResult} from "@/backend/server/SelfCheck/SelfCheckTypes";
-import SelfCheckContext from "./SelfCheckContext";
+import { JsonFileContext } from '../SimpleMutex';
+import {SelfCheckResult, SelfCheckStatus} from "./SelfCheckTypes";
 
+// Constants
 const REMOTE_SCRIPT_DIR = `${getConfig("COMPOSE_FOLDER_PATH")}/scripts`;
 const REFERENCE_DIR = '/app/template-setup/root';
 const TARGET_DIR = '/app/data';
@@ -28,121 +28,82 @@ const SELF_CHECK_SCRIPTS = [
     'ensure-user-compose-stack-up.sh'
 ];
 
-// Internal context instance - not exposed to external APIs
-let internalContext: SelfCheckContext | null = null;
-let initializationPromise: Promise<SelfCheckContext> | null = null;
+// Default status
+const DEFAULT_STATUS: SelfCheckStatus = {
+    isRunning: false,
+    overallStatus: 'never_run',
+    scripts: {}
+};
 
-async function getInternalContext(): Promise<SelfCheckContext> {
-    if (internalContext) {
-        return internalContext;
+// Global context instance
+let context: JsonFileContext<SelfCheckStatus> | null = null;
+
+/**
+ * Get or create the context
+ */
+export async function getContext(): Promise<JsonFileContext<SelfCheckStatus>> {
+    if (!context) {
+        context = new JsonFileContext('selfcheck-status', DEFAULT_STATUS);
+        await context.initialize();
     }
-
-    if (initializationPromise) {
-        return await initializationPromise;
-    }
-
-    initializationPromise = (async () => {
-        try {
-            console.log('Initializing SelfCheckContext...');
-            const context = SelfCheckContext.getInstance();
-            await context.initialize();
-            internalContext = context;
-            console.log('SelfCheckContext initialized');
-            return context;
-        } catch (error) {
-            // Reset promise so initialization can be retried
-            initializationPromise = null;
-            console.error('Failed to initialize SelfCheckContext:', error);
-            throw error;
-        }
-    })();
-
-    return await initializationPromise;
+    return context;
 }
 
-// =====  EXISTING PUBLIC API - NO CHANGES REQUIRED BY API LAYER =====
-
-export function getSelfCheckStatus(): SelfCheckStatus {
-    // Try to get from internal context first, fallback to default
-    if (internalContext) {
-        return internalContext.getDataSync();
-    }
-
-    // Return default status if context not initialized yet
-    return {
-        isRunning: false,
-        overallStatus: 'never_run',
-        scripts: {}
-    };
+/**
+ * Get self-check status (asynchronous, fresh read)
+ */
+export async function getSelfCheckStatus(): Promise<SelfCheckStatus> {
+    const ctx = await getContext();
+    return await ctx.read();
 }
 
-// Async version for when you can use await
-export async function getSelfCheckStatusAsync(): Promise<SelfCheckStatus> {
-    const context = await getInternalContext();
-    return await context.getData();
-}
-
+/**
+ * Run self-check
+ */
 export async function runSelfCheck(): Promise<void> {
-    const context = await getInternalContext();
+    const ctx = await getContext();
 
-    // Atomically check and set running state using the internal context
-    const wasAbleToStart = await context.tryStartSelfCheck();
-    if (!wasAbleToStart) {
+    // Try to start self-check (atomic check and set)
+    let canStart = false;
+    await ctx.update(data => {
+        if (data.isRunning) {
+            return data; // Already running
+        }
+        canStart = true;
+        return {
+            ...data,
+            isRunning: true,
+            lastRun: new Date(),
+            overallStatus: 'never_run',
+            scripts: {},
+            integrityCheck: undefined
+        };
+    });
+
+    if (!canStart) {
         throw new Error('Self-check is already running');
     }
 
     let successCount = 0;
-    let totalCount = SELF_CHECK_SCRIPTS.length;
+    const totalCount = SELF_CHECK_SCRIPTS.length;
 
     try {
-        console.log('Starting file integrity check...');
-
         // Run file integrity check first
-        await checkSelfIntegrity();
+        await runIntegrityCheck(ctx);
         console.log('✓ File integrity check completed');
 
         // Run all self-check scripts
         for (const scriptName of SELF_CHECK_SCRIPTS) {
-            const scriptPath = path.join(REMOTE_SCRIPT_DIR, 'self-check', scriptName);
-            const startTime = Date.now();
+            await runScript(ctx, scriptName);
 
-            try {
-                console.log(`Running: ${scriptName}`);
-
-                // Execute the script
-                const result = await executeHostCommand(scriptPath);
-                const duration = Date.now() - startTime;
-
-                // Atomically update this script's result using the internal context
-                const scriptResult: SelfCheckResult = {
-                    success: true,
-                    message: `Script completed successfully`,
-                    timestamp: new Date(),
-                    duration
-                };
-
-                await context.updateScriptResult(scriptName, scriptResult);
+            // Check if script succeeded
+            const currentStatus = await ctx.read();
+            if (currentStatus.scripts[scriptName]?.success) {
                 successCount++;
-                console.log(`✓ ${scriptName} completed in ${duration}ms`);
-
-            } catch (error) {
-                const duration = Date.now() - startTime;
-                const errorMessage = error instanceof Error ? error.message : String(error);
-
-                // Atomically update this script's error result using the internal context
-                const scriptResult: SelfCheckResult = {
-                    success: false,
-                    message: `Script failed: ${errorMessage}`,
-                    timestamp: new Date(),
-                    duration
-                };
-
-                await context.updateScriptResult(scriptName, scriptResult);
-                console.error(`✗ ${scriptName} failed: ${errorMessage}`);
             }
         }
 
-        // Determine overall status and mark as not running
+        // Determine overall status
         let overallStatus: 'success' | 'failure' | 'partial';
         if (successCount === totalCount) {
             overallStatus = 'success';
@@ -152,23 +113,28 @@ export async function runSelfCheck(): Promise<void> {
             overallStatus = 'partial';
         }
 
-        // Atomically finalize the self-check using the internal context
-        await context.finalizeSelfCheck(overallStatus);
+        // Finalize
+        await ctx.update(data => ({
+            ...data,
+            isRunning: false,
+            overallStatus
+        }));
 
         console.log(`Self-check completed: ${successCount}/${totalCount} scripts succeeded`);
         console.log(`Overall status: ${overallStatus}`);
 
     } catch (error) {
-        // Ensure we clear the running state even if something goes wrong
-        await context.finalizeSelfCheck('failure');
+        // Ensure we clear the running state
+        await ctx.update(data => ({
+            ...data,
+            isRunning: false,
+            overallStatus: 'failure'
+        }));
         throw error;
     }
 }
 
-// ===== INTERNAL HELPER FUNCTIONS =====
-
-async function checkSelfIntegrity(): Promise<void> {
-    const context = await getInternalContext();
+async function runIntegrityCheck(ctx: JsonFileContext<SelfCheckStatus>): Promise<void> {
     const startTime = Date.now();
 
     try {
@@ -252,7 +218,7 @@ async function checkSelfIntegrity(): Promise<void> {
         const duration = Date.now() - startTime;
         const success = errors.length === 0;
 
-        // Atomically update the integrity check result using the internal context
+        // Update integrity check result
         const integrityResult: SelfCheckResult = {
             success,
             message: success
@@ -262,8 +228,10 @@ async function checkSelfIntegrity(): Promise<void> {
             duration
         };
 
-        // Use the internal context method for setting integrity check result
-        await context.setIntegrityCheckResult(integrityResult);
+        await ctx.update(data => ({
+            ...data,
+            integrityCheck: integrityResult
+        }));
 
         console.log(`Integrity check completed in ${duration}ms`);
         console.log(`Files fixed: ${filesFixed}, Files removed: ${filesRemoved}, Errors: ${errors.length}`);
@@ -276,7 +244,6 @@ async function checkSelfIntegrity(): Promise<void> {
         const duration = Date.now() - startTime;
         const errorMessage = error instanceof Error ? error.message : String(error);
 
-        // Atomically update the integrity check error using the internal context
         const integrityResult: SelfCheckResult = {
             success: false,
             message: `Integrity check failed: ${errorMessage}`,
@@ -284,13 +251,92 @@ async function checkSelfIntegrity(): Promise<void> {
             duration
         };
 
-        await context.setIntegrityCheckResult(integrityResult);
+        await ctx.update(data => ({
+            ...data,
+            integrityCheck: integrityResult
+        }));
 
         console.error(`Integrity check failed: ${errorMessage}`);
         throw error;
     }
 }
 
+async function runScript(ctx: JsonFileContext<SelfCheckStatus>, scriptName: string, timeoutMs: number = 1200000): Promise<void> {
+    const wrapperPath = path.join(REMOTE_SCRIPT_DIR,'tools','execute_script_with_log.sh');
+    const targetScriptPath = path.join(REMOTE_SCRIPT_DIR, 'self-check', scriptName);
+    const startTime = Date.now();
+
+    try {
+        console.log(`Running: ${scriptName} (timeout: ${timeoutMs}ms)`);
+
+        // Create a timeout promise
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => {
+                reject(new Error(`Script timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+        });
+
+        // Race between the script execution and timeout
+        await Promise.race([
+            executeHostCommand(`${targetScriptPath} ${wrapperPath}`),
+            timeoutPromise
+        ]);
+
+        const duration = Date.now() - startTime;
+
+        // Update script result
+        const scriptResult: SelfCheckResult = {
+            success: true,
+            message: `Script completed successfully`,
+            timestamp: new Date(),
+            duration
+        };
+
+        await ctx.update(data => ({
+            ...data,
+            scripts: {
+                ...data.scripts,
+                [scriptName]: scriptResult
+            }
+        }));
+
+        console.log(`✓ ${scriptName} completed in ${duration}ms`);
+
+    } catch (error) {
+        const duration = Date.now() - startTime;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        // Check if it was a timeout
+        const isTimeout = errorMessage.includes('timed out after');
+        const resultMessage = isTimeout
+            ? `Script timed out after ${timeoutMs}ms`
+            : `Script failed: ${errorMessage}`;
+
+        // Update script error result
+        const scriptResult: SelfCheckResult = {
+            success: false,
+            message: resultMessage,
+            timestamp: new Date(),
+            duration
+        };
+
+        await ctx.update(data => ({
+            ...data,
+            scripts: {
+                ...data.scripts,
+                [scriptName]: scriptResult
+            }
+        }));
+
+        if (isTimeout) {
+            console.error(`⏰ ${scriptName} timed out after ${timeoutMs}ms`);
+        } else {
+            console.error(`✗ ${scriptName} failed: ${errorMessage}`);
+        }
+    }
+}
+
+// Helper functions
 function computeHash(content: Buffer): string {
     return crypto.createHash('sha256').update(content).digest('hex');
 }
@@ -309,7 +355,6 @@ async function loadIgnorePatterns(): Promise<string[]> {
             .map(line => line.trim())
             .filter(line => line && !line.startsWith('#'));
     } catch {
-        // If .ignore file doesn't exist, return empty patterns
         return [];
     }
 }
@@ -324,8 +369,6 @@ function shouldIgnoreFile(filePath: string, patterns: string[]): boolean {
 }
 
 function matchesPattern(filePath: string, pattern: string): boolean {
-    // Simple glob-like pattern matching
-    // Convert glob pattern to regex
     const regexPattern = pattern
         .replace(/\./g, '\\.')
         .replace(/\*/g, '.*')
@@ -356,19 +399,4 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
     }
 
     return files;
-}
-
-// ===== CLEANUP AND UTILITIES =====
-
-export async function cleanupSelfCheckContext(): Promise<void> {
-    if (internalContext) {
-        await internalContext.cleanup();
-        internalContext = null;
-        initializationPromise = null;
-    }
-}
-
-// Optional: Get context instance for advanced operations (internal use)
-export async function getSelfCheckContext(): Promise<SelfCheckContext> {
-    return await getInternalContext();
 }
