@@ -267,7 +267,7 @@ async function runScript(ctx: JsonFileContext<SelfCheckStatus>, scriptName: stri
     const startTime = Date.now();
 
     try {
-        console.log(`Running: ${scriptName} (timeout: ${timeoutMs}ms)`);
+        console.log(`Running: ${scriptName}`);
 
         // Create a timeout promise
         const timeoutPromise = new Promise<never>((_, reject) => {
@@ -278,7 +278,7 @@ async function runScript(ctx: JsonFileContext<SelfCheckStatus>, scriptName: stri
 
         // Race between the script execution and timeout
         await Promise.race([
-            executeHostCommand(`${targetScriptPath} ${wrapperPath}`),
+            executeHostCommand(`${wrapperPath} ${targetScriptPath}`),
             timeoutPromise
         ]);
 

@@ -18,6 +18,6 @@ execute_script_with_logging $SCRIPT_DIR/self-check/ensure-docker-installed.sh;
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-user-docker-compose-updated.sh;
 
 #restart the user compose stack to ensure service are in a right state for example casaos only works well after a fresh down and up
-execute_script_with_logging $SCRIPT_DIR/tool/restart-user-compose-stack.sh
+execute_script_with_logging $SCRIPT_DIR/tools/restart-user-compose-stack.sh
 
 log "=== Self-check-os completed successfully ==="

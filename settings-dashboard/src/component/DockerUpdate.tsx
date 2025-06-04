@@ -83,7 +83,7 @@ export const DockerUpdate: React.FC = () => {
         setError(null);
 
         try {
-            await apiRequest("/api/admin/docker-compose-update", "POST");
+            await apiRequest("/api/admin/docker-compose-update-run", "POST");
             notify('Docker update completed successfully');
             await getLastStatus(); // Refresh update status
         } catch (err: any) {
