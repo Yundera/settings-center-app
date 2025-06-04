@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# Idempotent script to create a 1GB resizable partition and mount it on /DATA
+# Idempotent script to create a 1GB resizable partition and mount it on /mnt/data
+# with bind mounts to /DATA and /var/lib/docker
 # This script must be run as root
-# Enhanced version that preserves existing /DATA directory contents
+# Preserves existing /DATA and /var/lib/docker directory contents
 
 # Exit immediately if a command exits with a non-zero status
 set -e
@@ -31,9 +32,9 @@ command -v rsync &> /dev/null || {
     apt-get update -qq && apt-get install -y rsync
 }
 
-# Check if /DATA is already mounted
-if mountpoint -q /DATA 2>/dev/null; then
-    echo "/DATA is already mounted. Nothing to do."
+# Check if /mnt/data is already mounted and bind mounts are set up
+if mountpoint -q /mnt/data 2>/dev/null && mountpoint -q /DATA 2>/dev/null && mountpoint -q /var/lib/docker 2>/dev/null; then
+    echo "All mounts are already configured. Nothing to do."
     exit 0
 fi
 
@@ -55,6 +56,24 @@ if [ -d "/DATA" ] && ! mountpoint -q /DATA 2>/dev/null; then
     echo "Existing /DATA directory backed up to /DATA.tmp"
 fi
 
+# Check if /var/lib/docker exists as a directory (not mounted)
+DOCKER_BACKUP_NEEDED=false
+if [ -d "/var/lib/docker" ] && ! mountpoint -q /var/lib/docker 2>/dev/null; then
+    echo "Found existing /var/lib/docker directory. Will preserve its contents."
+    DOCKER_BACKUP_NEEDED=true
+
+    # Check if docker.tmp already exists
+    if [ -e "/var/lib/docker.tmp" ]; then
+        echo "WARNING: /var/lib/docker.tmp already exists. Removing it..."
+        rm -rf "/var/lib/docker.tmp"
+    fi
+
+    # Rename existing /var/lib/docker to /var/lib/docker.tmp
+    echo "Backing up existing /var/lib/docker to /var/lib/docker.tmp..."
+    mv "/var/lib/docker" "/var/lib/docker.tmp"
+    echo "Existing /var/lib/docker directory backed up to /var/lib/docker.tmp"
+fi
+
 # Check if the volume group already exists
 if vgdisplay data_vg >/dev/null 2>&1; then
     echo "Volume group 'data_vg' already exists."
@@ -64,30 +83,67 @@ if vgdisplay data_vg >/dev/null 2>&1; then
         echo "Logical volume 'data_lv' already exists. Attempting to mount..."
 
         # Create mount point if it doesn't exist
-        if [ ! -d "/DATA" ]; then
-            echo "Creating mount point /DATA..."
-            mkdir /DATA
+        if [ ! -d "/mnt/data" ]; then
+            echo "Creating mount point /mnt/data..."
+            mkdir -p /mnt/data
         fi
 
         # Try to mount the existing volume
-        if mount /dev/data_vg/data_lv /DATA 2>/dev/null; then
-            echo "Successfully mounted existing data partition to /DATA"
+        if mount /dev/data_vg/data_lv /mnt/data 2>/dev/null; then
+            echo "Successfully mounted existing data partition to /mnt/data"
 
             # Ensure fstab entry exists
-            if ! grep -q "/dev/data_vg/data_lv /DATA" /etc/fstab; then
+            if ! grep -q "/dev/data_vg/data_lv /mnt/data" /etc/fstab; then
                 echo "Adding fstab entry..."
-                echo "/dev/data_vg/data_lv /DATA ext4 defaults 0 2" >> /etc/fstab
+                echo "/dev/data_vg/data_lv /mnt/data ext4 defaults 0 2" >> /etc/fstab
             fi
+
+            # Create subdirectories and restore data
+            mkdir -p /mnt/data/user
+            mkdir -p /mnt/data/docker
 
             # Restore backed up data if needed
             if [ "$DATA_BACKUP_NEEDED" = true ] && [ -d "/DATA.tmp" ]; then
-                echo "Restoring backed up data to mounted /DATA..."
-                rsync -av "/DATA.tmp/" "/DATA/"
+                echo "Restoring backed up data to /mnt/data/user..."
+                rsync -av "/DATA.tmp/" "/mnt/data/user/"
 
                 # Remove backup after successful restoration
                 echo "Removing backup directory /DATA.tmp..."
                 rm -rf "/DATA.tmp"
                 echo "Data restoration complete."
+            fi
+
+            if [ "$DOCKER_BACKUP_NEEDED" = true ] && [ -d "/var/lib/docker.tmp" ]; then
+                echo "Restoring backed up docker data to /mnt/data/docker..."
+                rsync -av "/var/lib/docker.tmp/" "/mnt/data/docker/"
+
+                # Remove backup after successful restoration
+                echo "Removing backup directory /var/lib/docker.tmp..."
+                rm -rf "/var/lib/docker.tmp"
+                echo "Docker data restoration complete."
+            fi
+
+            # Set up bind mounts
+            # Create mount points if they don't exist
+            mkdir -p /DATA
+            mkdir -p /var/lib/docker
+
+            # Set up bind mounts
+            if ! mountpoint -q /DATA 2>/dev/null; then
+                mount --bind /mnt/data/user /DATA
+            fi
+
+            if ! mountpoint -q /var/lib/docker 2>/dev/null; then
+                mount --bind /mnt/data/docker /var/lib/docker
+            fi
+
+            # Add bind mount entries to fstab
+            if ! grep -q "/mnt/data/user /DATA" /etc/fstab; then
+                echo "/mnt/data/user /DATA none bind 0 0" >> /etc/fstab
+            fi
+
+            if ! grep -q "/mnt/data/docker /var/lib/docker" /etc/fstab; then
+                echo "/mnt/data/docker /var/lib/docker none bind 0 0" >> /etc/fstab
             fi
 
             # Ensure ownership and logging directory
@@ -145,6 +201,11 @@ if [ -z "$SUITABLE_START" ]; then
         mv "/DATA.tmp" "/DATA"
     fi
 
+    if [ "$DOCKER_BACKUP_NEEDED" = true ] && [ -d "/var/lib/docker.tmp" ]; then
+        echo "Restoring original /var/lib/docker directory due to partition creation failure..."
+        mv "/var/lib/docker.tmp" "/var/lib/docker"
+    fi
+
     exit 1
 fi
 
@@ -163,7 +224,7 @@ START_NUM=$(echo "$SUITABLE_START" | sed 's/MB//')
 END_NUM=$((START_NUM + TARGET_SIZE))
 parted -s /dev/sda unit MB mkpart primary ${START_NUM}MB ${END_NUM}MB
 
-# DockerUpdate kernel to see the new partition
+# Update kernel to see the new partition
 partprobe /dev/sda
 
 # Smart wait for the partition to become available
@@ -191,6 +252,11 @@ if [ ! -b "$NEW_PARTITION" ]; then
         mv "/DATA.tmp" "/DATA"
     fi
 
+    if [ "$DOCKER_BACKUP_NEEDED" = true ] && [ -d "/var/lib/docker.tmp" ]; then
+        echo "Restoring original /var/lib/docker directory due to partition creation failure..."
+        mv "/var/lib/docker.tmp" "/var/lib/docker"
+    fi
+
     exit 1
 fi
 
@@ -208,6 +274,11 @@ if ! pvcreate $NEW_PARTITION; then
         mv "/DATA.tmp" "/DATA"
     fi
 
+    if [ "$DOCKER_BACKUP_NEEDED" = true ] && [ -d "/var/lib/docker.tmp" ]; then
+        echo "Restoring original /var/lib/docker directory due to LVM setup failure..."
+        mv "/var/lib/docker.tmp" "/var/lib/docker"
+    fi
+
     exit 1
 fi
 
@@ -220,6 +291,11 @@ if ! vgcreate data_vg $NEW_PARTITION; then
     if [ "$DATA_BACKUP_NEEDED" = true ] && [ -d "/DATA.tmp" ]; then
         echo "Restoring original /DATA directory due to LVM setup failure..."
         mv "/DATA.tmp" "/DATA"
+    fi
+
+    if [ "$DOCKER_BACKUP_NEEDED" = true ] && [ -d "/var/lib/docker.tmp" ]; then
+        echo "Restoring original /var/lib/docker directory due to LVM setup failure..."
+        mv "/var/lib/docker.tmp" "/var/lib/docker"
     fi
 
     exit 1
@@ -236,6 +312,11 @@ if ! lvcreate -l 100%FREE -n data_lv data_vg; then
         mv "/DATA.tmp" "/DATA"
     fi
 
+    if [ "$DOCKER_BACKUP_NEEDED" = true ] && [ -d "/var/lib/docker.tmp" ]; then
+        echo "Restoring original /var/lib/docker directory due to LVM setup failure..."
+        mv "/var/lib/docker.tmp" "/var/lib/docker"
+    fi
+
     exit 1
 fi
 
@@ -250,48 +331,84 @@ if ! mkfs.ext4 /dev/data_vg/data_lv; then
         mv "/DATA.tmp" "/DATA"
     fi
 
+    if [ "$DOCKER_BACKUP_NEEDED" = true ] && [ -d "/var/lib/docker.tmp" ]; then
+        echo "Restoring original /var/lib/docker directory due to formatting failure..."
+        mv "/var/lib/docker.tmp" "/var/lib/docker"
+    fi
+
     exit 1
 fi
 
 # Create mount point if it doesn't exist
-if [ ! -d "/DATA" ]; then
-    echo "Creating mount point /DATA..."
-    mkdir /DATA
+if [ ! -d "/mnt/data" ]; then
+    echo "Creating mount point /mnt/data..."
+    mkdir -p /mnt/data
 fi
 
 # Mount the volume
-echo "Mounting volume to /DATA..."
-if ! mount /dev/data_vg/data_lv /DATA; then
+echo "Mounting volume to /mnt/data..."
+if ! mount /dev/data_vg/data_lv /mnt/data; then
     echo "Failed to mount volume"
 
     # Restore backed up data if mounting failed
     if [ "$DATA_BACKUP_NEEDED" = true ] && [ -d "/DATA.tmp" ]; then
         echo "Restoring original /DATA directory due to mounting failure..."
-        rmdir "/DATA" 2>/dev/null || true  # Remove empty mount point
+        rmdir "/mnt/data" 2>/dev/null || true  # Remove empty mount point
         mv "/DATA.tmp" "/DATA"
+    fi
+
+    if [ "$DOCKER_BACKUP_NEEDED" = true ] && [ -d "/var/lib/docker.tmp" ]; then
+        echo "Restoring original /var/lib/docker directory due to mounting failure..."
+        mv "/var/lib/docker.tmp" "/var/lib/docker"
     fi
 
     exit 1
 fi
 
 # Add entry to /etc/fstab for persistent mounting (only if not already present)
-if ! grep -q "/dev/data_vg/data_lv /DATA" /etc/fstab; then
+if ! grep -q "/dev/data_vg/data_lv /mnt/data" /etc/fstab; then
     echo "Updating /etc/fstab..."
-    echo "/dev/data_vg/data_lv /DATA ext4 defaults 0 2" >> /etc/fstab
+    echo "/dev/data_vg/data_lv /mnt/data ext4 defaults 0 2" >> /etc/fstab
 else
     echo "fstab entry already exists, skipping..."
 fi
 
+# Create subdirectories
+mkdir -p /mnt/data/user
+mkdir -p /mnt/data/docker
+
 # Restore backed up data if needed
 if [ "$DATA_BACKUP_NEEDED" = true ] && [ -d "/DATA.tmp" ]; then
-    echo "Restoring backed up data to new partition..."
-    rsync -av "/DATA.tmp/" "/DATA/"
+    echo "Restoring backed up data to /mnt/data/user..."
+    rsync -av "/DATA.tmp/" "/mnt/data/user/"
 
     # Remove backup after successful restoration
     echo "Removing backup directory /DATA.tmp..."
     rm -rf "/DATA.tmp"
     echo "Data restoration complete."
 fi
+
+if [ "$DOCKER_BACKUP_NEEDED" = true ] && [ -d "/var/lib/docker.tmp" ]; then
+    echo "Restoring backed up docker data to /mnt/data/docker..."
+    rsync -av "/var/lib/docker.tmp/" "/mnt/data/docker/"
+
+    # Remove backup after successful restoration
+    echo "Removing backup directory /var/lib/docker.tmp..."
+    rm -rf "/var/lib/docker.tmp"
+    echo "Docker data restoration complete."
+fi
+
+# Create mount points for bind mounts
+mkdir -p /DATA
+mkdir -p /var/lib/docker
+
+# Set up bind mounts
+mount --bind /mnt/data/user /DATA
+mount --bind /mnt/data/docker /var/lib/docker
+
+# Add bind mount entries to fstab
+echo "/mnt/data/user /DATA none bind 0 0" >> /etc/fstab
+echo "/mnt/data/docker /var/lib/docker none bind 0 0" >> /etc/fstab
 
 # Create application directory structure
 mkdir -p /DATA/AppData/casaos/apps/yundera
@@ -309,7 +426,10 @@ echo "os-init-data-partition executed successfully" >> "/DATA/AppData/casaos/app
 # Ensure the log file is also owned by pcs
 chown pcs:pcs "/DATA/AppData/casaos/apps/yundera/log/yundera.log"
 
-echo "Setup complete. New 1GB DATA partition created, mounted at /DATA and owned by pcs user"
+echo "Setup complete. New 1GB DATA partition created, mounted at /mnt/data with bind mounts to /DATA and /var/lib/docker"
 if [ "$DATA_BACKUP_NEEDED" = true ]; then
-    echo "Original /DATA contents have been successfully restored to the new partition."
+    echo "Original /DATA contents have been successfully restored."
+fi
+if [ "$DOCKER_BACKUP_NEEDED" = true ]; then
+    echo "Original /var/lib/docker contents have been successfully restored."
 fi

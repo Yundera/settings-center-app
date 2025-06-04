@@ -102,7 +102,7 @@ if check_disk_expanded "$DISK" "$DATA_PART"; then
     sgdisk -d "$PART_NUM" "$DISK"
     sgdisk -n ${PART_NUM}:${START_SECTOR}:0 -t ${PART_NUM}:8e00 "$DISK"
 
-    # DockerUpdate kernel to see the new partition size
+    # Update kernel to see the new partition size
     echo "Updating partition table..."
     partprobe "$DISK"
     sleep 3
