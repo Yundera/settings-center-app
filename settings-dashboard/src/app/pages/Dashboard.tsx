@@ -2,6 +2,7 @@ import React from 'react';
 import Typography from '@mui/material/Typography';
 import { PageContainer } from "dashboard-core";
 import { YunderaDashboard } from "@/component/YunderaDahsboard";
+import { EnvConfiguration} from "@/component/EnvConfiguration";
 
 export const Dashboard: React.FC = () => {
     return (
@@ -10,6 +11,7 @@ export const Dashboard: React.FC = () => {
                 Yundera Dashboard
             </Typography>
             <YunderaDashboard />
+            <EnvConfiguration />
         </PageContainer>
     );
 };

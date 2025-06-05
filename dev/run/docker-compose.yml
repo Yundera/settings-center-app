@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  settings-app:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    container_name: settings-dev
+    env_file:
+      - dev-env
+    ports:
+      - "4342:80"
+    volumes:
+      - ssh_keys:/host_ssh/
+      - data:/app/data/
+    environment:
+      - HOST_ADDRESS=ubuntu-server
+    networks:
+      - app-network
+    depends_on:
+      - ubuntu-host
+
+  ubuntu-host:
+    image: ubuntu:latest
+    container_name: ubuntu-host
+    hostname: ubuntu-server
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ssh_keys:/root/.ssh/
+      - data:/DATA/AppData/casaos/apps/yundera/
+      - ./dev-env:/tmp/.env
+    command: >
+      bash -c "
+        apt-get update &&
+        apt-get install -y openssh-server &&
+        mkdir -p /root/.ssh &&
+        chmod 700 /root/.ssh &&
+        chmod 600 /root/.ssh/authorized_keys &&
+        echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config &&
+        service ssh start &&
+        cp /tmp/.env /DATA/AppData/casaos/apps/yundera/.env &&
+        tail -f /dev/null
+      "
+    networks:
+      - app-network
+
+volumes:
+  ssh_keys:
+  data:
+
+networks:
+  app-network:
+    driver: bridge
