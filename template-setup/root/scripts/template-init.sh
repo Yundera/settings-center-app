@@ -5,8 +5,7 @@ set -e
 SCRIPT_DIR="/DATA/AppData/casaos/apps/yundera/scripts"
 source ${SCRIPT_DIR}/library/common.sh
 
-mkdir -p /DATA/AppData/casaos/apps/yundera/scripts
-mkdir -p /DATA/AppData/casaos/apps/yundera/log
+mkdir -p /DATA/AppData/casaos/apps/yundera/
 touch /DATA/AppData/casaos/apps/yundera/log/yundera.log
 chown -R pcs:pcs /DATA/
 echo "" > ${LOG_FILE}
