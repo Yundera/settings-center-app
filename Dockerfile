@@ -1,16 +1,16 @@
-ARG BASE_PATH=""
-
-# Base image setup
 FROM node:lts AS base
-ARG BASE_PATH
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
+ARG BASE_PATH=""
 ENV NEXT_PUBLIC_BASE_PATH=$BASE_PATH
 
-RUN apt update && apt install -y iproute2
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 
-#same version as the one in CasaOS-UI package.json
-RUN corepack enable && corepack prepare pnpm@9.0.6 --activate
+# Install corepack and enable it
+RUN npm install -g corepack@latest && corepack enable
+
+# Install useful tools
+RUN apt-get update && apt-get install -y iproute2 && rm -rf /var/lib/apt/lists/*
+
 
 # pnpm file first
 WORKDIR /app
@@ -19,6 +19,8 @@ COPY dashboard-core/package.json /app/dashboard-core/
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /app/
 
 # pnpm install
+# Install the exact pnpm version specified in package.json
+RUN corepack install
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 COPY .eslintrc.json /app/.eslintrc.json

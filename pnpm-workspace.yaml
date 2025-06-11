@@ -1,4 +1,8 @@
 packages:
-  - "packages/*"
-  - "dashboard-core"
-  - "settings-dashboard"
+  - packages/*
+  - dashboard-core
+  - settings-dashboard
+
+onlyBuiltDependencies:
+  - esbuild
+  - protobufjs
