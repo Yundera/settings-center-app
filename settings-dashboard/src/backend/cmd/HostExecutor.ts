@@ -1,4 +1,4 @@
-import { execute } from "@/backend/cmd/Executor";
+import { execute } from "@/backend/cmd/LocalExecutor";
 import { promises as fs } from 'fs';
 import path from 'path';
 import {getConfig} from "@/configuration/getConfigBackend";
