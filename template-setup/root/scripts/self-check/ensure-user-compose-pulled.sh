@@ -11,7 +11,7 @@ if [ ! -f "$COMPOSE_FILE" ]; then
 fi
 
 # Start containers
-if docker compose -f "$COMPOSE_FILE" pull; then
+if docker compose -f "$COMPOSE_FILE" pull --quiet; then
     echo "User compose stack pulled successfully"
 else
     echo "ERROR: Failed to pull user compose stack"

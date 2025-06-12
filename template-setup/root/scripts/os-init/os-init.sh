@@ -10,9 +10,9 @@ log "=== Starting final user hand over ==="
 
 # basic permission and execution setup
 chmod +x $SCRIPT_DIR/self-check/ensure-pcs-user.sh
-chmod +x $SCRIPT_DIR/tools/make-executable.sh
+chmod +x $SCRIPT_DIR/self-check/ensure-script-executable.sh
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-pcs-user.sh
-execute_script_with_logging $SCRIPT_DIR/tools/make-executable.sh
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-script-executable.sh
 
 # run small subset self-check scripts the entire subset will be run by the admin app
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-data-partition.sh
@@ -23,7 +23,7 @@ execute_script_with_logging $SCRIPT_DIR/self-check/ensure-docker-installed.sh
 # this will generate the user specific docker compose file with user specific settings
 # and run the initial start of the docker compose user stack
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-user-docker-compose-updated.sh
-execute_script_with_logging $SCRIPT_DIR/os-init/os-docker-image-up-to-date.sh
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-user-compose-pulled.sh
 execute_script_with_logging $SCRIPT_DIR/tools/restart-user-compose-stack.sh
 
 # run os-init scripts only once in the VM lifecycle

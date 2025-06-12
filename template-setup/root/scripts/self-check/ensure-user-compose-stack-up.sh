@@ -1,22 +1,25 @@
 #!/bin/bash
-# Script to ensure Docker Compose services are running
-set -e  # Exit on any error
+set -e
 
 COMPOSE_FILE="/DATA/AppData/casaos/apps/yundera/docker-compose.yml"
 
-# Check if compose file exists
 if [ ! -f "$COMPOSE_FILE" ]; then
     echo "ERROR: Docker compose file not found: $COMPOSE_FILE"
     exit 1
 fi
 
-# Stop any existing containers (with error suppression)
-#docker compose -f "$COMPOSE_FILE" down 2>/dev/null || true
+echo "Starting docker compose update..."
 
-# Start containers
-if docker compose -f "$COMPOSE_FILE" up --quiet-pull -d; then
+# Run docker compose directly in background, streaming output
+docker compose -f "$COMPOSE_FILE" up --quiet-pull -d &
+DOCKER_PID=$!
+
+echo "Docker compose started (PID: $DOCKER_PID)"
+
+# Wait for completion and capture exit code
+if wait $DOCKER_PID; then
     echo "User compose stack is up"
 else
     echo "ERROR: Failed to start docker containers"
-    exit 1
+    exit $?
 fi

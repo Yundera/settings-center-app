@@ -108,9 +108,6 @@ export async function executeHostCommand(
             host = 'host.docker.internal'; // fallback
         }
 
-        // Ensure the private key has correct permissions
-        await execute(`chmod 600 ${keyPath}`,false);
-
         // SSH command with options
         const sshCmd = [
             'ssh',
