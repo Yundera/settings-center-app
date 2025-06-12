@@ -12,6 +12,7 @@ const REFERENCE_DIR = '/app/template-setup/root';
 const TARGET_DIR = '/app/data';
 const IGNORE_FILE = path.join(TARGET_DIR, '.ignore');
 
+//order of scripts matters, as some depend on others
 const SELF_CHECK_SCRIPTS = [
     'ensure-pcs-user.sh',
     'ensure-ubuntu-up-to-date.sh',
@@ -25,6 +26,7 @@ const SELF_CHECK_SCRIPTS = [
     'ensure-self-check-at-reboot.sh',
     'ensure-docker-installed.sh',
     'ensure-user-docker-compose-updated.sh',
+    'ensure-user-compose-pulled.sh',
     'ensure-user-compose-stack-up.sh'
 ];
 
