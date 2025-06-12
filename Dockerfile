@@ -26,10 +26,11 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 COPY .eslintrc.json /app/.eslintrc.json
 COPY ./dashboard-core /app/dashboard-core
 COPY ./settings-dashboard /app/settings-dashboard
-COPY ./template-setup /app/template-setup
 
 #recursive build
 RUN pnpm -r build
+
+COPY ./template-setup /app/template-setup
 
 #start the app
 EXPOSE 4321
