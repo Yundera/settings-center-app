@@ -20,8 +20,8 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Make scripts executable
-chmod +x $SCRIPT_DIR/tools/make-executable.sh
-execute_script_with_logging $SCRIPT_DIR/tools/make-executable.sh
+chmod +x $SCRIPT_DIR/self-check/ensure-script-executable.sh
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-script-executable.sh
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-pcs-user.sh;
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-data-partition.sh;
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-data-partition-size.sh;

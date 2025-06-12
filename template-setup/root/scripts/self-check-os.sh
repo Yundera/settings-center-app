@@ -13,6 +13,7 @@ source ${SCRIPT_DIR}/library/common.sh
 
 log "=== Self-check-os starting  ==="
 
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-script-executable.sh
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-self-check-at-reboot.sh;
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-docker-installed.sh;
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-user-docker-compose-updated.sh;

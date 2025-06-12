@@ -16,6 +16,7 @@ const IGNORE_FILE = path.join(TARGET_DIR, '.ignore');
 //order of scripts matters, as some depend on others
 const SELF_CHECK_SCRIPTS = [
     'ensure-pcs-user.sh',
+    'ensure-script-executable.sh',
     'ensure-ubuntu-up-to-date.sh',
     'ensure-common-tools-installed.sh',
     'ensure-ssh.sh',
