@@ -39,8 +39,8 @@ execute_script_with_logging $SCRIPT_DIR/self-check/ensure-docker-installed.sh;
 #$SCRIPT_DIR/self-check/ensure-user-dev-stack-up.sh
 
 # pre-pull necessary Docker images for faster vm creation for clients
-docker pull nasselle/settings-center-app
-docker pull nasselle/casa-img
-docker pull nasselle/mesh-router
+docker pull ghcr.io/yundera/settings-center-app
+docker pull ghcr.io/yundera/casa-img
+docker pull ghcr.io/yundera/mesh-router
 
 log "=== Template-init completed successfully ==="

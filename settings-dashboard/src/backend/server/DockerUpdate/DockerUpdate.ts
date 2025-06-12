@@ -3,6 +3,8 @@ import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 import { JsonFileContext } from '../SimpleMutex';
 import { DockerImageInfo, DockerUpdateStatus, ImageStatus, LastUpdateStatus } from './DockerUpdateTypes';
 
+const composePath = getConfig("COMPOSE_FOLDER_PATH") || "/DATA/AppData/casaos/apps/yundera/";
+
 // Default status
 const DEFAULT_STATUS: DockerUpdateStatus = {
     timestamp: new Date(),
@@ -31,7 +33,6 @@ export async function getContext(): Promise<JsonFileContext<DockerUpdateStatus>>
  * Run Docker update
  */
 export async function dockerUpdate() {
-    const composePath = getConfig("COMPOSE_FOLDER_PATH");
     const ctx = await getContext();
 
     try {
@@ -130,7 +131,6 @@ export async function dockerUpdate() {
  * Check for updates
  */
 export async function checkForUpdates(): Promise<ImageStatus[]> {
-    const composePath = getConfig("COMPOSE_FOLDER_PATH");
     const cdCommand = `cd ${composePath}`;
     const ctx = await getContext();
     const startTime = Date.now();
