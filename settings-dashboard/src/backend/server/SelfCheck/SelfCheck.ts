@@ -7,7 +7,8 @@ import { JsonFileContext } from '../SimpleMutex';
 import {SelfCheckResult, SelfCheckStatus} from "./SelfCheckTypes";
 
 // Constants
-const REMOTE_SCRIPT_DIR = `${getConfig("COMPOSE_FOLDER_PATH")}/scripts`;
+const REMOTE_DATA_APP = getConfig("COMPOSE_FOLDER_PATH") || "/DATA/AppData/casaos/apps/yundera/";
+const REMOTE_SCRIPT_DIR = `${REMOTE_DATA_APP}/scripts`;
 const REFERENCE_DIR = '/app/template-setup/root';
 const TARGET_DIR = '/app/data';
 const IGNORE_FILE = path.join(TARGET_DIR, '.ignore');
