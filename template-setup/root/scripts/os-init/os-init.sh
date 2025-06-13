@@ -22,6 +22,8 @@ execute_script_with_logging $SCRIPT_DIR/self-check/ensure-docker-installed.sh
 
 # this will generate the user specific docker compose file with user specific settings
 # and run the initial start of the docker compose user stack
+# This ensures the user compose stack is up to date with the latest changes
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-template-version.sh;
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-user-docker-compose-updated.sh
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-user-compose-pulled.sh
 execute_script_with_logging $SCRIPT_DIR/tools/restart-user-compose-stack.sh
