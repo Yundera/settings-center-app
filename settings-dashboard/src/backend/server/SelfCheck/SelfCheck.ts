@@ -27,6 +27,7 @@ const SELF_CHECK_SCRIPTS = [
     'ensure-swap.sh',
     'ensure-self-check-at-reboot.sh',
     'ensure-docker-installed.sh',
+    'ensure-template-version.sh',
     'ensure-user-docker-compose-updated.sh',
     'ensure-user-compose-pulled.sh',
     'ensure-user-compose-stack-up.sh'

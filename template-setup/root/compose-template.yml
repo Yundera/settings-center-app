@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
     environment:
       AUTHORITY_ENDPOINT: "https://8080-casaos-%DOMAIN%/v1/users"
+      COMPOSE_FOLDER_PATH: "/DATA/AppData/casaos/apps/yundera/"
     env_file:
       - .env
     volumes:

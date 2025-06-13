@@ -1,3 +1,4 @@
 docker-compose.yml
 .env
 log/*.log
+*.backup

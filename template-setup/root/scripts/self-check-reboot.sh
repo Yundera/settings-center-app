@@ -16,6 +16,7 @@ log "=== Self-check-os starting  ==="
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-script-executable.sh
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-self-check-at-reboot.sh;
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-docker-installed.sh;
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-template-version.sh;
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-user-docker-compose-updated.sh;
 # This ensures the user compose stack is up to date with the latest changes
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-user-compose-pulled.sh;

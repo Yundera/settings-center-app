@@ -9,8 +9,11 @@ if [ -f /.dockerenv ]; then
 fi
 
 remoteFolder="/DATA/AppData/casaos/apps/yundera/scripts"
-scriptFile="$remoteFolder/self-check-os.sh"
+scriptFile="$remoteFolder/self-check-reboot.sh"
 CRON_ENTRY="@reboot $scriptFile"
+
+# Ensure the script file is executable
+chmod +x "$scriptFile"
 
 # Check if cron job already exists
 if crontab -l 2>/dev/null | grep -q "$scriptFile"; then
