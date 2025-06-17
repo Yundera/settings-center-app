@@ -43,3 +43,5 @@ next-env.d.ts
 config/*.json
 .idea
 /dev/*
+settings-dashboard/docker-update-status.json
+settings-dashboard/selfcheck-status.json
