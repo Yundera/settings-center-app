@@ -15,6 +15,7 @@ execute_script_with_logging $SCRIPT_DIR/self-check/ensure-pcs-user.sh
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-script-executable.sh
 
 # run small subset self-check scripts the entire subset will be run by the admin app
+execute_script_with_logging $SCRIPT_DIR/self-check/ensure-qemu-agent.sh
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-data-partition.sh
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-data-partition-size.sh
 execute_script_with_logging $SCRIPT_DIR/self-check/ensure-self-check-at-reboot.sh
