@@ -1,8 +1,8 @@
-name: yundera
+name: pcs-app
 services:
 
   admin:
-    image: ghcr.io/yundera/settings-center-app:1.1.6
+    image: ghcr.io/yundera/settings-center-app:1.1.7
     container_name: admin
     hostname: admin
     restart: unless-stopped
@@ -26,7 +26,7 @@ services:
       pcs: null
 
   casaos:
-    image: ghcr.io/yundera/casa-img:0.4.15-17
+    image: ghcr.io/yundera/casa-img:0.4.15-18
     container_name: casaos
     hostname: casaos
     restart: unless-stopped
@@ -76,14 +76,14 @@ networks:
 
 x-casaos:
   main: admin
-  author: self
-  category: self
+  author: Yundera Team
+  category: pcs
   hostname: admin-%DOMAIN%
   icon: https://styles.redditmedia.com/t5_deqw76/styles/communityIcon_mrihspifrgee1.png
   index: /
   is_uncontrolled: false
   port_map: ""
   scheme: https
-  store_app_id: yundera
+  store_app_id: pcs-app
   title:
-    custom: Yundera
+    custom: PCS Settings
