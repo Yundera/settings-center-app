@@ -1,4 +1,4 @@
-name: pcs-app
+name: yundera
 services:
 
   admin:
@@ -84,6 +84,6 @@ x-casaos:
   is_uncontrolled: false
   port_map: ""
   scheme: https
-  store_app_id: pcs-app
+  store_app_id: yundera
   title:
     custom: PCS Settings
