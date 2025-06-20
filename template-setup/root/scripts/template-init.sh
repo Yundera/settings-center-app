@@ -1,13 +1,24 @@
 #!/bin/bash
 
+# to use this template init script on a fresh VM
+# 1 - switch to root :
+# sudo su -
+# 2 - create directory structure :
+# mkdir -p /DATA/AppData/casaos/apps/yundera/ && chown -R pcs:pcs /DATA/
+# 3 - copy this scripts folder to the directory : /DATA/AppData/casaos/apps/yundera/
+# 4 - run this script :
+# chmod +x /DATA/AppData/casaos/apps/yundera/scripts/template-init.sh && /DATA/AppData/casaos/apps/yundera/scripts/template-init.sh
+
 set -e
 
 SCRIPT_DIR="/DATA/AppData/casaos/apps/yundera/scripts"
 source ${SCRIPT_DIR}/library/common.sh
 
 mkdir -p /DATA/AppData/casaos/apps/yundera/
-touch /DATA/AppData/casaos/apps/yundera/log/yundera.log
 chown -R pcs:pcs /DATA/
+chmod +x /DATA/AppData/casaos/apps/yundera/
+
+touch /DATA/AppData/casaos/apps/yundera/log/yundera.log
 echo "" > ${LOG_FILE}
 chown pcs:pcs ${LOG_FILE}
 
@@ -38,9 +49,14 @@ execute_script_with_logging $SCRIPT_DIR/self-check/ensure-docker-installed.sh;
 #$SCRIPT_DIR/self-check/ensure-user-docker-dev-updated.sh;
 #$SCRIPT_DIR/self-check/ensure-user-dev-stack-up.sh
 
+apt-get upgrade -y
+
 # pre-pull necessary Docker images for faster vm creation for clients
 docker pull ghcr.io/yundera/settings-center-app
 docker pull ghcr.io/yundera/casa-img
 docker pull ghcr.io/yundera/mesh-router
+
+execute_script_with_logging $SCRIPT_DIR/tools/ssh-regen-service-setup.sh;
+execute_script_with_logging $SCRIPT_DIR/tools/template-cleanup-before-use.sh;
 
 log "=== Template-init completed successfully ==="
