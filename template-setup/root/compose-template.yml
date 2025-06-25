@@ -2,7 +2,7 @@ name: yundera
 services:
 
   admin:
-    image: ghcr.io/yundera/settings-center-app:1.1.10
+    image: ghcr.io/yundera/settings-center-app:1.1.11
     container_name: admin
     hostname: admin
     restart: unless-stopped
@@ -26,7 +26,7 @@ services:
       pcs: null
 
   casaos:
-    image: ghcr.io/yundera/casa-img:0.4.15-18
+    image: ghcr.io/yundera/casa-img:0.4.15-19
     container_name: casaos
     hostname: casaos
     restart: unless-stopped
