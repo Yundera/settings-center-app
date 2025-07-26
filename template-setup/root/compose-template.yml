@@ -1,6 +1,5 @@
 name: yundera
 services:
-
   admin:
     image: ghcr.io/yundera/settings-center-app:1.1.15
     container_name: admin
@@ -79,7 +78,7 @@ x-casaos:
   author: Yundera Team
   category: pcs
   hostname: admin-%DOMAIN%
-  icon: https://styles.redditmedia.com/t5_deqw76/styles/communityIcon_mrihspifrgee1.png
+  icon: https://github.com/Yundera/settings-center-app/blob/main/template-setup/root/YunderaPCS-setting_iconV1.svg?raw=true
   index: /
   is_uncontrolled: false
   port_map: ""
