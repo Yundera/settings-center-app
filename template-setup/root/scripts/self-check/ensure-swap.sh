@@ -6,7 +6,7 @@ set -e
 
 if [ -f /.dockerenv ]; then
     echo "Inside Docker - dev environment detected. Skipping setup."
-    exit 42
+    exit 0
 fi
 
 SWAP_FILE="/swap.img"

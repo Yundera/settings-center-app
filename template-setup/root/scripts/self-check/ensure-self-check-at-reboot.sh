@@ -5,7 +5,7 @@ set -e  # Exit on any error
 
 if [ -f /.dockerenv ]; then
     echo "Inside Docker - dev environment detected. Skipping setup."
-    exit 42
+    exit 0
 fi
 
 remoteFolder="/DATA/AppData/casaos/apps/yundera/scripts"

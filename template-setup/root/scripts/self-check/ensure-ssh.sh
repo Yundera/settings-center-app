@@ -8,7 +8,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 if [ -f /.dockerenv ]; then
     echo "Inside Docker - dev environment detected. Skipping setup."
-    exit 42
+    exit 0
 fi
 
 # Install openssh-server only if not already installed

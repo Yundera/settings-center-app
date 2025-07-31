@@ -18,29 +18,31 @@ services:
     networks:
       - app-network
     depends_on:
-      - ubuntu-host
+      - ubuntu-host-pcs
 
-  ubuntu-host:
-    image: ubuntu:latest
-    container_name: ubuntu-host
+  #PCS emulation
+  ubuntu-host-pcs:
+    build:
+      context: ../../
+      dockerfile: /dev/run/Dockerfile
+    container_name: ubuntu-host-pcs
     hostname: ubuntu-server
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ssh_keys:/root/.ssh/
       - data:/DATA/AppData/casaos/apps/yundera/
-      - ./dev-env:/tmp/.env
+      - ../../template-setup/root/:/tmp/setup:ro
+      - ./dev-env:/tmp/.env:ro
     command: >
       bash -c "
-        apt-get update &&
-        apt-get install -y openssh-server &&
-        mkdir -p /root/.ssh &&
-        chmod 700 /root/.ssh &&
-        chmod 600 /root/.ssh/authorized_keys &&
-        echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config &&
-        service ssh start &&
-        cp /tmp/.env /DATA/AppData/casaos/apps/yundera/.env &&
-        tail -f /dev/null
-      "
+            mkdir -p /DATA/AppData/casaos/apps/yundera/
+            cp -v -r /tmp/setup/* /DATA/AppData/casaos/apps/yundera/ &&
+            cp -v /tmp/.env /DATA/AppData/casaos/apps/yundera/.env &&
+            chmod +x /DATA/AppData/casaos/apps/yundera/scripts/os-init/os-init.sh &&
+            /DATA/AppData/casaos/apps/yundera/scripts/os-init/os-init.sh &&
+            service ssh start &&
+            tail -f /dev/null
+          "
     networks:
       - app-network
 

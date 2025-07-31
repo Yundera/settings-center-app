@@ -8,7 +8,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 if [ -f /.dockerenv ]; then
     echo "Inside Docker - dev environment detected. Skipping setup."
-    exit 42
+    exit 0
 fi
 
 # Install QEMU guest agent

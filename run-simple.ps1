@@ -17,8 +17,9 @@ try {
         throw "Docker Compose failed. Exiting."
     }
 
-    Write-Host "Docker Compose services are up and running."
     Write-Host "Main app available at: http://localhost:4342"
+    Write-Host "if you want a clean install please delete the associated docker volumes"
+    Write-Host "on clean install remember to create a casaos user"
 }
 catch {
     Write-Host "Error: $_"

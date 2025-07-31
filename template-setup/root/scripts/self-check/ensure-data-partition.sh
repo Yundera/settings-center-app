@@ -23,7 +23,7 @@ cd /
 
 if [ -f /.dockerenv ]; then
     echo "Inside Docker - dev environment detected. Skipping setup."
-    exit 42
+    exit 0
 fi
 
 # Install rsync only if not already present

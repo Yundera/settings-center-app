@@ -16,7 +16,7 @@ fi
 
 if [ -f /.dockerenv ]; then
     echo "Inside Docker - dev environment detected. Skipping setup."
-    exit 42
+    exit 0
 fi
 
 # Check if the DATA volume exists

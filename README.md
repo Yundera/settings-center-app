@@ -35,10 +35,34 @@ Configure the following environment variables by referring to their respective d
 
 ### Development
 
+#### Option 1: Standard Development Server
+
 Start the development server:
 ```bash
 pnpm start
 ```
+
+#### Option 2: Docker Environment (Recommended)
+
+Use Docker to simulate a PCS (Personal Cloud Server) environment, which is closer to the real deployment environment.
+This simulates a state just after a PCS has been created (with `.env` and `os-init.sh` executed)
+
+**Setup Steps:**
+
+1. **Configure the development environment**  
+   Configure `dev-env` according to `dev/run/dev-env.example`  
+
+2. **Start the Docker environment**  
+   Ensure Docker is running, then execute:
+   ```bash
+   .\run-simple.ps1
+   ```
+
+**Important Notes:**
+
+- **Clean Installation**: If you want a fresh installation, delete the associated Docker volumes first 
+- **Yundera stack**: this process will create a non-functional Yundera stack that can be ignored
+- **Authentication**: The login credentials will be those defined by the authority in `config/core.env.json` under `"AUTHORITY_ENDPOINT"`
 
 ## Deployment
 
