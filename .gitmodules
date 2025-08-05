@@ -1,3 +1,6 @@
 [submodule "dashboard-core"]
 	path = dashboard-core
 	url = https://github.com/Yundera/dashboard-core.git
+[submodule "dev/run/template-root"]
+	path = dev/run/template-root
+	url = https://github.com/Yundera/template-root.git

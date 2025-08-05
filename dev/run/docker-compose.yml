@@ -22,16 +22,14 @@ services:
 
   #PCS emulation
   ubuntu-host-pcs:
-    build:
-      context: ../../
-      dockerfile: /dev/run/Dockerfile
+    build: .
     container_name: ubuntu-host-pcs
     hostname: ubuntu-server
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ssh_keys:/root/.ssh/
       - data:/DATA/AppData/casaos/apps/yundera/
-      - ../../template-setup/root/:/tmp/setup:ro
+      - ./template-root/root/:/tmp/setup/:ro
       - ./dev-env:/tmp/.env:ro
     command: >
       bash -c "
