@@ -2,7 +2,8 @@
 
 # Fetch reference template from GitHub and copy to local template folder
 
-GITHUB_URL="https://raw.githubusercontent.com/Yundera/settings-center-app/main/template-setup/root/compose-template.yml"
+#GITHUB_URL="https://raw.githubusercontent.com/Yundera/settings-center-app/main/template-setup/root/compose-template.yml"
+GITHUB_URL="https://raw.githubusercontent.com/Yundera/template-root/refs/heads/main/root/compose-template.yml"
 COMPOSE_FILE="/DATA/AppData/casaos/apps/yundera/compose-template.yml"
 
 # Create directory if it doesn't exist
