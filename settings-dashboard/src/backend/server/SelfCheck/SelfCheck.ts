@@ -17,6 +17,7 @@ const IGNORE_FILE = path.join(TARGET_DIR, '.ignore');
 const SELF_CHECK_SCRIPTS = [
     'ensure-pcs-user.sh',
     'ensure-script-executable.sh',
+    'ensure-template-sync.sh',
     'ensure-ubuntu-up-to-date.sh',
     'ensure-common-tools-installed.sh',
     'ensure-ssh.sh',
@@ -27,7 +28,6 @@ const SELF_CHECK_SCRIPTS = [
     'ensure-swap.sh',
     'ensure-self-check-at-reboot.sh',
     'ensure-docker-installed.sh',
-    'ensure-template-version.sh',
     'ensure-user-docker-compose-updated.sh',
     'ensure-user-compose-pulled.sh',
     'ensure-user-compose-stack-up.sh'

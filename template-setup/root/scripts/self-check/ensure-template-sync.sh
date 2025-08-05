@@ -28,10 +28,8 @@ trap cleanup EXIT
 echo "Starting template sync..."
 
 # Get template URL from .env or use default
-TEMPLATE_REPO_URL="${DEFAULT_TEMPLATE_URL}"
-if [ -f "$ENV_FILE" ]; then
-    TEMPLATE_REPO_URL=$(grep "^TEMPLATE_REPO_URL=" "$ENV_FILE" 2>/dev/null | cut -d '=' -f2- | tr -d '"' || echo "$DEFAULT_TEMPLATE_URL")
-fi
+TEMPLATE_REPO_URL=$(grep "^TEMPLATE_REPO_URL=" "$ENV_FILE" 2>/dev/null | cut -d '=' -f2- | tr -d '"')
+[ -z "$TEMPLATE_REPO_URL" ] && TEMPLATE_REPO_URL="$DEFAULT_TEMPLATE_URL"
 
 echo "Using template repository URL: $TEMPLATE_REPO_URL"
 
