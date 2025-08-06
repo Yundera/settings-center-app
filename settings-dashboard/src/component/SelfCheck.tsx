@@ -29,7 +29,12 @@ export const SelfCheck: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [checking, setChecking] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [status, setStatus] = useState<SelfCheckStatus | null>(null);
+    const [status, setStatus] = useState<SelfCheckStatus>({
+        isRunning: false,
+        overallStatus: 'never_run',
+        scripts: {},
+        lastRun: undefined,
+    });
     const notify = useNotify();
 
     const checkStatus = async () => {
@@ -155,9 +160,6 @@ export const SelfCheck: React.FC = () => {
                             {/* Script Results */}
                             {status && Object.keys(status.scripts).length > 0 && (
                                 <>
-                                    <Typography variant="h6" gutterBottom>
-                                        Script Results
-                                    </Typography>
                                     <List dense>
                                         {Object.entries(status.scripts).map(([scriptName, result]) => (
                                             <ListItem key={scriptName}>

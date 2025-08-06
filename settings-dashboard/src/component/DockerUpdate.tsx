@@ -173,9 +173,6 @@ export const DockerUpdate: React.FC = () => {
                             {/* Individual Image Results */}
                             {updateStatus && updateStatus.images.length > 0 && (
                                 <>
-                                    <Typography variant="h6" gutterBottom>
-                                        Image Details ({updateStatus.images.length} images)
-                                    </Typography>
                                     <List dense>
                                         {updateStatus.images.map((imageStatus, index) => (
                                             <ListItem key={index}>
