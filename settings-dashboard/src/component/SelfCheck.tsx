@@ -101,121 +101,40 @@ export const SelfCheck: React.FC = () => {
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
             <Stack spacing={3}>
-                {/* Overall Status */}
-                {status && (
-                    <Card>
-                        <CardContent>
-                            <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                                <Typography variant="h6">Overall Status:</Typography>
-                                <Chip
-                                    label={status.overallStatus.replace('_', ' ').toUpperCase()}
-                                    color={getStatusColor(status.overallStatus) as any}
-                                    variant="outlined"
-                                />
-                                {status.isRunning && (
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                        <CircularProgress size={16} />
-                                        <Typography variant="body2" color="text.secondary">
-                                            Running...
-                                        </Typography>
-                                    </Box>
-                                )}
-                            </Stack>
-
-                            {status.lastRun && (
-                                <Typography variant="body2" color="text.secondary">
-                                    Last run: {new Date(status.lastRun).toLocaleString()}
-                                </Typography>
-                            )}
-                        </CardContent>
-                    </Card>
-                )}
-
-                {/* Script Results */}
-                {status && Object.keys(status.scripts).length > 0 && (
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Script Results
-                            </Typography>
-                            <List dense>
-                                {Object.entries(status.scripts).map(([scriptName, result]) => (
-                                    <ListItem key={scriptName}>
-                                        <ListItemIcon>
-                                            {getStatusIcon(result.success)}
-                                        </ListItemIcon>
-                                        <ListItemText
-                                            primary={scriptName}
-                                            secondary={
-                                                <Stack direction="row" alignItems="center" spacing={1}>
-                                                    <Typography variant="body2">
-                                                        {result.message}
-                                                    </Typography>
-                                                    {result.duration && (
-                                                        <Chip
-                                                            label={formatDuration(result.duration)}
-                                                            size="small"
-                                                            variant="outlined"
-                                                        />
-                                                    )}
-                                                </Stack>
-                                            }
-                                        />
-                                    </ListItem>
-                                ))}
-                            </List>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {/* Integrity Check Results */}
-                {status?.integrityCheck && (
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                File Integrity Check
-                            </Typography>
-                            <Stack direction="row" alignItems="center" spacing={2}>
-                                {getStatusIcon(status.integrityCheck.success)}
-                                <Typography variant="body1">
-                                    {status.integrityCheck.message}
-                                </Typography>
-                                {status.integrityCheck.duration && (
-                                    <Chip
-                                        label={formatDuration(status.integrityCheck.duration)}
-                                        size="small"
-                                        variant="outlined"
-                                    />
-                                )}
-                            </Stack>
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                {new Date(status.integrityCheck.timestamp).toLocaleString()}
-                            </Typography>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {/* Controls */}
+                {/* Unified Status and Results */}
                 <Card>
                     <CardContent>
-                        <Stack direction="row" spacing={2}>
-                            {loading || checking || status?.isRunning ? (
-                                <Box display="flex" alignItems="center" gap={1}>
-                                    <CircularProgress size={24} />
-                                    <Typography>
-                                        {status?.isRunning ? 'Self-check running...' : 'Loading...'}
-                                    </Typography>
-                                </Box>
-                            ) : (
-                                <>
-                                    <Button
-                                        variant="outlined"
-                                        onClick={checkStatus}
-                                        disabled={checking}
-                                    >
-                                        Refresh Status
-                                    </Button>
-
+                        <Stack spacing={3}>
+                            {/* Overall Status and Button on Same Line */}
+                            <Typography variant="h5">System Status</Typography>
+                            <Stack direction="row" alignItems="center" spacing={2} justifyContent="space-between">
+                                <Stack direction="row" alignItems="center" spacing={2}>
+                                    <Typography variant="h6">Status:</Typography>
+                                    {status && (
+                                        <Chip
+                                            label={status.overallStatus.replace('_', ' ').toUpperCase()}
+                                            color={getStatusColor(status.overallStatus) as any}
+                                            variant="outlined"
+                                        />
+                                    )}
+                                    {status?.isRunning && (
+                                        <Box display="flex" alignItems="center" gap={1}>
+                                            <CircularProgress size={16} />
+                                            <Typography variant="body2" color="text.secondary">
+                                                Running...
+                                            </Typography>
+                                        </Box>
+                                    )}
+                                </Stack>
+                                
+                                {loading || checking || status?.isRunning ? (
+                                    <Box display="flex" alignItems="center" gap={1}>
+                                        <CircularProgress size={24} />
+                                        <Typography>
+                                            {status?.isRunning ? 'Running...' : 'Loading...'}
+                                        </Typography>
+                                    </Box>
+                                ) : (
                                     <Button
                                         variant="contained"
                                         color="primary"
@@ -224,6 +143,72 @@ export const SelfCheck: React.FC = () => {
                                     >
                                         Run Self-Check
                                     </Button>
+                                )}
+                            </Stack>
+
+                            {status?.lastRun && (
+                                <Typography variant="body2" color="text.secondary">
+                                    Last run: {new Date(status.lastRun).toLocaleString()}
+                                </Typography>
+                            )}
+
+                            {/* Script Results */}
+                            {status && Object.keys(status.scripts).length > 0 && (
+                                <>
+                                    <Typography variant="h6" gutterBottom>
+                                        Script Results
+                                    </Typography>
+                                    <List dense>
+                                        {Object.entries(status.scripts).map(([scriptName, result]) => (
+                                            <ListItem key={scriptName}>
+                                                <ListItemIcon>
+                                                    {getStatusIcon(result.success)}
+                                                </ListItemIcon>
+                                                <ListItemText
+                                                    primary={scriptName}
+                                                    secondary={
+                                                        <Stack direction="row" alignItems="center" spacing={1}>
+                                                            <Typography variant="body2">
+                                                                {result.message}
+                                                            </Typography>
+                                                            {result.duration && (
+                                                                <Chip
+                                                                    label={formatDuration(result.duration)}
+                                                                    size="small"
+                                                                    variant="outlined"
+                                                                />
+                                                            )}
+                                                        </Stack>
+                                                    }
+                                                />
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                </>
+                            )}
+
+                            {/* Integrity Check Results */}
+                            {status?.integrityCheck && (
+                                <>
+                                    <Typography variant="h6" gutterBottom>
+                                        File Integrity Check
+                                    </Typography>
+                                    <Stack direction="row" alignItems="center" spacing={2}>
+                                        {getStatusIcon(status.integrityCheck.success)}
+                                        <Typography variant="body1">
+                                            {status.integrityCheck.message}
+                                        </Typography>
+                                        {status.integrityCheck.duration && (
+                                            <Chip
+                                                label={formatDuration(status.integrityCheck.duration)}
+                                                size="small"
+                                                variant="outlined"
+                                            />
+                                        )}
+                                    </Stack>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                        {new Date(status.integrityCheck.timestamp).toLocaleString()}
+                                    </Typography>
                                 </>
                             )}
                         </Stack>

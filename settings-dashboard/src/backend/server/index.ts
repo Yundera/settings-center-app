@@ -5,7 +5,7 @@ import {
     waitForSSHConnection
 } from "@/backend/cmd/HostExecutor";
 import cron from 'node-cron';
-import {checkForUpdates, dockerUpdate} from "@/backend/server/DockerUpdate/DockerUpdate";
+import {checkForUpdates} from "@/backend/server/DockerUpdate/DockerUpdate";
 import { runSelfCheck} from "@/backend/server/SelfCheck/SelfCheck";
 
 async function check(){
@@ -14,14 +14,11 @@ async function check(){
         //- run self check
         await runSelfCheck();
 
+        // Check for updates (for status display only - no automatic updates)
         let updateInfos = await checkForUpdates();
         if (updateInfos.length > 0) {
             console.log('Updates available:', updateInfos);
-            await dockerUpdate();
-            ///////////////////////////////////////////////////////
-            // WARNING: don't add code after the update command
-            // update may restart this container - don't remove this comment
-            ///////////////////////////////////////////////////////
+            // Note: Automatic updates have been disabled
         }
     }catch (e) {
         //check should never fail
