@@ -30,8 +30,6 @@ COPY ./settings-dashboard /app/settings-dashboard
 #recursive build
 RUN pnpm -r build
 
-COPY ./template-setup /app/template-setup
-
 #start the app
 EXPOSE 4321
 

@@ -45,3 +45,5 @@ config/*.json
 /dev/*
 settings-dashboard/docker-update-status.json
 settings-dashboard/selfcheck-status.json
+CLAUDE.md
+.claude/
