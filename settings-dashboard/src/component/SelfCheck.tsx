@@ -189,30 +189,6 @@ export const SelfCheck: React.FC = () => {
                                 </>
                             )}
 
-                            {/* Integrity Check Results */}
-                            {status?.integrityCheck && (
-                                <>
-                                    <Typography variant="h6" gutterBottom>
-                                        File Integrity Check
-                                    </Typography>
-                                    <Stack direction="row" alignItems="center" spacing={2}>
-                                        {getStatusIcon(status.integrityCheck.success)}
-                                        <Typography variant="body1">
-                                            {status.integrityCheck.message}
-                                        </Typography>
-                                        {status.integrityCheck.duration && (
-                                            <Chip
-                                                label={formatDuration(status.integrityCheck.duration)}
-                                                size="small"
-                                                variant="outlined"
-                                            />
-                                        )}
-                                    </Stack>
-                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                        {new Date(status.integrityCheck.timestamp).toLocaleString()}
-                                    </Typography>
-                                </>
-                            )}
                         </Stack>
                     </CardContent>
                 </Card>
