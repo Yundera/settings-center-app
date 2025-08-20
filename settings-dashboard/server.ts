@@ -3,6 +3,10 @@ import { parse } from 'url'
 import next from 'next'
 import {start} from "@/backend/server";
 import {initializeAllContexts} from "@/backend/server/initializeAllContexts";
+import { initializeEnvironment } from "@/utils/loadEnvironment";
+
+// Load environment variables from .env files before anything else
+initializeEnvironment();
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = dev ? 'localhost' : '0.0.0.0'
