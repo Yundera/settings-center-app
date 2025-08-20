@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   settings-app:
     build:
@@ -31,13 +29,23 @@ services:
       - data:/DATA/AppData/casaos/apps/yundera/
       - ./template-root/root/:/tmp/setup/:ro
       - ./dev-env:/tmp/.env:ro
+      - ./test-pcs.env:/tmp/.pcs.env:ro
+      - ./test-pcs.secret.env:/tmp/.pcs.secret.env:ro
+      - ./test-ynd.user.env:/tmp/.ynd.user.env:ro
+
+    # this command simulate what the pcs orchestrator does to prepare the vm
     command: >
       bash -c "
             mkdir -p /DATA/AppData/casaos/apps/yundera/
             cp -v -r /tmp/setup/* /DATA/AppData/casaos/apps/yundera/ &&
             cp -v /tmp/.env /DATA/AppData/casaos/apps/yundera/.env &&
-            chmod +x /DATA/AppData/casaos/apps/yundera/scripts/os-init/os-init.sh &&
-            /DATA/AppData/casaos/apps/yundera/scripts/os-init/os-init.sh &&
+            cp -v /tmp/.pcs.env /DATA/AppData/casaos/apps/yundera/.pcs.env &&
+            cp -v /tmp/.pcs.secret.env /DATA/AppData/casaos/apps/yundera/.pcs.secret.env &&
+            cp -v /tmp/.ynd.user.env /DATA/AppData/casaos/apps/yundera/.ynd.user.env &&
+            chmod +x /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh &&
+            /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh &&
+            chmod +x /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh &&
+            /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh &&
             service ssh start &&
             tail -f /dev/null
           "

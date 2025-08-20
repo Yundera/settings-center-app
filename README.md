@@ -55,12 +55,12 @@ This simulates a state just after a PCS has been created (with `.env` and `os-in
 2. **Start the Docker environment**  
    Ensure Docker is running, then execute:
    ```bash
-   .\run-simple.ps1
+   .\dev\run-simple.ps1
    ```
 
 **Important Notes:**
 
-- **Clean Installation**: If you want a fresh installation, delete the associated Docker volumes first 
+- **Clean Installation**: The run-simple script automatically cleans Docker volumes for fresh testing 
 - **Yundera stack**: this process will create a non-functional Yundera stack that can be ignored
 - **Authentication**: The login credentials will be those defined by the authority in `config/core.env.json` under `"AUTHORITY_ENDPOINT"`
 

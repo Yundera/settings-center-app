@@ -13,6 +13,7 @@ const SELF_CHECK_SCRIPTS = [
     'ensure-pcs-user.sh',
     'ensure-script-executable.sh',
     'ensure-template-sync.sh',
+    'ensure-yundera-user-data.sh',
     'ensure-ubuntu-up-to-date.sh',
     'ensure-common-tools-installed.sh',
     'ensure-ssh.sh',
