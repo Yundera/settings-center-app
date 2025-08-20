@@ -3,31 +3,60 @@ import * as path from 'path';
 import {getConfig} from "@/configuration/getConfigBackend";
 import { JsonFileContext } from '../SimpleMutex';
 import {SelfCheckResult, SelfCheckStatus} from "./SelfCheckTypes";
+import * as fs from 'fs/promises';
 
 // Constants
 const REMOTE_DATA_APP = getConfig("COMPOSE_FOLDER_PATH") || "/DATA/AppData/casaos/apps/yundera/";
 const REMOTE_SCRIPT_DIR = `${REMOTE_DATA_APP}/scripts`;
 
-//order of scripts matters, as some depend on others
-const SELF_CHECK_SCRIPTS = [
-    'ensure-pcs-user.sh',
-    'ensure-script-executable.sh',
-    'ensure-template-sync.sh',
-    'ensure-yundera-user-data.sh',
-    'ensure-ubuntu-up-to-date.sh',
-    'ensure-common-tools-installed.sh',
-    'ensure-ssh.sh',
-    'ensure-vm-scalable.sh',
-    'ensure-qemu-agent.sh',
-    'ensure-data-partition.sh',
-    'ensure-data-partition-size.sh',
-    'ensure-swap.sh',
-    'ensure-self-check-at-reboot.sh',
-    'ensure-docker-installed.sh',
-    'ensure-user-docker-compose-updated.sh',
-    'ensure-user-compose-pulled.sh',
-    'ensure-user-compose-stack-up.sh'
-];
+// Path to the shared configuration file
+const SCRIPTS_CONFIG_FILE = path.join(REMOTE_SCRIPT_DIR, 'self-check', 'scripts-config.txt');
+
+/**
+ * Read self-check scripts from the configuration file
+ * Returns array of script names in execution order
+ */
+async function loadSelfCheckScripts(): Promise<string[]> {
+    try {
+        // Try to read from remote host first
+        const configContent = await executeHostCommand(`cat "${SCRIPTS_CONFIG_FILE}"`);
+        return parseScriptsList(configContent.stdout || configContent);
+    } catch (error) {
+        console.warn('Failed to read scripts config from remote host, using fallback list:', error);
+        
+        // Fallback to default scripts list if config file is not accessible
+        return [
+            'ensure-pcs-user.sh',
+            'ensure-script-executable.sh',
+            'ensure-template-sync.sh',
+            'ensure-yundera-user-data.sh',
+            'ensure-ubuntu-up-to-date.sh',
+            'ensure-common-tools-installed.sh',
+            'ensure-ssh.sh',
+            'ensure-vm-scalable.sh',
+            'ensure-qemu-agent.sh',
+            'ensure-data-partition.sh',
+            'ensure-data-partition-size.sh',
+            'ensure-swap.sh',
+            'ensure-self-check-at-reboot.sh',
+            'ensure-docker-installed.sh',
+            'ensure-user-docker-compose-updated.sh',
+            'ensure-user-compose-pulled.sh',
+            'ensure-user-compose-stack-up.sh'
+        ];
+    }
+}
+
+/**
+ * Parse the scripts configuration file content
+ * Skips comments (lines starting with #) and empty lines
+ */
+function parseScriptsList(content: string): string[] {
+    return content
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('#'));
+}
 
 // Default status
 const DEFAULT_STATUS: SelfCheckStatus = {
@@ -84,12 +113,16 @@ export async function runSelfCheck(): Promise<void> {
         throw new Error('Self-check is already running');
     }
 
-    let successCount = 0;
-    const totalCount = SELF_CHECK_SCRIPTS.length;
-
     try {
+        // Load scripts from configuration file
+        const selfCheckScripts = await loadSelfCheckScripts();
+        console.log(`Loaded ${selfCheckScripts.length} self-check scripts from configuration`);
+        
+        let successCount = 0;
+        const totalCount = selfCheckScripts.length;
+
         // Run all self-check scripts
-        for (const scriptName of SELF_CHECK_SCRIPTS) {
+        for (const scriptName of selfCheckScripts) {
             await runScript(ctx, scriptName);
 
             // Check if script succeeded
