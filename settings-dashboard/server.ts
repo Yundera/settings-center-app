@@ -3,7 +3,7 @@ import { parse } from 'url'
 import next from 'next'
 import {start} from "@/backend/server";
 import {initializeAllContexts} from "@/backend/server/initializeAllContexts";
-import { initializeEnvironment } from "@/utils/loadEnvironment";
+import { initializeEnvironment } from "@/configuration/loadEnvironment";
 
 // Load environment variables from .env files before anything else
 initializeEnvironment();
