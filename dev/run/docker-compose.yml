@@ -46,8 +46,6 @@ services:
             /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh &&
             chmod +x /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh &&
             /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh &&
-            chmod +x /DATA/AppData/casaos/apps/yundera/scripts/self-check-reboot.sh &&
-            /DATA/AppData/casaos/apps/yundera/scripts/self-check-reboot.sh &&
             service ssh start &&
             tail -f /dev/null
           "
