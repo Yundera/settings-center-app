@@ -5,7 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: settings-dev
     env_file:
-      - dev-env
+      - ./test-pcs.env
+      - ./test-pcs.secret.env
+      - ./test-ynd.user.env
     ports:
       - "4342:80"
     volumes:
@@ -28,7 +30,6 @@ services:
       - ssh_keys:/root/.ssh/
       - data:/DATA/AppData/casaos/apps/yundera/
       - ./template-root/root/:/tmp/setup/:ro
-      - ./dev-env:/tmp/.env:ro
       - ./test-pcs.env:/tmp/.pcs.env:ro
       - ./test-pcs.secret.env:/tmp/.pcs.secret.env:ro
       - ./test-ynd.user.env:/tmp/.ynd.user.env:ro
@@ -38,7 +39,6 @@ services:
       bash -c "
             mkdir -p /DATA/AppData/casaos/apps/yundera/
             cp -v -r /tmp/setup/* /DATA/AppData/casaos/apps/yundera/ &&
-            cp -v /tmp/.env /DATA/AppData/casaos/apps/yundera/.env &&
             cp -v /tmp/.pcs.env /DATA/AppData/casaos/apps/yundera/.pcs.env &&
             cp -v /tmp/.pcs.secret.env /DATA/AppData/casaos/apps/yundera/.pcs.secret.env &&
             cp -v /tmp/.ynd.user.env /DATA/AppData/casaos/apps/yundera/.ynd.user.env &&
