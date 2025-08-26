@@ -31,10 +31,9 @@ export async function start() {
 
     await listAuthorizedKeys();
 
-    await check();
-
-    // Runs at 3:00 AM every day
-    cron.schedule('0 3 * * *', async ()=> {
-        await check();
-    });
+    setTimeout(() => {
+        cron.schedule('0 3 * * *', async () => {
+            await check();
+        });
+    }, 60*60*1000);//60 minutes after start
 }
