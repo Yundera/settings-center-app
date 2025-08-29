@@ -17,13 +17,13 @@ interface UpdateChannelResponse {
 async function updateChannelHandler(req: NextApiRequest, res: NextApiResponse<UpdateChannelResponse>) {
   const remoteDataApp = getConfig("COMPOSE_FOLDER_PATH") || "/DATA/AppData/casaos/apps/yundera/";
 
-  const envFilePath = path.join(remoteDataApp, '.env');
+  const envFilePath = path.join(remoteDataApp, '.pcs.env');
 
   try {
     if (req.method === 'GET') {
       // Read current UPDATE_URL value
       try {
-        // Try to read the .env file
+        // Try to read the .pcs.env file
         const result = await executeHostCommand(`cat "${envFilePath}"`);
         const lines = result.stdout.split('\n');
         const updateUrlLine = lines.find(line => line.startsWith('UPDATE_URL='));
@@ -49,7 +49,7 @@ async function updateChannelHandler(req: NextApiRequest, res: NextApiResponse<Up
     if (req.method === 'POST') {
       const { updateUrl }: UpdateChannelRequest = req.body;
 
-      // Read current .env content or create if it doesn't exist
+      // Read current .pcs.env content or create if it doesn't exist
       let envContent = '';
       try {
         const result = await executeHostCommand(`cat "${envFilePath}"`);
