@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {useLocation, useNavigate} from 'react-router-dom';
 
-import {Avatar, Box, Button, Card, CardActions, CircularProgress,} from '@mui/material';
+import {Avatar, Box, Button, Card, CardActions, CircularProgress, Typography,} from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import {Form, required, TextInput, useLogin, useNotify, useTranslate,} from 'react-admin';
 
@@ -76,7 +76,9 @@ export const Login = () => {
                     color: theme => theme.palette.grey[500],
                   }}
                 >
-                  Welcome!
+                  <Typography variant="body2" align="center" sx={{ px: 1 }}>
+                    For security reasons, please sign in again with<br />your server login to access the settings.
+                  </Typography>
                 </Box>
                 <Box sx={{padding: '0 1em 1em 1em'}}>
                   <Box sx={{marginTop: '1em'}}>

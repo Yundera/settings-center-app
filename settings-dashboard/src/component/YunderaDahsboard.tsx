@@ -1,5 +1,7 @@
 import React from "react";
 import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
+import Link from "@mui/material/Link";
 import { styled } from "@mui/material/styles";
 import LinkIcon from "@mui/icons-material/Link";
 
@@ -11,7 +13,9 @@ const StyledButton = styled(Button)(({ theme }) => ({
 export const YunderaDashboard: React.FC = () => {
     return (
         <div>
-            <h1>Yundera Dashboard</h1>
+            <Typography variant="body1" gutterBottom sx={{ color: 'grey.700', fontStyle: 'italic' }}>
+                Manage your subscription, Change your billing or rename your domain?
+            </Typography>
 
             <StyledButton
                 variant="contained"
@@ -20,7 +24,7 @@ export const YunderaDashboard: React.FC = () => {
                 rel="noopener noreferrer"
                 startIcon={<LinkIcon />}
             >
-                Go to Yundera Dashboard
+                Click here
             </StyledButton>
         </div>
     );
