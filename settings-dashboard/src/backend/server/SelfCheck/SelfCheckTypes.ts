@@ -8,6 +8,7 @@ export interface SelfCheckResult {
 export interface SelfCheckStatus {
     lastRun?: Date;
     isRunning: boolean;
-    overallStatus: 'success' | 'failure' | 'partial' | 'never_run';
+    overallStatus: 'success' | 'failure' | 'partial' | 'never_run' | 'connection_failed';
+    connectionError?: string;
     scripts: Record<string, SelfCheckResult>;
 }

@@ -15,35 +15,40 @@ const SCRIPTS_CONFIG_FILE = path.join(REMOTE_SCRIPT_DIR, 'self-check', 'scripts-
 /**
  * Read self-check scripts from the configuration file
  * Returns array of script names in execution order
+ * Throws error if SSH connection fails (no fallback)
  */
 async function loadSelfCheckScripts(): Promise<string[]> {
     try {
-        // Try to read from remote host first
         const configContent = await executeHostCommand(`cat "${SCRIPTS_CONFIG_FILE}"`);
         return parseScriptsList(configContent.stdout || configContent);
     } catch (error) {
-        console.warn('Failed to read scripts config from remote host, using fallback list:', error);
-        
-        // Fallback to default scripts list if config file is not accessible
-        return [
-            'ensure-pcs-user.sh',
-            'ensure-script-executable.sh',
-            'ensure-template-sync.sh',
-            'ensure-yundera-user-data.sh',
-            'ensure-ubuntu-up-to-date.sh',
-            'ensure-common-tools-installed.sh',
-            'ensure-ssh.sh',
-            'ensure-vm-scalable.sh',
-            'ensure-qemu-agent.sh',
-            'ensure-data-partition.sh',
-            'ensure-data-partition-size.sh',
-            'ensure-swap.sh',
-            'ensure-self-check-at-reboot.sh',
-            'ensure-docker-installed.sh',
-            'ensure-user-docker-compose-updated.sh',
-            'ensure-user-compose-pulled.sh',
-            'ensure-user-compose-stack-up.sh'
-        ];
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Failed to load self-check scripts from host: ${errorMsg}\n` +
+            `Possible causes:\n` +
+            `  - SSH connection to host not established\n` +
+            `  - scripts-config.txt does not exist at ${SCRIPTS_CONFIG_FILE}\n` +
+            `  - Template sync has not run yet\n` +
+            `Debug: Check SSH connectivity and verify file exists on host.`
+        );
+    }
+}
+
+/**
+ * Pre-flight check to verify SSH connectivity to host
+ * Returns status object - warning only, doesn't block execution
+ */
+async function checkSSHConnectivity(): Promise<{ connected: boolean; message: string }> {
+    try {
+        await executeHostCommand('echo "ssh-check-ok"');
+        return { connected: true, message: 'SSH connection to host verified' };
+    } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn(`[Self-Check] SSH pre-flight check failed: ${errorMsg}`);
+        return {
+            connected: false,
+            message: `SSH connection failed: ${errorMsg}`
+        };
     }
 }
 
@@ -62,7 +67,8 @@ function parseScriptsList(content: string): string[] {
 const DEFAULT_STATUS: SelfCheckStatus = {
     isRunning: false,
     overallStatus: 'never_run',
-    scripts: {}
+    scripts: {},
+    connectionError: undefined
 };
 
 // Global context instance
@@ -105,7 +111,8 @@ export async function runSelfCheck(): Promise<void> {
             isRunning: true,
             lastRun: new Date(),
             overallStatus: 'never_run',
-            scripts: {}
+            scripts: {},
+            connectionError: undefined
         };
     });
 
@@ -114,10 +121,16 @@ export async function runSelfCheck(): Promise<void> {
     }
 
     try {
-        // Load scripts from configuration file
+        // Pre-flight SSH check (warn only, don't block)
+        const sshCheck = await checkSSHConnectivity();
+        if (!sshCheck.connected) {
+            console.warn(`[Self-Check] Pre-flight warning: ${sshCheck.message}`);
+        }
+
+        // Load scripts from configuration file - this will throw if SSH fails
         const selfCheckScripts = await loadSelfCheckScripts();
-        console.log(`Loaded ${selfCheckScripts.length} self-check scripts from configuration`);
-        
+        console.log(`Loaded ${selfCheckScripts.length} self-check scripts from host`);
+
         let successCount = 0;
         const totalCount = selfCheckScripts.length;
 
@@ -146,19 +159,28 @@ export async function runSelfCheck(): Promise<void> {
         await ctx.update(data => ({
             ...data,
             isRunning: false,
-            overallStatus
+            overallStatus,
+            connectionError: undefined
         }));
 
         console.log(`Self-check completed: ${successCount}/${totalCount} scripts succeeded`);
         console.log(`Overall status: ${overallStatus}`);
 
     } catch (error) {
-        // Ensure we clear the running state
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        // Determine if this is a connection/infrastructure error vs script error
+        const isConnectionError = errorMessage.includes('Failed to load self-check scripts') ||
+                                  errorMessage.includes('Failed to execute host command');
+
         await ctx.update(data => ({
             ...data,
             isRunning: false,
-            overallStatus: 'failure'
+            overallStatus: isConnectionError ? 'connection_failed' : 'failure',
+            connectionError: isConnectionError ? errorMessage : undefined
         }));
+
+        console.error(`[Self-Check] ${isConnectionError ? 'Connection' : 'Execution'} error:`, errorMessage);
         throw error;
     }
 }

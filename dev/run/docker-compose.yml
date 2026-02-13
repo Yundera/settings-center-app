@@ -43,9 +43,9 @@ services:
             cp -v /tmp/.pcs.secret.env /DATA/AppData/casaos/apps/yundera/.pcs.secret.env &&
             cp -v /tmp/.ynd.user.env /DATA/AppData/casaos/apps/yundera/.ynd.user.env &&
             chmod +x /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh &&
-            /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh &&
+            /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh || echo '[dev] Template sync failed, continuing anyway...' &&
             chmod +x /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh &&
-            /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh &&
+            /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh || echo '[dev] OS init failed, continuing anyway...' &&
             service ssh start &&
             tail -f /dev/null
           "

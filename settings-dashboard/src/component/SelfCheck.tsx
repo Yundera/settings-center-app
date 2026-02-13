@@ -34,6 +34,7 @@ export const SelfCheck: React.FC = () => {
         overallStatus: 'never_run',
         scripts: {},
         lastRun: undefined,
+        connectionError: undefined,
     });
     const notify = useNotify();
 
@@ -71,6 +72,7 @@ export const SelfCheck: React.FC = () => {
             case 'success': return 'success';
             case 'failure': return 'error';
             case 'partial': return 'warning';
+            case 'connection_failed': return 'error';
             case 'never_run': return 'info';
             default: return 'default';
         }
@@ -155,6 +157,15 @@ export const SelfCheck: React.FC = () => {
                                 <Typography variant="body2" color="text.secondary">
                                     Last run: {new Date(status.lastRun).toLocaleString()}
                                 </Typography>
+                            )}
+
+                            {status?.connectionError && (
+                                <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                        Host Connection Error
+                                    </Typography>
+                                    {status.connectionError}
+                                </Alert>
                             )}
 
                             {/* Script Results */}
