@@ -1,5 +1,5 @@
 # =============================================================================
-# Stage 1: Dependencies
+# Stage 1: Dependencies (for build)
 # =============================================================================
 FROM node:20-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -53,27 +53,29 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy production node_modules
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/settings-dashboard/node_modules ./settings-dashboard/node_modules
-COPY --from=builder /app/dashboard-core/node_modules ./dashboard-core/node_modules
+# Copy package files for production install
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY settings-dashboard/package.json ./settings-dashboard/
+COPY dashboard-core/package.json ./dashboard-core/
+
+# Install production dependencies only (correct platform binaries, no dev deps)
+RUN --mount=type=cache,id=pnpm-prod,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --prod && \
+    # Remove wrong-platform binaries and unnecessary packages
+    rm -rf node_modules/.pnpm/@next+swc-linux-x64-gnu* \
+           node_modules/.pnpm/@next+swc-linux-arm64-gnu* \
+           node_modules/.pnpm/typescript@*
 
 # Copy built application
 COPY --from=builder /app/settings-dashboard/.next ./settings-dashboard/.next
 COPY --from=builder /app/settings-dashboard/public ./settings-dashboard/public
 COPY --from=builder /app/settings-dashboard/src ./settings-dashboard/src
 COPY --from=builder /app/settings-dashboard/server.ts ./settings-dashboard/server.ts
-COPY --from=builder /app/settings-dashboard/package.json ./settings-dashboard/package.json
 COPY --from=builder /app/settings-dashboard/tsconfig.json ./settings-dashboard/tsconfig.json
 COPY --from=builder /app/settings-dashboard/config ./settings-dashboard/config
 
-# Copy dashboard-core (needed for transpilation at runtime)
+# Copy dashboard-core source (needed for transpilation at runtime)
 COPY --from=builder /app/dashboard-core/src ./dashboard-core/src
-COPY --from=builder /app/dashboard-core/package.json ./dashboard-core/package.json
-
-# Copy workspace files
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 # Copy template files
 COPY --from=builder /app/dev/run/template-root/root/scripts /app/template-scripts
