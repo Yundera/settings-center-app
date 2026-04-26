@@ -16,7 +16,9 @@ import {
 } from "@mui/material";
 import { useNotify } from "react-admin";
 import { apiRequest } from "@/core/authApi";
+import { colors, font, card, title, button, text } from '@/app/pages/softTheme';
 
+// Available update channel types: stable (default), dev (main branch), local, or custom URL
 export type UpdateChannelType = 'stable' | 'dev' | 'local' | 'custom';
 
 interface UpdateChannelConfig {
@@ -24,6 +26,11 @@ interface UpdateChannelConfig {
     customUrl?: string;
 }
 
+/**
+ * UpdateChannel — Allows the admin to select and save the PCS update source.
+ * Channels: stable (empty URL), dev (GitHub main branch), local, or custom URL.
+ * After saving, automatically triggers a self-check run.
+ */
 export const UpdateChannel: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -34,11 +41,12 @@ export const UpdateChannel: React.FC = () => {
     const [customUrl, setCustomUrl] = useState('');
     const notify = useNotify();
 
+    // Fetch the current update channel config from the backend and map URL to channel type
     const loadCurrentConfig = async () => {
         try {
             const response = await apiRequest<{ updateUrl: string | null }>("/api/admin/update-channel", "GET");
             const updateUrl = response.updateUrl;
-            
+
             if (!updateUrl || updateUrl === '') {
                 setConfig({ channel: 'stable' });
             } else if (updateUrl === 'local') {
@@ -64,6 +72,7 @@ export const UpdateChannel: React.FC = () => {
         setConfig(prev => ({ ...prev, customUrl: url }));
     };
 
+    // Convert selected channel type to the actual URL sent to the backend
     const getUpdateUrl = (): string => {
         switch (config.channel) {
             case 'local':
@@ -78,6 +87,7 @@ export const UpdateChannel: React.FC = () => {
         }
     };
 
+    // Save the selected channel to backend, then trigger a self-check
     const handleSaveChannel = async () => {
         setLoading(true);
         setError(null);
@@ -93,13 +103,12 @@ export const UpdateChannel: React.FC = () => {
             await apiRequest("/api/admin/update-channel", "POST", {
                 updateUrl
             });
-            
+
             notify('Update channel saved successfully. Running self-check...');
-            
-            // Run self-check after updating the channel
+
             await apiRequest("/api/admin/self-check-run", "POST");
             notify('Self-check completed successfully');
-            
+
         } catch (err: any) {
             setError(err.message || "Failed to save update channel");
         } finally {
@@ -107,6 +116,7 @@ export const UpdateChannel: React.FC = () => {
         }
     };
 
+    // Human-readable description for each channel option
     const getChannelDescription = (channel: UpdateChannelType): string => {
         switch (channel) {
             case 'stable':
@@ -122,54 +132,67 @@ export const UpdateChannel: React.FC = () => {
         }
     };
 
+    // Load current config on mount
     useEffect(() => {
         loadCurrentConfig();
     }, []);
 
     return (
-        <Card>
-            <CardContent>
-                <Stack spacing={3}>
-                    <Typography variant="h5">Update Channel</Typography>
-                    
-                    {error && <Alert severity="error">{error}</Alert>}
-                    
-                    <FormControl fullWidth>
-                        <InputLabel>Channel</InputLabel>
+        <Card sx={card.root}>
+            <Box sx={card.header}>
+                <Typography sx={title.small}>
+                    Update Channel
+                </Typography>
+            </Box>
+
+            <CardContent sx={card.content}>
+                <Stack spacing={0}>
+
+                    {error && <Alert severity="error" sx={{ mb: '30px' }}>{error}</Alert>}
+
+                    <FormControl fullWidth sx={{ mb: '30px' }}>
+                        <InputLabel sx={{ fontSize: font.caption, fontWeight: 300, color: colors.textMuted, '&.Mui-focused': { color: colors.textMuted } }}>Channel</InputLabel>
                         <Select
                             value={config.channel}
                             label="Channel"
                             onChange={(e) => handleChannelChange(e.target.value as UpdateChannelType)}
                             disabled={loading}
+                            sx={{
+                                color: colors.textWhite,
+                                '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.textMuted },
+                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: colors.textMuted },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: colors.textMuted },
+                                '& .MuiSvgIcon-root': { color: colors.textMuted },
+                            }}
                         >
                             <MenuItem value="stable">
                                 <Stack>
-                                    <Typography>Stable</Typography>
-                                    <Typography variant="body2" color="text.secondary">
+                                    <Typography sx={{ fontSize: font.label, fontWeight: 400, color: colors.textWhite }}>Stable</Typography>
+                                    <Typography sx={{ fontSize: font.caption, fontWeight: 300, color: colors.textMuted }}>
                                         {getChannelDescription('stable')}
                                     </Typography>
                                 </Stack>
                             </MenuItem>
                             <MenuItem value="dev">
                                 <Stack>
-                                    <Typography>Development</Typography>
-                                    <Typography variant="body2" color="text.secondary">
+                                    <Typography sx={{ fontSize: font.label, fontWeight: 400, color: colors.textWhite }}>Development</Typography>
+                                    <Typography sx={{ fontSize: font.caption, fontWeight: 300, color: colors.textMuted }}>
                                         {getChannelDescription('dev')}
                                     </Typography>
                                 </Stack>
                             </MenuItem>
                             <MenuItem value="local">
                                 <Stack>
-                                    <Typography>Local</Typography>
-                                    <Typography variant="body2" color="text.secondary">
+                                    <Typography sx={{ fontSize: font.label, fontWeight: 400, color: colors.textWhite }}>Local</Typography>
+                                    <Typography sx={{ fontSize: font.caption, fontWeight: 300, color: colors.textMuted }}>
                                         {getChannelDescription('local')}
                                     </Typography>
                                 </Stack>
                             </MenuItem>
                             <MenuItem value="custom">
                                 <Stack>
-                                    <Typography>Custom</Typography>
-                                    <Typography variant="body2" color="text.secondary">
+                                    <Typography sx={{ fontSize: font.label, fontWeight: 400, color: colors.textWhite }}>Custom</Typography>
+                                    <Typography sx={{ fontSize: font.caption, fontWeight: 300, color: colors.textMuted }}>
                                         {getChannelDescription('custom')}
                                     </Typography>
                                 </Stack>
@@ -189,7 +212,7 @@ export const UpdateChannel: React.FC = () => {
                         />
                     )}
 
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography sx={{ ...text.bodyMuted, mb: '20px' }}>
                         Current URL: {getUpdateUrl() || 'Default (no value)'}
                     </Typography>
 
@@ -197,14 +220,14 @@ export const UpdateChannel: React.FC = () => {
                         {loading ? (
                             <Box display="flex" alignItems="center" gap={1}>
                                 <CircularProgress size={24} />
-                                <Typography>Saving and running self-check...</Typography>
+                                <Typography sx={{ color: colors.textWhite }}>Saving and running self-check...</Typography>
                             </Box>
                         ) : (
                             <Button
                                 variant="contained"
-                                color="primary"
                                 onClick={handleSaveChannel}
                                 disabled={loading}
+                                sx={button.primary}
                             >
                                 Save Channel
                             </Button>

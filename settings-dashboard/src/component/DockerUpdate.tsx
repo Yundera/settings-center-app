@@ -4,10 +4,6 @@ import {
     CircularProgress,
     Alert,
     Stack,
-    List,
-    ListItem,
-    ListItemText,
-    ListItemIcon,
     Chip,
     Card,
     CardContent,
@@ -15,11 +11,12 @@ import {
 } from "@mui/material";
 import {
     CheckCircle as CheckCircleIcon,
-    Error as ErrorIcon,
-    Warning as WarningIcon
+    Error as ErrorIcon
 } from "@mui/icons-material";
 import { apiRequest } from "@/core/authApi";
-// Updated interface to match new API
+import { colors, font, spacing, card, title, chip, icon, text } from '@/app/pages/softTheme';
+
+// Status of a single Docker image (local vs remote digest comparison)
 interface ImageStatus {
     image: string;
     currentDigest: string;
@@ -29,6 +26,7 @@ interface ImageStatus {
     error?: string;
 }
 
+// Aggregated status from the docker-compose-status API endpoint
 interface LastUpdateStatus {
     timestamp: Date;
     images: ImageStatus[];
@@ -37,13 +35,19 @@ interface LastUpdateStatus {
     error?: string;
 }
 
+/**
+ * DockerUpdate — Displays the "Software Status" card on the Health page.
+ * Fetches Docker image statuses from the backend and shows whether each image
+ * is up-to-date, has an update available, or encountered an error.
+ * Each image row shows a status icon, image name, status chip, and digest info.
+ */
 export const DockerUpdate: React.FC = () => {
     const [checking, setChecking] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [updateStatus, setUpdateStatus] = useState<LastUpdateStatus | null>(null);
     const [lastChecked, setLastChecked] = useState<Date | null>(null);
 
-
+    // Fetch Docker image status from backend on mount
     const getLastStatus = async () => {
         setChecking(true);
         setError(null);
@@ -59,60 +63,57 @@ export const DockerUpdate: React.FC = () => {
         }
     };
 
-
-    const getStatusColor = (hasUpdates: boolean) => {
-        return hasUpdates ? 'warning' : 'success';
-    };
-
+    // Returns a colored icon based on the image status
     const getImageStatusIcon = (status: string) => {
         switch (status) {
             case 'up-to-date':
-                return <CheckCircleIcon color="success" />;
+                return <CheckCircleIcon sx={{ color: colors.statusSuccess, ...icon.size }} />;
             case 'update-available':
-                return <WarningIcon color="warning" />;
+                return <ErrorIcon sx={{ color: colors.statusWarningAlt, ...icon.size }} />;
             case 'error':
-                return <ErrorIcon color="error" />;
+                return <ErrorIcon sx={{ color: colors.statusError, ...icon.size }} />;
             default:
-                return <CheckCircleIcon color="disabled" />;
+                return <CheckCircleIcon color="disabled" sx={icon.size} />;
         }
     };
 
+    // Returns a colored outlined chip for per-image status (uses !important to override MUI theme defaults)
     const getImageStatusChip = (status: string, hasUpdate: boolean) => {
         switch (status) {
             case 'up-to-date':
                 return (
                     <Chip
                         label="UP TO DATE"
-                        color="success"
                         size="small"
                         variant="outlined"
+                        sx={{ ...chip.tag, border: `1px solid ${colors.statusSuccess} !important`, color: `${colors.statusSuccess} !important`, '& .MuiChip-label': { color: `${colors.statusSuccess} !important` } }}
                     />
                 );
             case 'update-available':
                 return (
                     <Chip
-                        label="UPDATE AVAILABLE"
-                        color="warning"
+                        label="IN PROGRESS"
                         size="small"
                         variant="outlined"
+                        sx={{ ...chip.tag, border: `1px solid ${colors.statusWarningAlt} !important`, color: `${colors.statusWarningAlt} !important`, '& .MuiChip-label': { color: `${colors.statusWarningAlt} !important` } }}
                     />
                 );
             case 'error':
                 return (
                     <Chip
                         label="ERROR"
-                        color="error"
                         size="small"
                         variant="outlined"
+                        sx={{ ...chip.tag, border: `1px solid ${colors.statusError} !important`, color: `${colors.statusError} !important`, '& .MuiChip-label': { color: `${colors.statusError} !important` } }}
                     />
                 );
             default:
                 return (
                     <Chip
                         label="UNKNOWN"
-                        color="default"
                         size="small"
                         variant="outlined"
+                        sx={{ ...chip.tag, border: `1px solid #bdbdbd !important`, color: `#bdbdbd !important`, '& .MuiChip-label': { color: `#bdbdbd !important` } }}
                     />
                 );
         }
@@ -131,25 +132,33 @@ export const DockerUpdate: React.FC = () => {
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
             <Stack spacing={3}>
-                {/* Unified Docker Status and Results */}
-                <Card>
-                    <CardContent>
-                        <Stack spacing={3}>
-                            {/* Overall Image Status */}
+                <Card sx={card.root}>
+                    <Box sx={card.header}>
+                        <Typography sx={title.small}>
+                            Software Status
+                        </Typography>
+                    </Box>
+
+                    <CardContent sx={card.content}>
+                        <Stack sx={{ gap: spacing.itemGap }}>
                             {updateStatus && (
                                 <>
-                                    <Typography variant="h5">Software Status</Typography>
                                     <Stack direction="row" alignItems="center" spacing={2}>
-                                        <Typography variant="h6">Status:</Typography>
+                                        <Typography sx={text.label}>Status:</Typography>
                                         <Chip
                                             label={getOverallStatusText(updateStatus.hasUpdates)}
-                                            color={getStatusColor(updateStatus.hasUpdates) as any}
                                             variant="outlined"
+                                            sx={{
+                                                ...chip.status,
+                                                border: `1px solid ${updateStatus.hasUpdates ? colors.statusWarning : colors.statusSuccessChip} !important`,
+                                                color: `${updateStatus.hasUpdates ? colors.statusWarning : colors.statusSuccessChip} !important`,
+                                                '& .MuiChip-label': { color: `${updateStatus.hasUpdates ? colors.statusWarning : colors.statusSuccessChip} !important` },
+                                            }}
                                         />
                                         {checking && (
                                             <Box display="flex" alignItems="center" gap={1}>
                                                 <CircularProgress size={16} />
-                                                <Typography variant="body2" color="text.secondary">
+                                                <Typography variant="body2" sx={{ color: colors.textWhite }}>
                                                     Loading...
                                                 </Typography>
                                             </Box>
@@ -157,71 +166,67 @@ export const DockerUpdate: React.FC = () => {
                                     </Stack>
 
                                     {lastChecked && (
-                                        <Typography variant="body2" color="text.secondary">
+                                        <Typography variant="body2" sx={text.detail}>
                                             Last checked: {lastChecked.toLocaleString()}
                                         </Typography>
                                     )}
 
                                     {updateStatus.hasUpdates && (
-                                        <Typography variant="body2" color="warning.main">
+                                        <Typography variant="body2" sx={{ ...text.detail, color: colors.textWhite }}>
                                             {updateStatus.images.filter(img => img.hasUpdate).length} of {updateStatus.images.length} image(s) have updates available
                                         </Typography>
                                     )}
                                 </>
                             )}
 
-                            {/* Individual Image Results */}
                             {updateStatus && updateStatus.images.length > 0 && (
-                                <>
-                                    <List dense>
-                                        {updateStatus.images.map((imageStatus, index) => (
-                                            <ListItem key={index}>
-                                                <ListItemIcon>
-                                                    {getImageStatusIcon(imageStatus.status)}
-                                                </ListItemIcon>
-                                                <ListItemText
-                                                    primary={
-                                                        <Stack direction="row" alignItems="center" spacing={1}>
-                                                            <Typography variant="body1">
-                                                                {imageStatus.image}
+                                <Box>
+                                    {updateStatus.images.map((imageStatus, index) => (
+                                        <Box
+                                            key={index}
+                                            sx={{
+                                                display: 'flex',
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                mb: index < updateStatus.images.length - 1 ? spacing.itemGap : 0,
+                                            }}
+                                        >
+                                            <Box sx={icon.container}>
+                                                {getImageStatusIcon(imageStatus.status)}
+                                            </Box>
+                                            <Box>
+                                                <Stack direction="row" alignItems="center" spacing={1}>
+                                                    <Typography sx={text.label}>
+                                                        {imageStatus.image}
+                                                    </Typography>
+                                                    {getImageStatusChip(imageStatus.status, imageStatus.hasUpdate)}
+                                                </Stack>
+                                                <Box sx={{ mt: '4px' }}>
+                                                    {imageStatus.status === 'error' && imageStatus.error ? (
+                                                        <Typography variant="body2" sx={{ ...text.detail, color: colors.statusError }}>
+                                                            Error: {imageStatus.error}
+                                                        </Typography>
+                                                    ) : (
+                                                        <>
+                                                            <Typography variant="body2" sx={text.detail}>
+                                                                Current: {imageStatus.currentDigest === 'local-not-found'
+                                                                    ? 'Not found locally'
+                                                                    : imageStatus.currentDigest.substring(0, 16) + '...'}
                                                             </Typography>
-                                                            {getImageStatusChip(imageStatus.status, imageStatus.hasUpdate)}
-                                                        </Stack>
-                                                    }
-                                                    secondary={
-                                                        <Stack spacing={0.5} sx={{ mt: 1 }}>
-                                                            {imageStatus.status === 'error' && imageStatus.error ? (
-                                                                <Typography variant="body2" color="error.main">
-                                                                    <strong>Error:</strong> {imageStatus.error}
-                                                                </Typography>
-                                                            ) : (
-                                                                <>
-                                                                    <Typography variant="body2" color="text.secondary">
-                                                                        <strong>Current:</strong> {
-                                                                        imageStatus.currentDigest === 'local-not-found'
-                                                                            ? 'Not found locally'
-                                                                            : imageStatus.currentDigest.substring(0, 16) + '...'
-                                                                    }
-                                                                    </Typography>
-                                                                    <Typography variant="body2" color="text.secondary">
-                                                                        <strong>Available:</strong> {
-                                                                        imageStatus.availableDigest === 'remote-not-found'
-                                                                            ? 'Not found remotely'
-                                                                            : imageStatus.availableDigest.substring(0, 16) + '...'
-                                                                    }
-                                                                    </Typography>
-                                                                </>
-                                                            )}
-                                                        </Stack>
-                                                    }
-                                                />
-                                            </ListItem>
-                                        ))}
-                                    </List>
-                                </>
+                                                            <Typography variant="body2" sx={text.detail}>
+                                                                Available: {imageStatus.availableDigest === 'remote-not-found'
+                                                                    ? 'Not found remotely'
+                                                                    : imageStatus.availableDigest.substring(0, 16) + '...'}
+                                                            </Typography>
+                                                        </>
+                                                    )}
+                                                </Box>
+                                            </Box>
+                                        </Box>
+                                    ))}
+                                </Box>
                             )}
 
-                            {/* No Images Found */}
                             {updateStatus && updateStatus.images.length === 0 && (
                                 <Stack direction="row" alignItems="center" spacing={2}>
                                     <ErrorIcon color="warning" />

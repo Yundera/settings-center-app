@@ -5,10 +5,6 @@ import {
     CircularProgress,
     Alert,
     Stack,
-    List,
-    ListItem,
-    ListItemText,
-    ListItemIcon,
     Chip,
     Card,
     CardContent,
@@ -16,28 +12,27 @@ import {
 } from "@mui/material";
 import {
     CheckCircle as CheckCircleIcon,
-    Error as ErrorIcon,
-    Warning as WarningIcon,
-    Schedule as ScheduleIcon
+    Error as ErrorIcon
 } from "@mui/icons-material";
-import { PageContainer } from "dashboard-core";
 import { apiRequest } from "@/core/authApi";
 import { useNotify } from "react-admin";
 import { SelfCheckStatus, SelfCheckResult } from "@/backend/server/SelfCheck/SelfCheckTypes";
+import { colors, font, spacing, card, title, button, chip, icon, text } from '@/app/pages/softTheme';
 
+/**
+ * SelfCheck — Displays the "System Status" card on the Health page.
+ * Fetches self-check script results from the backend and shows pass/fail
+ * status for each script. Supports manual re-run via "Run Self-Check" button.
+ * Auto-polls every 2 seconds while a check is running.
+ */
 export const SelfCheck: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [checking, setChecking] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [status, setStatus] = useState<SelfCheckStatus>({
-        isRunning: false,
-        overallStatus: 'never_run',
-        scripts: {},
-        lastRun: undefined,
-        connectionError: undefined,
-    });
+    const [status, setStatus] = useState<SelfCheckStatus | null>(null);
     const notify = useNotify();
 
+    // Fetch the latest self-check status from the backend
     const checkStatus = async () => {
         setChecking(true);
         setError(null);
@@ -52,6 +47,7 @@ export const SelfCheck: React.FC = () => {
         }
     };
 
+    // Trigger a new self-check run on the backend, then refresh status
     const handleRunSelfCheck = async () => {
         setLoading(true);
         setError(null);
@@ -59,7 +55,7 @@ export const SelfCheck: React.FC = () => {
         try {
             await apiRequest("/api/admin/self-check-run", "POST");
             notify('Self-check completed successfully');
-            await checkStatus(); // Refresh status
+            await checkStatus();
         } catch (err: any) {
             setError(err.message || "Self-check failed");
         } finally {
@@ -67,22 +63,23 @@ export const SelfCheck: React.FC = () => {
         }
     };
 
-    const getStatusColor = (overallStatus: string) => {
+    // Map overall status to a semantic color for the status chip
+    const getStatusHexColor = (overallStatus: string) => {
         switch (overallStatus) {
-            case 'success': return 'success';
-            case 'failure': return 'error';
-            case 'partial': return 'warning';
-            case 'connection_failed': return 'error';
-            case 'never_run': return 'info';
-            default: return 'default';
+            case 'success': return colors.statusSuccessChip;
+            case 'failure': return colors.statusErrorAlt;
+            case 'partial': return colors.statusWarning;
+            case 'never_run': return colors.statusInfo;
+            default: return '#bdbdbd';
         }
     };
 
+    // Returns a green check or red error icon based on script success
     const getStatusIcon = (success: boolean) => {
         return success ? (
-            <CheckCircleIcon color="success" />
+            <CheckCircleIcon sx={{ color: colors.statusSuccess, ...icon.size }} />
         ) : (
-            <ErrorIcon color="error" />
+            <ErrorIcon sx={{ color: colors.statusError, ...icon.size }} />
         );
     };
 
@@ -91,15 +88,12 @@ export const SelfCheck: React.FC = () => {
         return duration < 1000 ? `${duration}ms` : `${(duration / 1000).toFixed(1)}s`;
     };
 
+    // Poll status on mount; auto-refresh every 2s while a check is running
     useEffect(() => {
         checkStatus();
-        // Set up polling to check if self-check is running
         const interval = setInterval(() => {
-            if (status?.isRunning) {
-                checkStatus();
-            }
+            if (status?.isRunning) { checkStatus(); }
         }, 2000);
-
         return () => clearInterval(interval);
     }, [status?.isRunning]);
 
@@ -108,45 +102,53 @@ export const SelfCheck: React.FC = () => {
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
             <Stack spacing={3}>
-                {/* Unified Status and Results */}
-                <Card>
-                    <CardContent>
-                        <Stack spacing={3}>
-                            {/* Overall Status and Button on Same Line */}
-                            <Typography variant="h5">System Status</Typography>
+                <Card sx={card.root}>
+                    <Box sx={card.header}>
+                        <Typography sx={title.small}>
+                            System Status
+                        </Typography>
+                    </Box>
+
+                    <CardContent sx={card.content}>
+                        <Stack sx={{ gap: spacing.itemGap }}>
                             <Stack direction="row" alignItems="center" spacing={2} justifyContent="space-between">
                                 <Stack direction="row" alignItems="center" spacing={2}>
-                                    <Typography variant="h6">Status:</Typography>
+                                    <Typography sx={text.label}>Status:</Typography>
                                     {status && (
                                         <Chip
                                             label={status.overallStatus.replace('_', ' ').toUpperCase()}
-                                            color={getStatusColor(status.overallStatus) as any}
                                             variant="outlined"
+                                            sx={{
+                                                ...chip.status,
+                                                border: `1px solid ${getStatusHexColor(status.overallStatus)} !important`,
+                                                color: `${getStatusHexColor(status.overallStatus)} !important`,
+                                                '& .MuiChip-label': { color: `${getStatusHexColor(status.overallStatus)} !important` },
+                                            }}
                                         />
                                     )}
                                     {status?.isRunning && (
                                         <Box display="flex" alignItems="center" gap={1}>
                                             <CircularProgress size={16} />
-                                            <Typography variant="body2" color="text.secondary">
+                                            <Typography variant="body2" sx={{ color: colors.textWhite }}>
                                                 Running...
                                             </Typography>
                                         </Box>
                                     )}
                                 </Stack>
-                                
+
                                 {loading || checking || status?.isRunning ? (
                                     <Box display="flex" alignItems="center" gap={1}>
                                         <CircularProgress size={24} />
-                                        <Typography>
+                                        <Typography sx={{ color: colors.textWhite }}>
                                             {status?.isRunning ? 'Running...' : 'Loading...'}
                                         </Typography>
                                     </Box>
                                 ) : (
                                     <Button
                                         variant="contained"
-                                        color="primary"
                                         onClick={handleRunSelfCheck}
                                         disabled={loading || status?.isRunning}
+                                        sx={button.primary}
                                     >
                                         Run Self-Check
                                     </Button>
@@ -154,7 +156,7 @@ export const SelfCheck: React.FC = () => {
                             </Stack>
 
                             {status?.lastRun && (
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography variant="body2" sx={text.detail}>
                                     Last run: {new Date(status.lastRun).toLocaleString()}
                                 </Typography>
                             )}
@@ -168,38 +170,49 @@ export const SelfCheck: React.FC = () => {
                                 </Alert>
                             )}
 
-                            {/* Script Results */}
                             {status && Object.keys(status.scripts).length > 0 && (
-                                <>
-                                    <List dense>
-                                        {Object.entries(status.scripts).map(([scriptName, result]) => (
-                                            <ListItem key={scriptName}>
-                                                <ListItemIcon>
-                                                    {getStatusIcon(result.success)}
-                                                </ListItemIcon>
-                                                <ListItemText
-                                                    primary={scriptName}
-                                                    secondary={
-                                                        <Stack direction="row" alignItems="center" spacing={1}>
-                                                            <Typography variant="body2">
-                                                                {result.message}
-                                                            </Typography>
-                                                            {result.duration && (
-                                                                <Chip
-                                                                    label={formatDuration(result.duration)}
-                                                                    size="small"
-                                                                    variant="outlined"
-                                                                />
-                                                            )}
-                                                        </Stack>
-                                                    }
-                                                />
-                                            </ListItem>
-                                        ))}
-                                    </List>
-                                </>
+                                <Box>
+                                    {Object.entries(status.scripts).map(([scriptName, result], index, arr) => (
+                                        <Box
+                                            key={scriptName}
+                                            sx={{
+                                                display: 'flex',
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                mb: index < arr.length - 1 ? spacing.itemGap : 0,
+                                            }}
+                                        >
+                                            <Box sx={icon.container}>
+                                                {getStatusIcon(result.success)}
+                                            </Box>
+                                            <Box>
+                                                <Typography sx={text.label}>{scriptName}</Typography>
+                                                <Stack direction="row" alignItems="center" spacing={1}>
+                                                    <Typography variant="body2" sx={text.detail}>
+                                                        {result.message}
+                                                    </Typography>
+                                                    {result.duration && (
+                                                        <Chip
+                                                            label={formatDuration(result.duration)}
+                                                            size="small"
+                                                            variant="outlined"
+                                                            sx={{
+                                                                color: `${colors.textWhite} !important`,
+                                                                border: `1px solid ${colors.textWhite} !important`,
+                                                                fontSize: font.caption,
+                                                                fontWeight: 400,
+                                                                letterSpacing: '0.75px',
+                                                                borderRadius: '12px',
+                                                                backgroundColor: 'transparent',
+                                                            }}
+                                                        />
+                                                    )}
+                                                </Stack>
+                                            </Box>
+                                        </Box>
+                                    ))}
+                                </Box>
                             )}
-
                         </Stack>
                     </CardContent>
                 </Card>
