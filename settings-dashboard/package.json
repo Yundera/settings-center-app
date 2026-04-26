@@ -20,6 +20,7 @@
     "dashboard-core": "workspace:*",
     "dotenv": "^16.4.5",
     "js-crypto-hkdf": "^1.0.7",
+    "jose": "^5.9.6",
     "jsonwebtoken": "^9.0.2",
     "next": "14.0.1",
     "node-cron": "^4.0.7",

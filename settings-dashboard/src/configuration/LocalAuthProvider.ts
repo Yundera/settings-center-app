@@ -13,39 +13,34 @@ interface LocalUser{
   authToken: string
 }
 
+function redirectToOIDCLogin(): Promise<never> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Not authenticated"));
+  }
+  const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+  window.location.replace(`/api/auth/oidc/login?returnTo=${returnTo}`);
+  return new Promise<never>(() => {}); // navigation in progress
+}
+
 export const localAuthProvider : ( AuthProvider & AuthProviderAPIAccess)= {
   async listPermissions() {
-    console.log('listPermissions');
     return {};
   },
-  async login({ username, password }) {
-    try {
-      const response = await axios.post('/api/local/auth/login', {
-        username,
-        password
-      }, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      const data : LocalUser = response.data;
-      localStorage.setItem('user', JSON.stringify(data));
-    } catch (error) {
-      throw new Error('Login failed');
-    }
+  async login() {
+    return redirectToOIDCLogin();
   },
   async checkError(error) {
     const status = error.status;
     if (status === 401 || status === 403) {
       localStorage.removeItem('user');
-      throw new Error('Session expired');
+      return redirectToOIDCLogin();
     }
     // other error codes (404, 500, etc): no need to log out
   },
   async checkAuth() {
     if (!localStorage.getItem('user')) {
-      throw new Error('Not authenticated');
+      return redirectToOIDCLogin();
     }
-    // Prepare headers
     const token = await this.getIdToken();
     const headers: HeadersInit = {
       "Content-Type": "application/json",
@@ -54,13 +49,17 @@ export const localAuthProvider : ( AuthProvider & AuthProviderAPIAccess)= {
     const response = await axios.post('/api/local/auth/check-auth', {}, {
       headers: headers
     });
-    if(response.status !== 200){
-      localStorage.removeItem('user');//force user to login again
-      throw new Error('Not authenticated');
+    if (response.status !== 200) {
+      localStorage.removeItem('user');
+      return redirectToOIDCLogin();
     }
   },
   async logout() {
     localStorage.removeItem('user');
+    if (typeof window !== "undefined") {
+      window.location.replace('/api/auth/oidc/logout');
+      return new Promise<never>(() => {});
+    }
   },
   async getIdentity() {
     const user = JSON.parse(localStorage.getItem('user') || '{user:{}}') as LocalUser;

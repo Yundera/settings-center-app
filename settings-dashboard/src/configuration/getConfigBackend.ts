@@ -3,10 +3,10 @@ import {BaseConfig, getConfig as getConfigBackend} from "dashboard-core/backend/
 type Config = {
     BASE_PATH: string;
     JWT_SECRET: string;
-    AUTHORITY_ENDPOINT: string;
     COMPOSE_FOLDER_PATH: string;
     HOST_ADDRESS: string; //optional, used for host commands
     MOCK: string;
+    OIDC_REGISTRAR_URL: string;
 
     DOMAIN: string;
     PROVIDER_STR: string;

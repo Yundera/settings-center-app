@@ -62,7 +62,7 @@ This simulates a state just after a PCS has been created (with `.env` and `os-in
 
 - **Clean Installation**: The run-simple script automatically cleans Docker volumes for fresh testing 
 - **Yundera stack**: this process will create a non-functional Yundera stack that can be ignored
-- **Authentication**: The login credentials will be those defined by the authority in `config/core.env.json` under `"AUTHORITY_ENDPOINT"`
+- **Authentication**: Sign-in is delegated to Authelia via OIDC (auto-registered with `mesh-router-auth`). The dashboard mints its own short-lived app JWT after a successful OIDC callback.
 
 ## Deployment
 
