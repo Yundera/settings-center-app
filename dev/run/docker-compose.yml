@@ -1,26 +1,68 @@
 services:
-  settings-app:
+  # ============================================================================
+  # admin (settings-center-app under test)
+  # Container name MUST be `admin` so mesh-router-auth's PTR-derived clientId
+  # matches the prod template-root deployment (the `admin` subdomain in
+  # buildRedirectUri.ts is hard-coded). Routed at https://admin-${DOMAIN} via
+  # mesh-router-caddy below — direct localhost:4342 mapping is gone because
+  # the OIDC redirect URI is HTTPS-only.
+  # ============================================================================
+  admin:
     build:
       context: ../../
-      dockerfile: Dockerfile
-    container_name: settings-dev
+      # Dev-mode image with full deps installed (tsx, typescript, ...).
+      dockerfile: dev/run/Dockerfile.admin-dev
+    container_name: admin
+    hostname: admin
     env_file:
       - ./test-pcs.env
       - ./test-pcs.secret.env
       - ./test-ynd.user.env
-    ports:
-      - "4342:80"
     volumes:
       - ssh_keys:/host_ssh/
       - data:/app/data/
+      # Source bind-mounts for Next.js fast refresh — edits in src/ are picked
+      # up without rebuilding the image. node_modules and .next stay inside the
+      # container (built by the Dockerfile) so we don't pull host artifacts in.
+      - ../../settings-dashboard/src:/app/settings-dashboard/src
+      - ../../settings-dashboard/server.ts:/app/settings-dashboard/server.ts:ro
+      - ../../settings-dashboard/config:/app/settings-dashboard/config:ro
+      - ../../settings-dashboard/public:/app/settings-dashboard/public:ro
+      - ../../settings-dashboard/next.config.mjs:/app/settings-dashboard/next.config.mjs:ro
+      - ../../settings-dashboard/tsconfig.json:/app/settings-dashboard/tsconfig.json:ro
+      - ../../dashboard-core/src:/app/dashboard-core/src
+    # `pnpm start` runs `tsx server.ts` with NODE_ENV unset → Next.js dev mode
+    # (fast refresh) listening on port 4342. Override the production CMD that
+    # the image ships with.
+    command: ["pnpm", "-C", "settings-dashboard", "start"]
     environment:
       - HOST_ADDRESS=ubuntu-server
+      # Force dev mode — server.ts switches behaviour off NODE_ENV.
+      - NODE_ENV=development
+      # Bind on all interfaces so dev-caddy can reach us across the
+      # docker network (Next.js dev mode default is loopback-only).
+      - HOSTNAME_BIND=0.0.0.0
+      # Caddy `tls internal` issues from a per-container local CA the admin
+      # container's Node runtime doesn't trust. Discovery (`getDiscovery` in
+      # backend/auth/oidc/discovery.ts) and token exchange go server-to-caddy
+      # over HTTPS, so we relax verification for dev only.
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
     networks:
       - app-network
     depends_on:
-      - ubuntu-host-pcs
+      ubuntu-host-pcs:
+        condition: service_healthy
+    labels:
+      caddy_0: admin-${DOMAIN}
+      caddy_0.import: gateway_tls
+      # Dev mode listens on 4342 (server.ts:13), prod on 80.
+      caddy_0.reverse_proxy: "{{upstreams 4342}}"
 
-  #PCS emulation
+  # ============================================================================
+  # PCS emulation — runs template-sync + os-init, then explicitly bootstraps
+  # Authelia secrets so the auth_data volume is populated before authelia/
+  # auth-registrar start. Healthcheck blocks dependents until ready.
+  # ============================================================================
   ubuntu-host-pcs:
     build: .
     container_name: ubuntu-host-pcs
@@ -29,6 +71,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ssh_keys:/root/.ssh/
       - data:/DATA/AppData/casaos/apps/yundera/
+      # Shared with authelia (mounts at /config) and auth-registrar.
+      # ensure-auth-secrets.sh writes secrets, JWKS, configuration.yml, and
+      # users_database.yml here.
+      - auth_data:/DATA/AppData/yundera/auth/
       - ./template-root/root/:/tmp/setup/:ro
       - ./test-pcs.env:/tmp/.pcs.env:ro
       - ./test-pcs.secret.env:/tmp/.pcs.secret.env:ro
@@ -46,16 +92,126 @@ services:
             /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh || echo '[dev] Template sync failed, continuing anyway...' &&
             chmod +x /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh &&
             /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh || echo '[dev] OS init failed, continuing anyway...' &&
+            chmod +x /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-auth-secrets.sh &&
+            /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-auth-secrets.sh &&
+            touch /tmp/auth-bootstrap-ready &&
             service ssh start &&
             tail -f /dev/null
           "
+    healthcheck:
+      # Gate on the bootstrap marker — secrets, JWKS, configuration.yml, and
+      # users_database.yml must all exist before authelia tries to read /config.
+      test: ["CMD-SHELL", "test -f /tmp/auth-bootstrap-ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
     networks:
       - app-network
+
+  # ============================================================================
+  # Authelia — OIDC IdP. /config is the auth_data volume populated by
+  # ensure-auth-secrets.sh in ubuntu-host-pcs.
+  # ============================================================================
+  authelia:
+    image: authelia/authelia:4.39
+    container_name: authelia
+    hostname: authelia
+    restart: unless-stopped
+    environment:
+      AUTHELIA_SESSION_SECRET_FILE: /config/secrets/session
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /config/secrets/storage
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE: /config/secrets/reset
+    volumes:
+      - auth_data:/config
+    expose:
+      - "9091"
+    networks:
+      - app-network
+    depends_on:
+      ubuntu-host-pcs:
+        condition: service_healthy
+    labels:
+      caddy_0: auth-${DOMAIN}
+      caddy_0.import: gateway_tls
+      caddy_0.reverse_proxy: "{{upstreams 9091}}"
+
+  # ============================================================================
+  # auth-registrar — sidecar that hands out OIDC client_id/secret pairs to
+  # apps on first POST /register. Reads template-root scripts from the
+  # shared `data` volume; writes clients.d/ and re-renders config via the
+  # mounted register-oidc-client.sh.
+  # ============================================================================
+  auth-registrar:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth-registrar
+    # `auth-registrar` is a common container_name (used by every PCS stack and
+    # by the MetaMesh dev stack), so we run under a dev-prefixed name and
+    # advertise the canonical alias only on app-network for in-stack DNS.
+    container_name: dev-auth-registrar
+    hostname: auth-registrar
+    restart: unless-stopped
+    environment:
+      ISSUER_URL: https://auth-${DOMAIN}
+      REGISTER_SCRIPT_PATH: /DATA/AppData/casaos/apps/yundera/scripts/tools/register-oidc-client.sh
+    volumes:
+      - data:/DATA/AppData/casaos/apps/yundera:ro
+      - auth_data:/DATA/AppData/yundera/auth
+      - /var/run/docker.sock:/var/run/docker.sock
+    expose:
+      - "9092"
+    networks:
+      app-network:
+        aliases:
+          - auth-registrar
+    depends_on:
+      authelia:
+        condition: service_started
+
+  # ============================================================================
+  # caddy-docker-proxy — routes admin-${DOMAIN} → admin:80 and
+  # auth-${DOMAIN} → authelia:9091 from `caddy_*` labels above. Uses
+  # `tls internal` (Caddy local CA) — first browse will warn; trust the CA at
+  # /data/caddy/pki/authorities/local/root.crt or accept per-domain.
+  # ============================================================================
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:2.10
+    container_name: dev-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CADDY_INGRESS_NETWORKS: app-network
+      CADDY_DOCKER_CADDYFILE_PATH: /etc/caddy/Caddyfile
+      PCS_EMAIL: admin@${DOMAIN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      app-network:
+        # Aliases let server-side calls inside admin (`getDiscovery`,
+        # `getOIDCClient`) resolve auth/admin hostnames to Caddy on the
+        # internal network, instead of falling back to public nip.io DNS
+        # which returns 127.0.0.1 (= admin's own netns, ECONNREFUSED).
+        aliases:
+          - admin-${DOMAIN}
+          - auth-${DOMAIN}
 
 volumes:
   ssh_keys:
   data:
+  auth_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   app-network:
+    # Pin the network name (otherwise compose prefixes it as `run_app-network`),
+    # so CADDY_INGRESS_NETWORKS on the caddy service can match it for upstream
+    # discovery.
+    name: app-network
     driver: bridge

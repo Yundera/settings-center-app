@@ -16,6 +16,9 @@ import {securityPanel} from "@/panels/security/Config";
 import {AuthProvider} from "ra-core";
 import {healthPanel} from "@/panels/health/Config";
 import {migrationPanel} from "@/panels/migration/Config";
+import {systemInformationPanel} from "@/panels/system-information/Config";
+import {billingPanel} from "@/panels/billing/Config";
+import {accountPanel} from "@/panels/account/Config";
 
 const MyApp = ({authProvider, dataProvider, permissions}: {
   authProvider:AuthProvider,
@@ -23,7 +26,7 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
   permissions: Record<string, boolean>
 }) => {
 
-  let availablePanels: any[] = [healthPanel, migrationPanel]
+  let availablePanels: any[] = [systemInformationPanel, accountPanel, healthPanel, migrationPanel, billingPanel]
   let panels: any[] = [];
   for (const availablePanel of availablePanels) {
     if (availablePanel.permissions && !!permissions[availablePanel.permissions]) {

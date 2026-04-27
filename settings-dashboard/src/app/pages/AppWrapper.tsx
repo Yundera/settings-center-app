@@ -135,61 +135,19 @@ const MenuItem = (panel: PanelInterface, dense: boolean, translate: any) => {
   />
 }
 
-// Style for non-link menu items (e.g. "Other", "More options...")
-const menuItemBoxStyle = {
-  borderRadius: radius.button,
-  padding: '12px 20px',
-  margin: '5px 0',
-  fontSize: font.menuItem,
-  fontWeight: 400,
-  color: colors.textMuted,
-  minHeight: '50px',
-  display: 'flex',
-  alignItems: 'center',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-  '&:hover': {
-    backgroundColor: colors.bgOverlay,
-    color: colors.textWhite,
-  },
-};
-
 // ── Sidebar Menu ─────────────────────────────────────────────
-// Builds the sidebar navigation: Dashboard link, panel links, category label, and placeholder items.
+// Builds the sidebar navigation: Dashboard link followed by one link per panel.
 // Padding is applied here (not on RaSidebar-fixed) to avoid double-padding issues on refresh.
 export const Menu = (panels: PanelInterface[]) => ({ dense = false }: MenuProps) => {
   const translate = useTranslate();
 
   return (
       <Box sx={{ padding: '20px', boxSizing: 'border-box' }}>
-          {/* Dashboard menu link */}
           <Box sx={{ mb: 1 }}>
               <DashboardMenuItem sx={menuItemLinkSx} />
           </Box>
-
-          {/* Panel menu links */}
           <Box>
               {panels.map(value => MenuItem(value, dense, translate))}
-              <Box sx={menuItemBoxStyle}>
-                  Other
-              </Box>
-          </Box>
-
-          {/* Category section label */}
-          <Typography sx={{
-              color: colors.textSubtle,
-              fontSize: font.caption,
-              fontWeight: 300,
-              letterSpacing: '1px',
-              textTransform: 'uppercase',
-              padding: '20px 20px 10px 20px',
-          }}>
-              CATEGORY
-          </Typography>
-
-          {/* Placeholder for future menu items */}
-          <Box sx={menuItemBoxStyle}>
-              More options...
           </Box>
       </Box>
   );

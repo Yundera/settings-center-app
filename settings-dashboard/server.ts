@@ -9,7 +9,10 @@ import { initializeEnvironment } from "@/configuration/loadEnvironment";
 initializeEnvironment();
 
 const dev = process.env.NODE_ENV !== 'production'
-const hostname = dev ? 'localhost' : '0.0.0.0'
+// Allow overriding the dev bind address — by default Next.js dev mode only
+// listens on loopback, which breaks reverse-proxy containers that reach the
+// admin app over a docker network.
+const hostname = process.env.HOSTNAME_BIND ?? (dev ? 'localhost' : '0.0.0.0')
 const port = dev ? 4342 : 80
 
 // Create Next.js app instance
