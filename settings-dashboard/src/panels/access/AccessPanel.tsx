@@ -1,0 +1,323 @@
+import React, { useCallback, useEffect, useState } from "react";
+import {
+    Alert,
+    Box,
+    Button,
+    Card,
+    CardContent,
+    Chip,
+    CircularProgress,
+    Divider,
+    Stack,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableRow,
+    Typography,
+} from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import { apiRequest } from "@/core/authApi";
+import { button, card, colors, font, spacing, text, title } from "@/app/pages/softTheme";
+
+interface AuthorizedKey {
+    type: string;
+    fingerprint: string;
+    bits: number | null;
+    comment: string;
+    isAdminKey: boolean;
+}
+
+interface LoginEvent {
+    username: string;
+    terminal: string;
+    from: string;
+    time: string;
+    duration: string;
+}
+
+interface HostAccount {
+    username: string;
+    uid: number;
+    gid: number;
+    home: string;
+    shell: string;
+    isSystem: boolean;
+    lastLoginTime: string | null;
+    lastLoginFrom: string | null;
+    authorizedKeys: AuthorizedKey[];
+    authorizedKeysError: string | null;
+}
+
+interface AccessInfoResponse {
+    accounts: HostAccount[];
+    recentLogins: LoginEvent[];
+    collectedAt: string;
+}
+
+const tableHeadCell = {
+    color: colors.textMuted,
+    fontSize: font.caption,
+    fontWeight: 700,
+    letterSpacing: '0.75px',
+    textTransform: 'uppercase' as const,
+    borderBottomColor: colors.borderMuted,
+};
+
+const tableBodyCell = {
+    color: colors.textWhite,
+    fontSize: font.detail,
+    borderBottomColor: colors.borderMuted,
+};
+
+/**
+ * AccessPanel — "Access" page. Lists Linux user accounts on the host, the
+ * authorized SSH keys per account, and recent login history (time + IP).
+ */
+export const AccessPanel: React.FC = () => {
+    const [data, setData] = useState<AccessInfoResponse | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await apiRequest<AccessInfoResponse>("/api/admin/access-info", "GET");
+            setData(res);
+            setError(null);
+        } catch (err: any) {
+            setError(err?.message || "Failed to load access info");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    const loginAccounts = (data?.accounts || []).filter(a => !a.isSystem || a.authorizedKeys.length > 0 || a.lastLoginTime);
+    const otherAccounts = (data?.accounts || []).filter(a => a.isSystem && a.authorizedKeys.length === 0 && !a.lastLoginTime);
+
+    return (
+        <Box sx={{
+            backgroundColor: colors.bgPage,
+            paddingTop: spacing.pageY,
+            paddingBottom: spacing.pageY,
+            paddingX: spacing.pageX,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+        }}>
+            <Typography
+                variant="h2"
+                sx={{
+                    textAlign: 'center',
+                    fontSize: font.titleLarge,
+                    fontWeight: 700,
+                    color: colors.textWhite,
+                    marginBottom: '30px',
+                }}
+            >
+                Access
+            </Typography>
+
+            <Box sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: spacing.cardGap,
+                maxWidth: '1000px',
+                width: '100%',
+            }}>
+                {/* Accounts and keys card */}
+                <Card sx={card.root}>
+                    <Box sx={card.header}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between">
+                            <Typography sx={title.small}>Host accounts &amp; SSH keys</Typography>
+                            <Button
+                                onClick={fetchData}
+                                disabled={loading}
+                                startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />}
+                                sx={button.primary}
+                            >
+                                Refresh
+                            </Button>
+                        </Stack>
+                    </Box>
+                    <CardContent sx={card.content}>
+                        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+                        {loading && !data && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                                <CircularProgress />
+                            </Box>
+                        )}
+
+                        {data && loginAccounts.length === 0 && (
+                            <Typography sx={text.bodyMuted}>No login accounts detected.</Typography>
+                        )}
+
+                        <Stack sx={{ gap: spacing.itemGap }}>
+                            {loginAccounts.map(account => (
+                                <AccountBlock key={account.username} account={account} />
+                            ))}
+                        </Stack>
+
+                        {otherAccounts.length > 0 && (
+                            <>
+                                <Divider sx={{ my: 3, borderColor: colors.borderMuted }} />
+                                <Typography sx={{ ...text.label, mb: 1 }}>
+                                    Other system accounts ({otherAccounts.length})
+                                </Typography>
+                                <Typography sx={{ ...text.detail, mb: 2 }}>
+                                    System users with no recorded login and no authorized keys.
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                    {otherAccounts.map(a => (
+                                        <Chip key={a.username} label={`${a.username} (${a.uid})`} size="small" />
+                                    ))}
+                                </Box>
+                            </>
+                        )}
+
+                        {data && (
+                            <Typography sx={{ ...text.detail, mt: 3 }}>
+                                Collected at {new Date(data.collectedAt).toLocaleString()}
+                            </Typography>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Recent logins card */}
+                <Card sx={card.root}>
+                    <Box sx={card.header}>
+                        <Typography sx={title.small}>Recent login history</Typography>
+                    </Box>
+                    <CardContent sx={card.content}>
+                        {data && data.recentLogins.length === 0 && (
+                            <Typography sx={text.bodyMuted}>No login records found.</Typography>
+                        )}
+                        {data && data.recentLogins.length > 0 && (
+                            <Box sx={{ overflowX: 'auto' }}>
+                                <Table size="small">
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell sx={tableHeadCell}>User</TableCell>
+                                            <TableCell sx={tableHeadCell}>Terminal</TableCell>
+                                            <TableCell sx={tableHeadCell}>From</TableCell>
+                                            <TableCell sx={tableHeadCell}>Time</TableCell>
+                                            <TableCell sx={tableHeadCell}>Duration</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {data.recentLogins.map((event, idx) => (
+                                            <TableRow key={idx}>
+                                                <TableCell sx={tableBodyCell}>{event.username}</TableCell>
+                                                <TableCell sx={tableBodyCell}>{event.terminal || '—'}</TableCell>
+                                                <TableCell sx={tableBodyCell}>{event.from || '—'}</TableCell>
+                                                <TableCell sx={tableBodyCell}>{event.time || '—'}</TableCell>
+                                                <TableCell sx={tableBodyCell}>{event.duration || '—'}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </Box>
+                        )}
+                    </CardContent>
+                </Card>
+            </Box>
+        </Box>
+    );
+};
+
+const AccountBlock: React.FC<{ account: HostAccount }> = ({ account }) => {
+    return (
+        <Box sx={{
+            border: `1px solid ${colors.borderMuted}`,
+            borderRadius: 2,
+            p: 2,
+        }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+                <Typography sx={text.label}>{account.username}</Typography>
+                <Chip label={`UID ${account.uid}`} size="small" />
+                {account.uid === 0 && (
+                    <Chip label="ROOT" size="small" color="warning" />
+                )}
+                {account.isSystem && (
+                    <Chip label="SYSTEM" size="small" />
+                )}
+            </Stack>
+
+            <Stack direction="row" spacing={3} sx={{ mb: 1, flexWrap: 'wrap' }}>
+                <Typography sx={text.detail}>
+                    <strong>Home:</strong> {account.home || '—'}
+                </Typography>
+                <Typography sx={text.detail}>
+                    <strong>Shell:</strong> {account.shell || '—'}
+                </Typography>
+            </Stack>
+
+            <Stack direction="row" spacing={3} sx={{ mb: 2, flexWrap: 'wrap' }}>
+                <Typography sx={text.detail}>
+                    <strong>Last login:</strong>{' '}
+                    {account.lastLoginTime
+                        ? `${account.lastLoginTime}`
+                        : 'never (within recorded history)'}
+                </Typography>
+                {account.lastLoginFrom && (
+                    <Typography sx={text.detail}>
+                        <strong>From:</strong> {account.lastLoginFrom}
+                    </Typography>
+                )}
+            </Stack>
+
+            <Typography sx={{ ...text.label, fontSize: font.detail, mb: 1 }}>
+                Authorized SSH keys ({account.authorizedKeys.length})
+            </Typography>
+            {account.authorizedKeysError && (
+                <Alert severity="warning" sx={{ mb: 1 }}>{account.authorizedKeysError}</Alert>
+            )}
+            {account.authorizedKeys.length === 0 && !account.authorizedKeysError && (
+                <Typography sx={text.detail}>No authorized keys.</Typography>
+            )}
+            {account.authorizedKeys.length > 0 && (
+                <Box sx={{ overflowX: 'auto' }}>
+                    <Table size="small">
+                        <TableHead>
+                            <TableRow>
+                                <TableCell sx={tableHeadCell}>Type</TableCell>
+                                <TableCell sx={tableHeadCell}>Fingerprint</TableCell>
+                                <TableCell sx={tableHeadCell}>Comment</TableCell>
+                                <TableCell sx={tableHeadCell}>Tag</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {account.authorizedKeys.map((key, idx) => (
+                                <TableRow key={idx}>
+                                    <TableCell sx={tableBodyCell}>
+                                        {key.type}{key.bits ? ` ${key.bits}` : ''}
+                                    </TableCell>
+                                    <TableCell sx={{
+                                        ...tableBodyCell,
+                                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                                        wordBreak: 'break-all',
+                                    }}>
+                                        {key.fingerprint || '—'}
+                                    </TableCell>
+                                    <TableCell sx={tableBodyCell}>{key.comment || '—'}</TableCell>
+                                    <TableCell sx={tableBodyCell}>
+                                        {key.isAdminKey ? (
+                                            <Chip label="dashboard" size="small" color="info" />
+                                        ) : (
+                                            <Chip label="user" size="small" />
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </Box>
+            )}
+        </Box>
+    );
+};
