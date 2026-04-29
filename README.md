@@ -64,6 +64,38 @@ This simulates a state just after a PCS has been created (with `.env` and `os-in
 - **Yundera stack**: this process will create a non-functional Yundera stack that can be ignored
 - **Authentication**: Sign-in is delegated to Authelia via OIDC (auto-registered with `mesh-router-auth`). The dashboard mints its own short-lived app JWT after a successful OIDC callback.
 
+## Public Health Endpoint
+
+`GET /api/health` is unauthenticated and returns a small JSON snapshot from
+RAM only — no shell, no SSH, no file I/O on call. It exists so the Yundera
+control plane can poll each PCS roughly once a day to confirm the deployed
+version and that the last self-check did not report failures.
+
+```http
+GET /api/health
+```
+
+```json
+{
+  "version": "0.1.0",
+  "selfCheck": {
+    "ok": true,
+    "lastRunAt": "2026-04-29T03:00:12"
+  },
+  "lastRefreshedAt": "2026-04-29T03:05:00.000Z"
+}
+```
+
+- `selfCheck.ok` — `true` on success, `false` on failures, `null` if no
+  completion line has been observed yet.
+- `selfCheck.lastRunAt` — host-local timestamp from the self-check log
+  (no timezone).
+- `lastRefreshedAt` — UTC timestamp of the last successful cache refresh.
+
+The cache is owned by `settings-dashboard/src/backend/server/Health/Health.ts`
+and refreshed every 5 minutes by tailing
+`/DATA/AppData/casaos/apps/yundera/log/yundera.log` over SSH.
+
 ## Deployment
 
 Build and publish using Dockflow:

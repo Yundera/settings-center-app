@@ -8,11 +8,19 @@ import {button, colors, font, spacing} from '@/app/pages/softTheme';
 // Authelia hosts the credential-management UI on its own origin so cookies and
 // audit logs stay scoped correctly. We deep-link into it from a button rather
 // than iframing — Authelia explicitly sets X-Frame-Options to deny embedding.
+//
+// Derive the auth host from the current admin hostname rather than APP_CONFIG.
+// The admin and authelia containers are routed at parallel `admin-${DOMAIN}` /
+// `auth-${DOMAIN}` labels (and matching nip.io / sslip.io variants), so swapping
+// the prefix is correct for every deployment shape and avoids depending on the
+// /api/core/config/core payload (which can be empty when the image is built
+// without a baked-in core.env.json).
 const buildAutheliaUrl = (): string => {
     if (typeof window === "undefined") return "#";
-    const domain = (window as any).APP_CONFIG?.DOMAIN;
-    if (!domain) return "#";
-    return `https://auth-${domain}/settings`;
+    const host = window.location.host;
+    if (!host.startsWith("admin-")) return "#";
+    const authHost = `auth-${host.slice("admin-".length)}`;
+    return `https://${authHost}/`;
 };
 
 export const AccountPanel = () => {
