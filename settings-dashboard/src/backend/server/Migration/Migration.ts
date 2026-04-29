@@ -9,7 +9,7 @@ import {
     MIGRATION_STEPS,
 } from './MigrationTypes';
 import { runPreflight } from './steps/preflight';
-import { pushMigrationKey, removeMigrationAccount } from './steps/pushKey';
+import { pushMigrationKey, cleanupMigrationKey } from './steps/pushKey';
 import { runRsync } from './steps/rsync';
 import { pullImagesOnTarget } from './steps/dockerPull';
 import { stopSource, restartSource } from './steps/stopSource';
@@ -79,6 +79,10 @@ async function isCancelled(): Promise<boolean> {
  * Starts a migration. Returns immediately with the initial status; the job
  * runs asynchronously and progress is observable via getMigrationStatus.
  *
+ * THIS PCS is the source — it pushes its data to the target identified by
+ * req.host using the target's pre-existing migration sudoer account
+ * (req.user / req.password).
+ *
  * Throws if a migration is already in flight.
  */
 export async function startMigration(req: MigrationRequest): Promise<MigrationStatus> {
@@ -98,7 +102,7 @@ export async function startMigration(req: MigrationRequest): Promise<MigrationSt
             ...DEFAULT_STATUS,
             phase: 'preflight',
             startedAt: new Date(),
-            source: { host: req.host, user: req.user },
+            target: { host: req.host, user: req.user },
             webhookUrl: req.webhookUrl,
             steps,
             cancelRequested: false,
@@ -137,19 +141,19 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         await setStep('preflight', 'success', `${preflight.checks.length} checks passed`);
         if (await isCancelled()) throw new Error('Cancelled');
 
-        // ---- Push migration key ----
+        // ---- Push SSH key onto target migration account ----
         await setStep('push_key', 'running');
         await setPhase('push_key');
         keypair = await pushMigrationKey(req);
-        await setStep('push_key', 'success', `Migration account '${keypair.migrationUser}' created on source`);
+        await setStep('push_key', 'success', `SSH key installed for '${keypair.migrationUser}' on target`);
         if (await isCancelled()) throw new Error('Cancelled');
 
-        // ---- Online rsync ----
+        // ---- Online rsync (source → target, source still serving) ----
         await setStep('online_rsync', 'running');
         await setPhase('online_rsync');
         await runRsync({
             keypair,
-            source: req.host,
+            target: req.host,
             deleteFlag: false,
             onProgress: updateRsyncProgress,
             isCancelled,
@@ -157,27 +161,27 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         await setStep('online_rsync', 'success');
         if (await isCancelled()) throw new Error('Cancelled');
 
-        // ---- Docker pull on target ----
+        // ---- Pre-pull docker images on target ----
         await setStep('docker_pull', 'running');
         await setPhase('docker_pull');
-        const pulled = await pullImagesOnTarget();
-        await setStep('docker_pull', 'success', `Pulled ${pulled.length} images`);
+        const pulled = await pullImagesOnTarget(keypair, req.host);
+        await setStep('docker_pull', 'success', `Pulled ${pulled.length} images on target`);
         if (await isCancelled()) throw new Error('Cancelled');
 
-        // ---- Stop source ----
+        // ---- Stop source (LOCAL — bring our own apps + cron down) ----
         await setStep('stop_source', 'running');
         await setPhase('stop_source');
-        await stopSource(keypair, req.host);
+        await stopSource();
         sourceStopped = true;
         await setStep('stop_source', 'success');
         if (await isCancelled()) throw new Error('Cancelled');
 
-        // ---- Offline diff rsync ----
+        // ---- Offline diff rsync (with --delete) ----
         await setStep('offline_rsync', 'running');
         await setPhase('offline_rsync');
         await runRsync({
             keypair,
-            source: req.host,
+            target: req.host,
             deleteFlag: true,
             onProgress: updateRsyncProgress,
             isCancelled,
@@ -185,10 +189,10 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         await setStep('offline_rsync', 'success');
         if (await isCancelled()) throw new Error('Cancelled');
 
-        // ---- Target self-check (IP detect + user-data fetch + compose up) ----
+        // ---- Trigger self-check on target (handover) ----
         await setStep('target_self_check', 'running');
         await setPhase('target_self_check');
-        await triggerTargetSelfCheck();
+        await triggerTargetSelfCheck(keypair, req.host);
         await setStep('target_self_check', 'success');
 
         // ---- Webhook ----
@@ -202,10 +206,10 @@ async function runMigration(req: MigrationRequest): Promise<void> {
             await setStep('webhook', 'skipped', 'No webhook URL configured');
         }
 
-        // ---- Cleanup ----
+        // ---- Cleanup (remove our SSH key from the target migration user) ----
         await setStep('cleanup', 'running');
         await setPhase('cleanup');
-        await removeMigrationAccount(keypair, req);
+        await cleanupMigrationKey(keypair, req);
         keypair = undefined;
         await setStep('cleanup', 'success');
 
@@ -214,12 +218,10 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         const msg = err instanceof Error ? err.message : String(err);
 
         if (sourceStopped) {
-            // Rollback: bring source back up so user has a serving PCS
+            // Rollback: bring source back up so the user has a serving PCS.
             await setPhase('rolling_back', { error: msg });
             try {
-                if (keypair) {
-                    await restartSource(keypair, req.host);
-                }
+                await restartSource();
             } catch (rollbackErr) {
                 console.error('[Migration] rollback restart-source failed:', rollbackErr);
             }
@@ -228,10 +230,10 @@ async function runMigration(req: MigrationRequest): Promise<void> {
             await setPhase('failed', { error: msg, finishedAt: new Date() });
         }
 
-        // Best-effort cleanup of migration account
+        // Best-effort cleanup of the SSH key we installed on the target
         if (keypair) {
             try {
-                await removeMigrationAccount(keypair, req);
+                await cleanupMigrationKey(keypair, req);
                 keypair = undefined;
             } catch (cleanupErr) {
                 console.error('[Migration] cleanup after failure errored:', cleanupErr);
@@ -248,4 +250,3 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         }
     }
 }
-

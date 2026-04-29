@@ -1,4 +1,3 @@
-import { getContext as getSelfCheckContext } from './SelfCheck/SelfCheck';
 import {getContext as getDockerUpdateContext} from './DockerUpdate/DockerUpdate';
 
 let contextsInitialized = false;
@@ -9,10 +8,6 @@ export async function initializeAllContexts(): Promise<void> {
     }
 
     try {
-        // Initialize SelfCheck context
-        await getSelfCheckContext();
-
-        // Initialize DockerUpdate context
         await getDockerUpdateContext();
 
         contextsInitialized = true;

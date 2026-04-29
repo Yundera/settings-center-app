@@ -1,20 +1,23 @@
-import { execOnSource, MigrationKeyPair, shq } from '../MigrationSSH';
+import { executeHostCommand } from '@/backend/cmd/HostExecutor';
+import { shq } from '../MigrationSSH';
 
 /**
- * Stop source PCS:
+ * Stop THIS PCS (the source) before the offline diff rsync, so its data
+ * is quiescent and so its self-check cron can't rotate USER_JWT or restart
+ * apps while the target is being brought up:
  *   1. Bring down every docker-compose stack under /DATA/AppData.
- *   2. Disable the self-check cron so source can't rotate USER_JWT while
- *      target is being brought up. The cron is identified via crontab -l
- *      matching the yundera self-check marker path.
+ *   2. Disable the local self-check cron (keeping a backup so we can restore
+ *      it on rollback). Removes any matching crontab line on root + the
+ *      operator user, plus any yundera systemd timer.
  *
- * Critical: if this step succeeds but a later step fails, rollback must
- * call restartSource() to bring source back to a serving state.
+ * If a later step fails, rollback calls restartSource() to bring this PCS
+ * back to a serving state.
  */
 
 const CRON_MARKER_FILE = '/DATA/AppData/casaos/apps/yundera/.self-check-cron-disabled';
 
-export async function stopSource(keypair: MigrationKeyPair, host: string): Promise<void> {
-    // 1. Find and bring down all compose stacks
+export async function stopSource(): Promise<void> {
+    // 1. Bring down every compose stack
     const bringDownScript = `
 set +e
 for compose_file in $(sudo -n find /DATA/AppData -maxdepth 4 -type f \\( -name 'docker-compose.yml' -o -name 'compose.yml' -o -name 'docker-compose.yaml' \\) 2>/dev/null); do
@@ -24,20 +27,14 @@ for compose_file in $(sudo -n find /DATA/AppData -maxdepth 4 -type f \\( -name '
 done
 echo DONE
 `.trim();
+    await executeHostCommand(`bash -c ${shq(bringDownScript)}`, { timeout: 10 * 60 * 1000 });
 
-    await execOnSource(keypair, host, `bash -c ${shq(bringDownScript)}`, { timeout: 10 * 60 * 1000 });
-
-    // 2. Disable self-check cron. The self-check is typically installed
-    //    via cron — we remove any crontab line referencing the yundera
-    //    self-check path, and drop a marker file so restart can undo it.
-    //
-    //    We look at both the operator's crontab AND root's crontab.
+    // 2. Disable self-check cron (backup so rollback can restore)
     const disableCronScript = `
 set +e
 MARKER=${shq(CRON_MARKER_FILE)}
 sudo -n mkdir -p "$(dirname "$MARKER")"
 
-# Save original crontabs so we can restore them on rollback
 for who in root "$USER"; do
   backup="$MARKER.$who.bak"
   if sudo -n crontab -l -u "$who" 2>/dev/null > "/tmp/ct.$who" && [ -s "/tmp/ct.$who" ]; then
@@ -48,7 +45,6 @@ for who in root "$USER"; do
   fi
 done
 
-# Also disable any systemd timer matching yundera
 for unit in $(sudo -n systemctl list-timers --all --no-legend 2>/dev/null | grep -i yundera | awk '{print $NF}'); do
   sudo -n systemctl stop "$unit" 2>/dev/null || true
   sudo -n systemctl disable "$unit" 2>/dev/null || true
@@ -58,16 +54,15 @@ done
 sudo -n touch "$MARKER"
 echo DONE
 `.trim();
-
-    await execOnSource(keypair, host, `bash -c ${shq(disableCronScript)}`, { timeout: 60_000 });
+    await executeHostCommand(`bash -c ${shq(disableCronScript)}`, { timeout: 60_000 });
 }
 
 /**
- * Rollback helper: bring source back to a running state.
+ * Rollback helper: bring THIS PCS back to a running state.
  *   1. Restore self-check cron from backups.
  *   2. Bring every compose stack back up.
  */
-export async function restartSource(keypair: MigrationKeyPair, host: string): Promise<void> {
+export async function restartSource(): Promise<void> {
     const restoreCronScript = `
 set +e
 MARKER=${shq(CRON_MARKER_FILE)}
@@ -86,8 +81,7 @@ fi
 sudo -n rm -f "$MARKER" "$MARKER".*.bak "$MARKER.timers"
 echo DONE
 `.trim();
-
-    await execOnSource(keypair, host, `bash -c ${shq(restoreCronScript)}`, { timeout: 60_000 });
+    await executeHostCommand(`bash -c ${shq(restoreCronScript)}`, { timeout: 60_000 });
 
     const bringUpScript = `
 set +e
@@ -98,6 +92,5 @@ for compose_file in $(sudo -n find /DATA/AppData -maxdepth 4 -type f \\( -name '
 done
 echo DONE
 `.trim();
-
-    await execOnSource(keypair, host, `bash -c ${shq(bringUpScript)}`, { timeout: 10 * 60 * 1000 });
+    await executeHostCommand(`bash -c ${shq(bringUpScript)}`, { timeout: 10 * 60 * 1000 });
 }

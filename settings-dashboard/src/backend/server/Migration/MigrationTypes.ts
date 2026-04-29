@@ -34,8 +34,11 @@ export interface RsyncProgress {
 }
 
 export interface MigrationRequest {
+    /** Target PCS host or IP — where this PCS will push its data. */
     host: string;
+    /** Target migration user (typically `migration`, pre-created on the target via its UI). */
     user: string;
+    /** Target migration user's password. Used once to install an SSH key. */
     password: string;
     webhookUrl?: string;
 }
@@ -57,7 +60,8 @@ export interface MigrationStatus {
     phase: MigrationPhase;
     startedAt?: Date;
     finishedAt?: Date;
-    source?: {
+    /** Target PCS the source pushed to. */
+    target?: {
         host: string;
         user: string;
     };
@@ -66,20 +70,16 @@ export interface MigrationStatus {
     rsync?: RsyncProgress;
     error?: string;
     cancelRequested: boolean;
-    migrationAccount?: {
-        name: string;
-        createdOnSource: boolean;
-    };
 }
 
 export const MIGRATION_STEPS: Array<{ key: string; label: string }> = [
     { key: 'preflight', label: 'Preflight checks' },
-    { key: 'push_key', label: 'Create migration account + push SSH key' },
-    { key: 'online_rsync', label: 'Online rsync (source live)' },
+    { key: 'push_key', label: 'Install SSH key on target migration account' },
+    { key: 'online_rsync', label: 'Online rsync (push to target)' },
     { key: 'docker_pull', label: 'Pull Docker images on target' },
-    { key: 'stop_source', label: 'Stop source containers + disable self-check cron' },
-    { key: 'offline_rsync', label: 'Offline diff rsync' },
+    { key: 'stop_source', label: 'Stop local containers + disable self-check cron' },
+    { key: 'offline_rsync', label: 'Offline diff rsync (push to target)' },
     { key: 'target_self_check', label: 'Run self-check on target' },
     { key: 'webhook', label: 'Fire webhook' },
-    { key: 'cleanup', label: 'Cleanup (remove migration account)' },
+    { key: 'cleanup', label: 'Cleanup (remove SSH key from target)' },
 ];

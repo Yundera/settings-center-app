@@ -2,15 +2,9 @@ import {NextApiRequest, NextApiResponse} from 'next'
 import {authMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 
-const SELF_CHECK_SCRIPT = "/DATA/AppData/casaos/apps/yundera/scripts/self-check.sh";
-
 /**
- * Kicks off self-check.sh detached on the host. Returns immediately.
- * The script's own flock prevents overlap with the @reboot or nightly run —
- * if one is already in flight, the new invocation logs "Another self-check
- * instance is running, exiting" and exits 0.
- *
- * Progress is observable by tailing the log via /api/admin/self-check-log.
+ * Reboots the host via SSH. The reboot is delayed and detached so the SSH
+ * call can return cleanly before the host actually goes down.
  */
 async function handler(
     req: NextApiRequest,
@@ -22,12 +16,12 @@ async function handler(
 
     try {
         await executeHostCommand(
-            `nohup bash ${SELF_CHECK_SCRIPT} > /dev/null 2>&1 < /dev/null &`
+            `nohup sh -c 'sleep 2; /sbin/reboot' > /dev/null 2>&1 < /dev/null &`
         );
-        res.status(200).json({status: 'started'});
+        res.status(200).json({status: 'rebooting'});
     } catch (error) {
         res.status(500).json({
-            error: 'Failed to start self-check',
+            error: 'Failed to reboot host',
             details: error instanceof Error ? error.message : String(error),
         });
     }

@@ -19,6 +19,8 @@ async function handler(
             DEFAULT_PWD: getConfig("DEFAULT_PWD") || '',
             PUBLIC_IP: getConfig("PUBLIC_IP") || '',
             DEFAULT_USER: getConfig("DEFAULT_USER") || '',
+            DEFAULT_SERVICE_HOST: getConfig("DEFAULT_SERVICE_HOST") || '',
+            DEFAULT_SERVICE_PORT: getConfig("DEFAULT_SERVICE_PORT") || '',
         };
 
         res.status(200).json({

@@ -1,222 +1,204 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Button,
     Typography,
     CircularProgress,
     Alert,
     Stack,
-    Chip,
     Card,
     CardContent,
-    Box
+    Box,
+    TextField,
 } from "@mui/material";
-import {
-    CheckCircle as CheckCircleIcon,
-    Error as ErrorIcon
-} from "@mui/icons-material";
 import { apiRequest } from "@/core/authApi";
 import { useNotify } from "react-admin";
-import { SelfCheckStatus, SelfCheckResult } from "@/backend/server/SelfCheck/SelfCheckTypes";
-import { colors, font, spacing, card, title, button, chip, icon, text } from '@/app/pages/softTheme';
+import { colors, font, spacing, card, title, button, text } from '@/app/pages/softTheme';
+
+const LOG_TAIL_LINES = 300;
+const LOG_REFRESH_MS = 5000;
+
+interface CronInfo {
+    value: string;
+    effective: string;
+    default: string;
+}
 
 /**
- * SelfCheck — Displays the "System Status" card on the Health page.
- * Fetches self-check script results from the backend and shows pass/fail
- * status for each script. Supports manual re-run via "Run Self-Check" button.
- * Auto-polls every 2 seconds while a check is running.
+ * SelfCheck — "System Status" card on the Health page.
+ *
+ * The host script (self-check.sh) is the source of truth: it runs nightly
+ * via cron and at @reboot, and writes structured output to yundera.log.
+ * This component just shows the log tail and exposes:
+ *   - "Run now" (kicks off self-check.sh detached)
+ *   - cron schedule input (writes SELF_CHECK_CRON in .pcs.env, then re-runs
+ *     ensure-nightly-self-check.sh to apply)
  */
 export const SelfCheck: React.FC = () => {
-    const [loading, setLoading] = useState(false);
-    const [checking, setChecking] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [status, setStatus] = useState<SelfCheckStatus | null>(null);
+    const [log, setLog] = useState<string>('');
+    const [logError, setLogError] = useState<string | null>(null);
+    const [logLoading, setLogLoading] = useState<boolean>(true);
+    const [running, setRunning] = useState<boolean>(false);
+
+    const [cron, setCron] = useState<CronInfo | null>(null);
+    const [cronInput, setCronInput] = useState<string>('');
+    const [cronSaving, setCronSaving] = useState<boolean>(false);
+    const [cronError, setCronError] = useState<string | null>(null);
+
     const notify = useNotify();
+    const logRef = useRef<HTMLPreElement | null>(null);
 
-    // Fetch the latest self-check status from the backend
-    const checkStatus = async () => {
-        setChecking(true);
-        setError(null);
-
+    const fetchLog = useCallback(async () => {
         try {
-            const response = await apiRequest<SelfCheckStatus>("/api/admin/self-check-status", "GET");
-            setStatus(response);
+            const res = await apiRequest<{ log: string }>(
+                `/api/admin/self-check-log?lines=${LOG_TAIL_LINES}`,
+                "GET"
+            );
+            setLog(res.log || '');
+            setLogError(null);
         } catch (err: any) {
-            setError(err.message || "Failed to get self-check status");
+            setLogError(err.message || 'Failed to read log');
         } finally {
-            setChecking(false);
+            setLogLoading(false);
         }
-    };
+    }, []);
 
-    // Trigger a new self-check run on the backend, then refresh status
-    const handleRunSelfCheck = async () => {
-        setLoading(true);
-        setError(null);
+    const fetchCron = useCallback(async () => {
+        try {
+            const res = await apiRequest<CronInfo>("/api/admin/self-check-cron", "GET");
+            setCron(res);
+            setCronInput(res.value);
+            setCronError(null);
+        } catch (err: any) {
+            setCronError(err.message || 'Failed to read cron schedule');
+        }
+    }, []);
 
+    const handleRun = async () => {
+        setRunning(true);
         try {
             await apiRequest("/api/admin/self-check-run", "POST");
-            notify('Self-check completed successfully');
-            await checkStatus();
+            notify('Self-check started');
+            // Give the host a moment to start writing, then refresh the log.
+            setTimeout(fetchLog, 1500);
         } catch (err: any) {
-            setError(err.message || "Self-check failed");
+            notify(err.message || 'Failed to start self-check', { type: 'error' });
         } finally {
-            setLoading(false);
+            setRunning(false);
         }
     };
 
-    // Map overall status to a semantic color for the status chip
-    const getStatusHexColor = (overallStatus: string) => {
-        switch (overallStatus) {
-            case 'success': return colors.statusSuccessChip;
-            case 'failure': return colors.statusErrorAlt;
-            case 'partial': return colors.statusWarning;
-            case 'never_run': return colors.statusInfo;
-            default: return '#bdbdbd';
+    const handleSaveCron = async () => {
+        setCronSaving(true);
+        setCronError(null);
+        try {
+            await apiRequest<{ status: string; value: string }>(
+                "/api/admin/self-check-cron",
+                "POST",
+                { value: cronInput.trim() }
+            );
+            notify('Schedule updated');
+            await fetchCron();
+        } catch (err: any) {
+            setCronError(err.message || 'Failed to update schedule');
+        } finally {
+            setCronSaving(false);
         }
     };
 
-    // Returns a green check or red error icon based on script success
-    const getStatusIcon = (success: boolean) => {
-        return success ? (
-            <CheckCircleIcon sx={{ color: colors.statusSuccess, ...icon.size }} />
-        ) : (
-            <ErrorIcon sx={{ color: colors.statusError, ...icon.size }} />
-        );
-    };
-
-    const formatDuration = (duration?: number) => {
-        if (!duration) return '';
-        return duration < 1000 ? `${duration}ms` : `${(duration / 1000).toFixed(1)}s`;
-    };
-
-    // Poll status on mount; auto-refresh every 2s while a check is running
     useEffect(() => {
-        checkStatus();
-        const interval = setInterval(() => {
-            if (status?.isRunning) { checkStatus(); }
-        }, 2000);
+        fetchLog();
+        fetchCron();
+        const interval = setInterval(fetchLog, LOG_REFRESH_MS);
         return () => clearInterval(interval);
-    }, [status?.isRunning]);
+    }, [fetchLog, fetchCron]);
+
+    // Keep the log scrolled to the bottom on update.
+    useEffect(() => {
+        if (logRef.current) {
+            logRef.current.scrollTop = logRef.current.scrollHeight;
+        }
+    }, [log]);
 
     return (
-        <div>
-            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <Card sx={card.root}>
+            <Box sx={card.header}>
+                <Typography sx={title.small}>System Status</Typography>
+            </Box>
+            <CardContent sx={card.content}>
+                <Stack sx={{ gap: spacing.itemGap }}>
+                    {/* Schedule + run-now controls */}
+                    <Stack direction="row" alignItems="flex-end" spacing={2} flexWrap="wrap">
+                        <TextField
+                            label="Nightly schedule (cron)"
+                            value={cronInput}
+                            onChange={(e) => setCronInput(e.target.value)}
+                            placeholder={cron?.default || '0 3 * * *'}
+                            disabled={cronSaving}
+                            size="small"
+                            sx={{ minWidth: 220 }}
+                            helperText={
+                                cron
+                                    ? `Effective: ${cron.effective}${cron.value === '' ? ' (default)' : ''}`
+                                    : ' '
+                            }
+                        />
+                        <Button
+                            variant="contained"
+                            onClick={handleSaveCron}
+                            disabled={cronSaving || cronInput === (cron?.value ?? '')}
+                            sx={button.primary}
+                        >
+                            {cronSaving ? 'Saving…' : 'Save'}
+                        </Button>
+                        <Box sx={{ flexGrow: 1 }} />
+                        <Button
+                            variant="contained"
+                            onClick={handleRun}
+                            disabled={running}
+                            sx={button.primary}
+                        >
+                            {running ? 'Starting…' : 'Run now'}
+                        </Button>
+                    </Stack>
 
-            <Stack spacing={3}>
-                <Card sx={card.root}>
-                    <Box sx={card.header}>
-                        <Typography sx={title.small}>
-                            System Status
-                        </Typography>
-                    </Box>
+                    {cronError && <Alert severity="error">{cronError}</Alert>}
 
-                    <CardContent sx={card.content}>
-                        <Stack sx={{ gap: spacing.itemGap }}>
-                            <Stack direction="row" alignItems="center" spacing={2} justifyContent="space-between">
-                                <Stack direction="row" alignItems="center" spacing={2}>
-                                    <Typography sx={text.label}>Status:</Typography>
-                                    {status && (
-                                        <Chip
-                                            label={status.overallStatus.replace('_', ' ').toUpperCase()}
-                                            variant="outlined"
-                                            sx={{
-                                                ...chip.status,
-                                                border: `1px solid ${getStatusHexColor(status.overallStatus)} !important`,
-                                                color: `${getStatusHexColor(status.overallStatus)} !important`,
-                                                '& .MuiChip-label': { color: `${getStatusHexColor(status.overallStatus)} !important` },
-                                            }}
-                                        />
-                                    )}
-                                    {status?.isRunning && (
-                                        <Box display="flex" alignItems="center" gap={1}>
-                                            <CircularProgress size={16} />
-                                            <Typography variant="body2" sx={{ color: colors.textWhite }}>
-                                                Running...
-                                            </Typography>
-                                        </Box>
-                                    )}
-                                </Stack>
+                    <Typography variant="body2" sx={text.detail}>
+                        Tip: leave the schedule blank for the default ({cron?.default || '0 3 * * *'})
+                        or set to <code>disabled</code> to skip nightly runs. The @reboot run is
+                        always installed.
+                    </Typography>
 
-                                {loading || checking || status?.isRunning ? (
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                        <CircularProgress size={24} />
-                                        <Typography sx={{ color: colors.textWhite }}>
-                                            {status?.isRunning ? 'Running...' : 'Loading...'}
-                                        </Typography>
-                                    </Box>
-                                ) : (
-                                    <Button
-                                        variant="contained"
-                                        onClick={handleRunSelfCheck}
-                                        disabled={loading || status?.isRunning}
-                                        sx={button.primary}
-                                    >
-                                        Run Self-Check
-                                    </Button>
-                                )}
-                            </Stack>
-
-                            {status?.lastRun && (
-                                <Typography variant="body2" sx={text.detail}>
-                                    Last run: {new Date(status.lastRun).toLocaleString()}
-                                </Typography>
-                            )}
-
-                            {status?.connectionError && (
-                                <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>
-                                    <Typography variant="subtitle2" gutterBottom>
-                                        Host Connection Error
-                                    </Typography>
-                                    {status.connectionError}
-                                </Alert>
-                            )}
-
-                            {status && Object.keys(status.scripts).length > 0 && (
-                                <Box>
-                                    {Object.entries(status.scripts).map(([scriptName, result], index, arr) => (
-                                        <Box
-                                            key={scriptName}
-                                            sx={{
-                                                display: 'flex',
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                mb: index < arr.length - 1 ? spacing.itemGap : 0,
-                                            }}
-                                        >
-                                            <Box sx={icon.container}>
-                                                {getStatusIcon(result.success)}
-                                            </Box>
-                                            <Box>
-                                                <Typography sx={text.label}>{scriptName}</Typography>
-                                                <Stack direction="row" alignItems="center" spacing={1}>
-                                                    <Typography variant="body2" sx={text.detail}>
-                                                        {result.message}
-                                                    </Typography>
-                                                    {result.duration && (
-                                                        <Chip
-                                                            label={formatDuration(result.duration)}
-                                                            size="small"
-                                                            variant="outlined"
-                                                            sx={{
-                                                                color: `${colors.textWhite} !important`,
-                                                                border: `1px solid ${colors.textWhite} !important`,
-                                                                fontSize: font.caption,
-                                                                fontWeight: 400,
-                                                                letterSpacing: '0.75px',
-                                                                borderRadius: '12px',
-                                                                backgroundColor: 'transparent',
-                                                            }}
-                                                        />
-                                                    )}
-                                                </Stack>
-                                            </Box>
-                                        </Box>
-                                    ))}
-                                </Box>
-                            )}
+                    {/* Log tail */}
+                    <Box>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                            <Typography sx={text.label}>Log tail</Typography>
+                            {logLoading && <CircularProgress size={16} />}
                         </Stack>
-                    </CardContent>
-                </Card>
-            </Stack>
-        </div>
+                        {logError && <Alert severity="error" sx={{ mb: 1 }}>{logError}</Alert>}
+                        <Box
+                            component="pre"
+                            ref={logRef}
+                            sx={{
+                                m: 0,
+                                p: 2,
+                                maxHeight: 400,
+                                overflow: 'auto',
+                                backgroundColor: colors.bgApp,
+                                color: colors.textWhite,
+                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                                fontSize: font.caption,
+                                lineHeight: 1.5,
+                                borderRadius: 1,
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                            }}
+                        >
+                            {log || (logLoading ? '' : '(log is empty)')}
+                        </Box>
+                    </Box>
+                </Stack>
+            </CardContent>
+        </Card>
     );
 };

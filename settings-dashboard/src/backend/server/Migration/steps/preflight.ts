@@ -3,15 +3,18 @@ import { MigrationRequest, PreflightResult } from '../MigrationTypes';
 import { shq } from '../MigrationSSH';
 
 /**
- * Preflight runs BEFORE we push a key. It uses the operator's password
- * (one-shot, via sshpass on the target host) to verify:
- *   - SSH reachability to source with provided creds
- *   - sudo on source
- *   - /DATA size on source vs free space on target
+ * Preflight runs from the SOURCE host and verifies the TARGET is reachable
+ * and ready. The migration account on the target was created by the target's
+ * user via its own admin UI; we use its password here exactly once to install
+ * an SSH key on the target. After this step everything else uses key auth.
+ *
+ *   - SSH reachability + sudo on target
+ *   - source /DATA size vs target free space
+ *   - target /DATA/AppData is blank (or absent for bare-Ubuntu targets)
  *   - clock skew sanity
  *
- * sshpass is a standard Ubuntu package but not always installed. We
- * install it on-demand on the target host as the very first check.
+ * sshpass is a standard Ubuntu package but not always installed on the source
+ * host. We install it on-demand as the very first check.
  */
 
 const SAFETY_MARGIN = 1.1; // require 10% more target free space than source size
@@ -21,43 +24,47 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
     let sourceSizeBytes: number | undefined;
     let targetFreeBytes: number | undefined;
 
-    // 1. Ensure sshpass + rsync on target host (both required for later steps)
+    // 1. Ensure sshpass + rsync on the source host (we initiate from here)
     try {
         await executeHostCommand(`DEBIAN_FRONTEND=noninteractive apt-get install -y sshpass rsync >/dev/null 2>&1 || sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y sshpass rsync >/dev/null 2>&1`);
-        checks.push({ name: 'target_tooling', ok: true, message: 'sshpass and rsync available on target host' });
+        checks.push({ name: 'source_tooling', ok: true, message: 'sshpass and rsync available on source host' });
     } catch (err) {
         checks.push({
-            name: 'target_tooling',
+            name: 'source_tooling',
             ok: false,
-            message: `Cannot install sshpass/rsync on target host: ${errMsg(err)}`,
+            message: `Cannot install sshpass/rsync on source host: ${errMsg(err)}`,
         });
         return { ok: false, checks };
     }
 
-    // 2. SSH reachability to source with provided password
+    // 2. SSH reachability to target with provided password
     try {
-        const out = await sshpassOnHost(req, 'echo OK');
+        const out = await sshpassToTarget(req, 'echo OK');
         if (!out.stdout.includes('OK')) {
             throw new Error(`Unexpected response: ${out.stdout.slice(0, 200)}`);
         }
-        checks.push({ name: 'source_ssh', ok: true, message: `SSH to ${req.user}@${req.host} succeeded` });
+        checks.push({ name: 'target_ssh', ok: true, message: `SSH to ${req.user}@${req.host} succeeded` });
     } catch (err) {
-        checks.push({ name: 'source_ssh', ok: false, message: `SSH to source failed: ${errMsg(err)}` });
+        checks.push({ name: 'target_ssh', ok: false, message: `SSH to target failed: ${errMsg(err)}` });
         return { ok: false, checks };
     }
 
-    // 3. Sudo on source — we need it to create a migration user, read /DATA as root, and stop containers
+    // 3. Passwordless sudo on target — the migration account is set up with
+    //    NOPASSWD when enabled via the target's UI.
     try {
-        await sshpassOnHost(req, `echo ${shq(req.password)} | sudo -S -p '' -v`);
-        checks.push({ name: 'source_sudo', ok: true, message: `User ${req.user} has sudo` });
+        const out = await sshpassToTarget(req, `sudo -n whoami`);
+        if (!out.stdout.trim().includes('root')) {
+            throw new Error(`sudo -n returned ${out.stdout.trim() || '<empty>'} (expected 'root')`);
+        }
+        checks.push({ name: 'target_sudo', ok: true, message: `${req.user} has passwordless sudo on target` });
     } catch (err) {
-        checks.push({ name: 'source_sudo', ok: false, message: `sudo check on source failed: ${errMsg(err)}` });
+        checks.push({ name: 'target_sudo', ok: false, message: `sudo check on target failed: ${errMsg(err)}` });
         return { ok: false, checks };
     }
 
-    // 4. Source /DATA size
+    // 4. Source /DATA size (local du)
     try {
-        const out = await sshpassOnHost(req, `echo ${shq(req.password)} | sudo -S -p '' du -sb /DATA 2>/dev/null | awk '{print $1}'`);
+        const out = await executeHostCommand(`sudo -n du -sb /DATA 2>/dev/null | awk '{print $1}'`);
         sourceSizeBytes = parseInt(out.stdout.trim(), 10);
         if (!Number.isFinite(sourceSizeBytes) || sourceSizeBytes <= 0) {
             throw new Error(`could not parse du output: ${out.stdout.slice(0, 200)}`);
@@ -72,9 +79,13 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
         return { ok: false, checks };
     }
 
-    // 5. Target free space on /DATA
+    // 5. Target free space on /DATA (or its parent if /DATA doesn't exist yet)
     try {
-        const out = await executeHostCommand(`df --output=avail -B1 /DATA | tail -n1`);
+        // Fall back to / if /DATA doesn't exist on target yet (bare Ubuntu case).
+        const out = await sshpassToTarget(
+            req,
+            `df --output=avail -B1 /DATA 2>/dev/null | tail -n1 || df --output=avail -B1 / | tail -n1`
+        );
         targetFreeBytes = parseInt(out.stdout.trim(), 10);
         if (!Number.isFinite(targetFreeBytes) || targetFreeBytes <= 0) {
             throw new Error(`could not parse df output: ${out.stdout.slice(0, 200)}`);
@@ -94,20 +105,33 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
         return { ok: false, checks };
     }
 
-    // 6. Fresh-target invariant: /DATA/AppData must have at most casaos + yundera system dirs
+    // 6. Target blank: /DATA/AppData must be absent or contain only the
+    //    bootstrap dirs (casaos / yundera). A target that's already running
+    //    user apps would have those overwritten — refuse.
     try {
-        const out = await executeHostCommand(`ls /DATA/AppData 2>/dev/null | grep -vE '^(casaos|yundera)$' | wc -l`);
-        const extraCount = parseInt(out.stdout.trim(), 10) || 0;
-        if (extraCount > 0) {
-            const list = await executeHostCommand(`ls /DATA/AppData 2>/dev/null | grep -vE '^(casaos|yundera)$' | head -20`);
-            checks.push({
-                name: 'target_blank',
-                ok: false,
-                message: `Target /DATA/AppData already contains user apps (${extraCount} entries); migration requires a fresh PCS. Sample: ${list.stdout.split('\n').filter(Boolean).join(', ')}`,
-            });
-            return { ok: false, checks, sourceSizeBytes, targetFreeBytes };
+        const out = await sshpassToTarget(
+            req,
+            `if [ ! -d /DATA/AppData ]; then echo MISSING; else ls /DATA/AppData 2>/dev/null | grep -vE '^(casaos|yundera)$' | wc -l; fi`
+        );
+        const trimmed = out.stdout.trim();
+        if (trimmed === 'MISSING') {
+            checks.push({ name: 'target_blank', ok: true, message: '/DATA/AppData absent on target — will be created' });
+        } else {
+            const extraCount = parseInt(trimmed, 10) || 0;
+            if (extraCount > 0) {
+                const list = await sshpassToTarget(
+                    req,
+                    `ls /DATA/AppData 2>/dev/null | grep -vE '^(casaos|yundera)$' | head -20`
+                );
+                checks.push({
+                    name: 'target_blank',
+                    ok: false,
+                    message: `Target /DATA/AppData already contains user apps (${extraCount} entries); migration requires a fresh PCS. Sample: ${list.stdout.split('\n').filter(Boolean).join(', ')}`,
+                });
+                return { ok: false, checks, sourceSizeBytes, targetFreeBytes };
+            }
+            checks.push({ name: 'target_blank', ok: true, message: 'Target /DATA/AppData has no user apps' });
         }
-        checks.push({ name: 'target_blank', ok: true, message: 'Target /DATA/AppData has no user apps' });
     } catch (err) {
         checks.push({ name: 'target_blank', ok: false, message: `Target blank check failed: ${errMsg(err)}` });
         return { ok: false, checks };
@@ -115,12 +139,12 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
 
     // 7. Clock skew sanity (warn if > 60s)
     try {
-        const [targetOut, sourceOut] = await Promise.all([
+        const [sourceOut, targetOut] = await Promise.all([
             executeHostCommand(`date +%s`),
-            sshpassOnHost(req, `date +%s`),
+            sshpassToTarget(req, `date +%s`),
         ]);
-        const t = parseInt(targetOut.stdout.trim(), 10);
         const s = parseInt(sourceOut.stdout.trim(), 10);
+        const t = parseInt(targetOut.stdout.trim(), 10);
         const skew = Math.abs(t - s);
         const ok = skew < 60;
         checks.push({
@@ -138,11 +162,11 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
 }
 
 /**
- * Run a command on the source PCS from the target host using sshpass.
+ * Run a command on the target PCS from the source host using sshpass.
  * Used only during preflight and the initial key-push step — everything
  * after that uses key auth.
  */
-async function sshpassOnHost(
+async function sshpassToTarget(
     req: MigrationRequest,
     remoteCmd: string
 ): Promise<{ stdout: string; stderr: string }> {

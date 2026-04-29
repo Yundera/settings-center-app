@@ -1,8 +1,18 @@
 import React from "react";
-import {Typography, Box} from "@mui/material";
-import {colors, font, spacing} from '@/app/pages/softTheme';
+import {Typography, Box, Button} from "@mui/material";
+import LinkIcon from "@mui/icons-material/Link";
+import {button, colors, font, spacing} from '@/app/pages/softTheme';
+
+const buildDefaultAppUrl = (): string | null => {
+    if (typeof window === "undefined") return null;
+    const domain = (window as any).APP_CONFIG?.DOMAIN;
+    if (!domain) return null;
+    return `https://${domain}/`;
+};
 
 export const YunderaDashboard: React.FC = () => {
+    const defaultAppUrl = buildDefaultAppUrl();
+
     return (
         <Box sx={{
             backgroundColor: colors.bgPage,
@@ -35,6 +45,7 @@ export const YunderaDashboard: React.FC = () => {
                     fontSize: font.caption,
                     fontWeight: 400,
                     color: colors.textWhite,
+                    marginBottom: '25px',
                 }}
             >
                 Manage your domain updates, monitor server health, check PCS status,
@@ -42,6 +53,25 @@ export const YunderaDashboard: React.FC = () => {
                 continue improving the product. As a startup building a privacy first tool,
                 we appreciate your patience.
             </Typography>
+
+            {defaultAppUrl && (
+                <Button
+                    variant="contained"
+                    href={defaultAppUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    startIcon={<LinkIcon />}
+                    sx={{
+                        ...button.primary,
+                        '&:hover': {
+                            ...button.primary['&:hover'],
+                            transform: 'translateY(-1px)',
+                        },
+                    }}
+                >
+                    Open your PCS
+                </Button>
+            )}
         </Box>
     );
 };

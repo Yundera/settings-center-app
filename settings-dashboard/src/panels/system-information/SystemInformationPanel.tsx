@@ -2,6 +2,7 @@ import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import React from "react";
 import {EnvConfiguration} from "@/component/EnvConfiguration";
+import {RebootSystem} from "@/component/RebootSystem";
 import {colors, font, spacing} from '@/app/pages/softTheme';
 
 export const SystemInformationPanel = () => {
@@ -36,6 +37,7 @@ export const SystemInformationPanel = () => {
                 width: '100%',
             }}>
                 <EnvConfiguration />
+                <RebootSystem />
             </Box>
         </Box>
     );

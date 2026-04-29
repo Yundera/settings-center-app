@@ -4,12 +4,14 @@ import { RsyncProgress } from '../MigrationTypes';
 import { getConfig } from '@/configuration/getConfigBackend';
 
 /**
- * Runs rsync from source PCS /DATA to target host /DATA, streaming progress.
+ * Runs rsync from this PCS (the source) /DATA to the target PCS /DATA,
+ * streaming progress.
  *
- * Runs by invoking ssh from the CONTAINER back to the TARGET HOST, which
- * then runs rsync. The rsync process on the host drives the transfer
- * (source → host /DATA). This mirrors the HostExecutor pattern used
- * throughout the app — we never run rsync in the container itself.
+ * Runs by invoking ssh from the CONTAINER back to the SOURCE HOST, which
+ * then runs rsync. The rsync process on the source host drives the transfer
+ * (local /DATA → target /DATA over SSH). This mirrors the HostExecutor
+ * pattern used throughout the app — we never run rsync in the container
+ * itself.
  *
  * Progress parsing: `--info=progress2` emits periodic lines shaped like
  *   `  123,456,789  42%  123.45MB/s  0:12:34 (xfr#42, ir-chk=1234/5678)`
@@ -28,16 +30,16 @@ const RSYNC_FLAGS_COMMON = [
 
 export interface RsyncOptions {
     keypair: MigrationKeyPair;
-    source: string;
+    target: string;
     deleteFlag: boolean;
     onProgress: (p: RsyncProgress) => Promise<void>;
     isCancelled: () => Promise<boolean>;
 }
 
 export async function runRsync(opts: RsyncOptions): Promise<void> {
-    const { keypair, source, deleteFlag, onProgress, isCancelled } = opts;
+    const { keypair, target, deleteFlag, onProgress, isCancelled } = opts;
 
-    // Build the `ssh -e` argument rsync uses to connect to source
+    // Build the `ssh -e` argument rsync uses to connect to the target
     const rshArg = [
         'ssh',
         '-i', keypair.privateKeyPath,
@@ -45,35 +47,36 @@ export async function runRsync(opts: RsyncOptions): Promise<void> {
         '-o', 'BatchMode=yes',
     ].join(' ');
 
-    // rsync runs under sudo on source (to read all files including others' homes)
-    // and writes directly to target /DATA (on the host, not container).
+    // rsync reads /DATA on the source host (sudo for permissions on others'
+    // home dirs etc.) and writes via the target migration user's sudo
+    // (--rsync-path=sudo rsync) — so the target side runs rsync as root.
     const flags = [...RSYNC_FLAGS_COMMON];
     if (deleteFlag) flags.push('--delete');
 
-    const remoteSpec = `${keypair.migrationUser}@${source}:/DATA/`;
-    const localTarget = '/DATA/';
+    const localSource = '/DATA/';
+    const remoteSpec = `${keypair.migrationUser}@${target}:/DATA/`;
 
-    // We invoke the whole rsync via `ssh -t target-host "..."` so it runs on the
-    // target host, not in the container. executeHostCommand buffers output — we
+    // We invoke rsync via `ssh -t source-host "..."` so it runs on the source
+    // host, not in the container. executeHostCommand buffers output — we
     // need streaming for progress, so we build our own streaming SSH invocation.
     const hostSshKey = '/app/container_ssh_key';
     const hostUser = 'root';
-    const targetHost = await resolveTargetHost();
+    const sourceHost = await resolveSourceHost();
 
     const rsyncOnHost = [
-        'rsync',
+        'sudo', 'rsync',
         ...flags,
         shq('--rsync-path=sudo rsync'),
         `--rsh=${shq(rshArg)}`,
+        shq(localSource),
         shq(remoteSpec),
-        shq(localTarget),
     ].join(' ');
 
     const args = [
         '-i', hostSshKey,
         '-o', 'StrictHostKeyChecking=no',
         '-o', 'BatchMode=yes',
-        `${hostUser}@${targetHost}`,
+        `${hostUser}@${sourceHost}`,
         rsyncOnHost,
     ];
 
@@ -128,9 +131,10 @@ export async function runRsync(opts: RsyncOptions): Promise<void> {
 
 /**
  * Same host-IP detection logic as HostExecutor.detectHostIP, inlined to
- * keep this file self-contained for the streaming path.
+ * keep this file self-contained for the streaming path. Resolves the
+ * source PCS's host address from inside the container.
  */
-async function resolveTargetHost(): Promise<string> {
+async function resolveSourceHost(): Promise<string> {
     if (getConfig('HOST_ADDRESS')) return getConfig('HOST_ADDRESS');
     // Best-effort: defer to HostExecutor's internal detection by running a
     // buffered command once to prime the route.

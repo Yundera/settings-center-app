@@ -14,6 +14,8 @@ type Config = {
     DEFAULT_PWD: string;
     PUBLIC_IP: string;
     DEFAULT_USER: string;
+    DEFAULT_SERVICE_HOST: string;
+    DEFAULT_SERVICE_PORT: string;
 
 } & BaseConfig;
 

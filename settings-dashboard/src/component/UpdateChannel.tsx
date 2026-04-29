@@ -104,10 +104,9 @@ export const UpdateChannel: React.FC = () => {
                 updateUrl
             });
 
-            notify('Update channel saved successfully. Running self-check...');
+            notify('Update channel saved. Self-check started — watch the log on the Health page.');
 
             await apiRequest("/api/admin/self-check-run", "POST");
-            notify('Self-check completed successfully');
 
         } catch (err: any) {
             setError(err.message || "Failed to save update channel");
