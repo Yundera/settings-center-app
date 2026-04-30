@@ -1,0 +1,20 @@
+# Dev variant of template-root/root/Caddyfile.
+# Differences from prod:
+#   - `tls internal` instead of `tls /certs/cert.pem /certs/key.pem`
+#     (no gateway/LE cert mounted in dev — Caddy mints from its local CA;
+#      browser will warn until you trust /data/caddy/pki/authorities/local/root.crt
+#      or accept the warning per-domain)
+#   - sslip.io / nip.io / DEFAULT_SERVICE root blocks dropped — irrelevant locally
+{
+    log {
+        output stdout
+        format console
+    }
+    email {$PCS_EMAIL}
+}
+
+(gateway_tls) {
+    @has_original_host header X-Original-Host *
+    request_header @has_original_host Host {http.request.header.X-Original-Host}
+    tls internal
+}

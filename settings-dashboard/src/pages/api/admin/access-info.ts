@@ -39,6 +39,10 @@ export interface AccessInfoResponse {
     collectedAt: string;
 }
 
+// Per-user authorized_keys files are mode 0600 owned by their respective
+// user; the admin SSH session can't read them directly. We sudo each
+// file-touching call (test/cat/ssh-keygen) — getent and last only need
+// world-readable sources, no elevation needed.
 const COLLECT_SCRIPT = `
 echo '===PASSWD==='
 getent passwd
@@ -48,13 +52,13 @@ echo '===KEYS==='
 getent passwd | while IFS=: read -r name _ uid _ _ home shell; do
   if [ -z "$home" ] || [ ! -d "$home" ]; then continue; fi
   ak="$home/.ssh/authorized_keys"
-  if [ ! -f "$ak" ]; then continue; fi
+  if ! sudo -n test -f "$ak"; then continue; fi
   echo "---USER:$name---"
   echo "FP_START"
-  ssh-keygen -lf "$ak" 2>/dev/null || true
+  sudo -n ssh-keygen -lf "$ak" 2>/dev/null || true
   echo "FP_END"
   echo "RAW_START"
-  cat "$ak" 2>/dev/null || true
+  sudo -n cat "$ak" 2>/dev/null || true
   echo "RAW_END"
 done
 echo '===END==='

@@ -45,24 +45,21 @@ pnpm start
 #### Option 2: Docker Environment (Recommended)
 
 Use Docker to simulate a PCS (Personal Cloud Server) environment, which is closer to the real deployment environment.
-This simulates a state just after a PCS has been created (with `.env` and `os-init.sh` executed)
+This simulates a state just after a PCS has been created (with `.env` and `os-init.sh` executed).
 
-**Setup Steps:**
+```bash
+cd dev/run
+cp .env.example .env
+# edit .env — fill in UID, USER_JWT, DEFAULT_PWD, PROVIDER_STR, EMAIL
+docker compose up -d --build
+```
 
-1. **Configure the development environment**  
-   Configure `dev-env` according to `dev/run/dev-env.example`  
+Open `https://admin-dev.localhost/` once the stack is healthy. See [`dev/run/README.md`](./dev/run/README.md) for service architecture, the one-time Caddy CA trust step, and troubleshooting.
 
-2. **Start the Docker environment**  
-   Ensure Docker is running, then execute:
-   ```bash
-   .\dev\run-simple.ps1
-   ```
+**Notes:**
 
-**Important Notes:**
-
-- **Clean Installation**: The run-simple script automatically cleans Docker volumes for fresh testing 
-- **Yundera stack**: this process will create a non-functional Yundera stack that can be ignored
-- **Authentication**: Sign-in is delegated to Authelia via OIDC (auto-registered with `mesh-router-auth`). The dashboard mints its own short-lived app JWT after a successful OIDC callback.
+- Authentication is delegated to Authelia via OIDC (auto-registered with `mesh-router-auth`). The dashboard mints its own short-lived app JWT after a successful OIDC callback.
+- For a clean reset, `docker compose down -v` from `dev/run/`.
 
 ## Public Health Endpoint
 

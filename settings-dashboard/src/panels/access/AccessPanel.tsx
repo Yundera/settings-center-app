@@ -7,6 +7,11 @@ import {
     CardContent,
     Chip,
     CircularProgress,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
     Divider,
     Stack,
     Table,
@@ -14,9 +19,11 @@ import {
     TableCell,
     TableHead,
     TableRow,
+    TextField,
     Typography,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import AddIcon from "@mui/icons-material/Add";
 import { apiRequest } from "@/core/authApi";
 import { button, card, colors, font, spacing, text, title } from "@/app/pages/softTheme";
 
@@ -78,6 +85,7 @@ export const AccessPanel: React.FC = () => {
     const [data, setData] = useState<AccessInfoResponse | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [addKeyTarget, setAddKeyTarget] = useState<string | null>(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -159,7 +167,11 @@ export const AccessPanel: React.FC = () => {
 
                         <Stack sx={{ gap: spacing.itemGap }}>
                             {loginAccounts.map(account => (
-                                <AccountBlock key={account.username} account={account} />
+                                <AccountBlock
+                                    key={account.username}
+                                    account={account}
+                                    onAddKey={() => setAddKeyTarget(account.username)}
+                                />
                             ))}
                         </Stack>
 
@@ -226,11 +238,20 @@ export const AccessPanel: React.FC = () => {
                     </CardContent>
                 </Card>
             </Box>
+
+            <AddKeyDialog
+                username={addKeyTarget}
+                onClose={() => setAddKeyTarget(null)}
+                onAdded={() => {
+                    setAddKeyTarget(null);
+                    fetchData();
+                }}
+            />
         </Box>
     );
 };
 
-const AccountBlock: React.FC<{ account: HostAccount }> = ({ account }) => {
+const AccountBlock: React.FC<{ account: HostAccount; onAddKey: () => void }> = ({ account, onAddKey }) => {
     return (
         <Box sx={{
             border: `1px solid ${colors.borderMuted}`,
@@ -246,6 +267,15 @@ const AccountBlock: React.FC<{ account: HostAccount }> = ({ account }) => {
                 {account.isSystem && (
                     <Chip label="SYSTEM" size="small" />
                 )}
+                <Box sx={{ flexGrow: 1 }} />
+                <Button
+                    onClick={onAddKey}
+                    startIcon={<AddIcon />}
+                    size="small"
+                    sx={button.primary}
+                >
+                    Add key
+                </Button>
             </Stack>
 
             <Stack direction="row" spacing={3} sx={{ mb: 1, flexWrap: 'wrap' }}>
@@ -319,5 +349,81 @@ const AccountBlock: React.FC<{ account: HostAccount }> = ({ account }) => {
                 </Box>
             )}
         </Box>
+    );
+};
+
+const AddKeyDialog: React.FC<{
+    username: string | null;
+    onClose: () => void;
+    onAdded: () => void;
+}> = ({ username, onClose, onAdded }) => {
+    const [publicKey, setPublicKey] = useState<string>("");
+    const [submitting, setSubmitting] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (username !== null) {
+            setPublicKey("");
+            setError(null);
+            setSubmitting(false);
+        }
+    }, [username]);
+
+    const handleSubmit = async () => {
+        if (!username) return;
+        setSubmitting(true);
+        setError(null);
+        try {
+            await apiRequest<{ status: string }>(
+                "/api/admin/access-add-key",
+                "POST",
+                { username, publicKey },
+            );
+            onAdded();
+        } catch (err: any) {
+            setError(err?.message || "Failed to add key");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <Dialog open={username !== null} onClose={onClose} maxWidth="sm" fullWidth>
+            <DialogTitle>Add SSH key for {username}</DialogTitle>
+            <DialogContent>
+                <DialogContentText sx={{ mb: 2 }}>
+                    Paste a single OpenSSH public key (e.g. <code>ssh-ed25519 AAAA… comment</code>).
+                    It will be appended to <code>~/.ssh/authorized_keys</code> for this account.
+                </DialogContentText>
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                <TextField
+                    autoFocus
+                    multiline
+                    minRows={4}
+                    fullWidth
+                    placeholder="ssh-ed25519 AAAA... user@host"
+                    value={publicKey}
+                    onChange={e => setPublicKey(e.target.value)}
+                    disabled={submitting}
+                    inputProps={{
+                        style: {
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                            fontSize: 13,
+                        },
+                    }}
+                />
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+                <Button
+                    onClick={handleSubmit}
+                    disabled={submitting || publicKey.trim().length === 0}
+                    variant="contained"
+                    startIcon={submitting ? <CircularProgress size={14} /> : null}
+                >
+                    Add key
+                </Button>
+            </DialogActions>
+        </Dialog>
     );
 };

@@ -1,0 +1,35 @@
+# Dev variant of the settings-center-app image — installs full deps (incl. dev
+# tools like tsx, typescript) so `pnpm start` (Next.js dev mode + fast refresh)
+# works against bind-mounted source. The prod Dockerfile only ships --prod
+# deps with a different pnpm store path, which `tsx` then tries (and fails) to
+# heal at runtime.
+FROM node:20-alpine
+
+RUN apk add --no-cache iproute2 openssh-client
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Install workspace deps once at image build time. node_modules lives inside
+# the image (not bind-mounted) so re-creating the container is fast.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY settings-dashboard/package.json ./settings-dashboard/
+COPY dashboard-core/package.json ./dashboard-core/
+RUN --mount=type=cache,id=pnpm-dev,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# Bake source into the image as a fallback for files we don't bind-mount.
+# Bind mounts in docker-compose.yml override these paths at runtime.
+COPY . .
+
+# Generate dashboard-core barrel exports so settings-dashboard's imports
+# resolve. (Re-run `pnpm -C dashboard-core dev` inside the container if you
+# add new exported files — barrelsby --watch can be added here later.)
+RUN pnpm -C dashboard-core build
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+EXPOSE 4342
+
+CMD ["pnpm", "-C", "settings-dashboard", "start"]

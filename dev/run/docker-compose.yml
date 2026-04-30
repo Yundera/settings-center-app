@@ -15,9 +15,7 @@ services:
     container_name: admin
     hostname: admin
     env_file:
-      - ./test-pcs.env
-      - ./test-pcs.secret.env
-      - ./test-ynd.user.env
+      - ./.env
     volumes:
       - ssh_keys:/host_ssh/
       - data:/app/data/
@@ -47,6 +45,11 @@ services:
       # backend/auth/oidc/discovery.ts) and token exchange go server-to-caddy
       # over HTTPS, so we relax verification for dev only.
       - NODE_TLS_REJECT_UNAUTHORIZED=0
+      # auth-registrar sidecar hands out OIDC client_id/secret pairs. Set here
+      # because the image doesn't ship config/core.env.json (gitignored), so
+      # the dashboard would otherwise fail with "OIDC_REGISTRAR_URL not
+      # configured" on every login attempt — same as the prod template.
+      - OIDC_REGISTRAR_URL=http://auth-registrar:9092/register
     networks:
       - app-network
     depends_on:
@@ -69,25 +72,27 @@ services:
     hostname: ubuntu-server
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ssh_keys:/root/.ssh/
+      - ssh_keys:/home/admin/.ssh/
       - data:/DATA/AppData/casaos/apps/yundera/
       # Shared with authelia (mounts at /config) and auth-registrar.
       # ensure-auth-secrets.sh writes secrets, JWKS, configuration.yml, and
       # users_database.yml here.
       - auth_data:/DATA/AppData/yundera/auth/
       - ./template-root/root/:/tmp/setup/:ro
-      - ./test-pcs.env:/tmp/.pcs.env:ro
-      - ./test-pcs.secret.env:/tmp/.pcs.secret.env:ro
-      - ./test-ynd.user.env:/tmp/.ynd.user.env:ro
+      # Single .env mounted under all three names the inner template-root
+      # scripts expect (.pcs.env / .pcs.secret.env / .ynd.user.env). They
+      # `set -a; source <file>` each one independently, so receiving the same
+      # merged file three times is harmless — every var ends up in the env.
+      - ./.env:/tmp/.env:ro
 
     # this command simulate what the pcs orchestrator does to prepare the vm
     command: >
       bash -c "
             mkdir -p /DATA/AppData/casaos/apps/yundera/
             cp -v -r /tmp/setup/* /DATA/AppData/casaos/apps/yundera/ &&
-            cp -v /tmp/.pcs.env /DATA/AppData/casaos/apps/yundera/.pcs.env &&
-            cp -v /tmp/.pcs.secret.env /DATA/AppData/casaos/apps/yundera/.pcs.secret.env &&
-            cp -v /tmp/.ynd.user.env /DATA/AppData/casaos/apps/yundera/.ynd.user.env &&
+            cp -v /tmp/.env /DATA/AppData/casaos/apps/yundera/.pcs.env &&
+            cp -v /tmp/.env /DATA/AppData/casaos/apps/yundera/.pcs.secret.env &&
+            cp -v /tmp/.env /DATA/AppData/casaos/apps/yundera/.ynd.user.env &&
             chmod +x /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh &&
             /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh || echo '[dev] Template sync failed, continuing anyway...' &&
             chmod +x /DATA/AppData/casaos/apps/yundera/scripts/tools/os-init.sh &&
@@ -143,9 +148,7 @@ services:
   # mounted register-oidc-client.sh.
   # ============================================================================
   auth-registrar:
-    build:
-      context: .
-      dockerfile: Dockerfile.auth-registrar
+    image: ghcr.io/yundera/mesh-auth:1.1.0
     # `auth-registrar` is a common container_name (used by every PCS stack and
     # by the MetaMesh dev stack), so we run under a dev-prefixed name and
     # advertise the canonical alias only on app-network for in-stack DNS.

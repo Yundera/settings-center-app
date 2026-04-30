@@ -21,8 +21,12 @@ async function handler(
     }
 
     try {
+        // self-check.sh and the ensure-*.sh scripts it invokes assume root
+        // (useradd, systemctl, /etc/sudoers.d, dpkg-reconfigure, ...). The
+        // SSH session is the `admin` sudoer, so wrap the whole thing in
+        // `sudo -n` (NOPASSWD via /etc/sudoers.d/90-admin-nopasswd).
         await executeHostCommand(
-            `nohup bash ${SELF_CHECK_SCRIPT} > /dev/null 2>&1 < /dev/null &`
+            `nohup sudo -n bash ${SELF_CHECK_SCRIPT} > /dev/null 2>&1 < /dev/null &`
         );
         res.status(200).json({status: 'started'});
     } catch (error) {

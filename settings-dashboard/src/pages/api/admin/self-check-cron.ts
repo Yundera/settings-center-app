@@ -48,11 +48,13 @@ async function handler(
             }
 
             // Quote the value for the shell since cron expressions contain spaces.
-            await executeHostCommand(`${ENV_MGR} set ${VAR_NAME} '${value}' ${PCS_ENV}`);
+            // env-file-manager.sh writes to .pcs.env (owned by pcs:pcs), so
+            // sudo to elevate from the admin SSH session.
+            await executeHostCommand(`sudo -n ${ENV_MGR} set ${VAR_NAME} '${value}' ${PCS_ENV}`);
 
-            // Apply immediately by re-running the ensure script. If it fails,
-            // surface the error — the env file was still written.
-            await executeHostCommand(`bash ${ENSURE_SCRIPT}`);
+            // Apply immediately by re-running the ensure script. The script
+            // installs root's crontab, so it must run as root.
+            await executeHostCommand(`sudo -n bash ${ENSURE_SCRIPT}`);
 
             return res.status(200).json({status: 'ok', value});
         }

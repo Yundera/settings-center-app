@@ -25,7 +25,11 @@ export interface MigrationKeyPair {
     runId: string;
 }
 
-const MIGRATION_KEY_DIR_ON_HOST = '/root/.yundera-migration';
+// The migration orchestrator SSHes to the source host as the `admin` sudoer
+// and writes its keypair under admin's home (admin can't write /root).
+// Privileged steps (rsync of /DATA, sudo on remote) elevate via sudo on the
+// commands themselves, not via this directory's location.
+const MIGRATION_KEY_DIR_ON_HOST = '/home/admin/.yundera-migration';
 
 export function newRunId(): string {
     const d = new Date();

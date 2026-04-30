@@ -79,13 +79,14 @@ async function updateChannelHandler(req: NextApiRequest, res: NextApiResponse<Up
 
       const newEnvContent = lines.join('\n');
 
-      // Write the updated content back to the file
-      // Create directory if it doesn't exist
-      await executeHostCommand(`mkdir -p "${path.dirname(envFilePath)}"`);
-      
-      // Write the file using echo for atomic operation
+      // Write the updated content back to the file. The .pcs.env file is
+      // owned by pcs:pcs (see ensure-pcs-user.sh), so the admin SSH session
+      // elevates via sudo to write it.
+      await executeHostCommand(`sudo -n mkdir -p "${path.dirname(envFilePath)}"`);
+
+      // Write via tee so the redirect runs under sudo, not under admin's shell.
       const escapedContent = newEnvContent.replace(/"/g, '\\"');
-      await executeHostCommand(`echo "${escapedContent}" > "${envFilePath}"`);
+      await executeHostCommand(`echo "${escapedContent}" | sudo -n tee "${envFilePath}" > /dev/null`);
 
       return res.status(200).json({
         success: true,

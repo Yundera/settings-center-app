@@ -59,14 +59,16 @@ export async function runRsync(opts: RsyncOptions): Promise<void> {
     // We invoke rsync via `ssh -t source-host "..."` so it runs on the source
     // host, not in the container. executeHostCommand buffers output — we
     // need streaming for progress, so we build our own streaming SSH invocation.
+    // The host login is the `admin` sudoer; the leading `sudo rsync` below
+    // elevates so rsync can read every owner's files under /DATA.
     const hostSshKey = '/app/container_ssh_key';
-    const hostUser = 'root';
+    const hostUser = 'admin';
     const sourceHost = await resolveSourceHost();
 
     const rsyncOnHost = [
-        'sudo', 'rsync',
+        'sudo', '-n', 'rsync',
         ...flags,
-        shq('--rsync-path=sudo rsync'),
+        shq('--rsync-path=sudo -n rsync'),
         `--rsh=${shq(rshArg)}`,
         shq(localSource),
         shq(remoteSpec),

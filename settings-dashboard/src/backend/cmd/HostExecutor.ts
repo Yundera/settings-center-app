@@ -6,7 +6,7 @@ import {getConfig} from "@/configuration/getConfigBackend";
 const adminKeyComment = 'local-admin-access';
 const defaultAuthorizedKeysPath = '/host_ssh/authorized_keys';
 const defaultPrivateKeyPath = '/app/container_ssh_key';
-const defaultHostUser = 'root';
+const defaultHostUser = 'admin';
 
 /**
  * Detects the host IP address from inside the container
@@ -313,9 +313,63 @@ export async function initializeSSHAccess(): Promise<void> {
             retryDelay: 3000 // 3 seconds between retries
         });
 
+        // Step 4: Seed the `admin` host user's authorized_keys from root if
+        // empty. ensure-admin-user.sh only seeds on first run, before this
+        // container has written its key to /root/.ssh/authorized_keys, which
+        // leaves the admin account with 0 keys in local dev. Idempotent: a
+        // no-op once admin has any key of its own.
+        await seedAdminUserKeysIfEmpty();
+
     } catch (error) {
         console.error('Failed to initialize SSH access:', error);
         throw error;
+    }
+}
+
+/**
+ * Seeds /home/admin/.ssh/authorized_keys from /root/.ssh/authorized_keys when
+ * the admin user has no keys. Safe to run repeatedly — does nothing if admin
+ * already has keys, or if the admin user does not exist.
+ */
+async function seedAdminUserKeysIfEmpty(): Promise<void> {
+    const innerScript = `set -e
+if ! id admin >/dev/null 2>&1; then
+  echo NO_ADMIN_USER
+  exit 0
+fi
+SSH_DIR="/home/admin/.ssh"
+AK="$SSH_DIR/authorized_keys"
+ROOT_AK="/root/.ssh/authorized_keys"
+mkdir -p "$SSH_DIR"
+chmod 700 "$SSH_DIR"
+touch "$AK"
+# "Empty" = no non-blank, non-comment line. Treat such files as ready to seed.
+if grep -Eq '^[^#[:space:]]' "$AK" 2>/dev/null; then
+  echo ALREADY_HAS_KEYS
+  exit 0
+fi
+if [ -s "$ROOT_AK" ]; then
+  cp "$ROOT_AK" "$AK"
+  chmod 600 "$AK"
+  chown -R admin:admin "$SSH_DIR" 2>/dev/null || true
+  echo SEEDED
+else
+  echo NO_ROOT_KEYS
+fi
+`;
+    const scriptB64 = Buffer.from(innerScript, 'utf8').toString('base64');
+    try {
+        const result = await executeHostCommand(`echo ${scriptB64} | base64 -d | bash`);
+        const out = result.stdout || '';
+        if (out.includes('SEEDED')) {
+            console.log('Seeded /home/admin/.ssh/authorized_keys from /root/.ssh/authorized_keys');
+        } else if (out.includes('NO_ADMIN_USER')) {
+            console.log('Admin user not present on host — skipping admin key seed');
+        } else if (out.includes('NO_ROOT_KEYS')) {
+            console.log('No root keys to seed admin user from');
+        }
+    } catch (e) {
+        console.warn('Failed to seed admin user keys:', e);
     }
 }
 

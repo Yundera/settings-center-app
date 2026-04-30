@@ -30,8 +30,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# env files (can opt-in for commiting if needed)
+# env files — local secrets, never committed. Whitelist *.example templates.
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -42,7 +43,8 @@ next-env.d.ts
 
 config/*.json
 .idea
-/dev/*
+# Dev stack scaffolding (Caddyfile, Dockerfiles, .env.example, etc.) is now
+# committed under /dev/. Local secrets stay out via the .env* rule above.
 settings-dashboard/docker-update-status.json
 settings-dashboard/selfcheck-status.json
 CLAUDE.md

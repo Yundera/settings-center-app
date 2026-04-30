@@ -16,7 +16,7 @@ async function handler(
 
     try {
         await executeHostCommand(
-            `nohup sh -c 'sleep 2; /sbin/reboot' > /dev/null 2>&1 < /dev/null &`
+            `nohup sh -c 'sleep 2; sudo -n /sbin/reboot' > /dev/null 2>&1 < /dev/null &`
         );
         res.status(200).json({status: 'rebooting'});
     } catch (error) {

@@ -63,7 +63,9 @@ echo OK
 `.trim();
 
     const encoded = Buffer.from(script, 'utf8').toString('base64');
-    const cmd = `echo ${encoded} | base64 -d | bash -s -- ${shq(MIGRATION_USER)} ${shq(password)} ${shq(SUDOERS_FILE)}`;
+    // useradd / chpasswd / writing /etc/sudoers.d need root; the SSH session
+    // is the `admin` sudoer so wrap the script execution in sudo.
+    const cmd = `echo ${encoded} | base64 -d | sudo -n bash -s -- ${shq(MIGRATION_USER)} ${shq(password)} ${shq(SUDOERS_FILE)}`;
     const result = await executeHostCommand(cmd);
     if (!result.stdout.includes('OK')) {
         throw new Error(`Failed to enable migration account: ${result.stdout}\n${result.stderr}`);
@@ -87,7 +89,7 @@ echo OK
 `.trim();
 
     const encoded = Buffer.from(script, 'utf8').toString('base64');
-    const cmd = `echo ${encoded} | base64 -d | bash -s -- ${shq(MIGRATION_USER)} ${shq(SUDOERS_FILE)}`;
+    const cmd = `echo ${encoded} | base64 -d | sudo -n bash -s -- ${shq(MIGRATION_USER)} ${shq(SUDOERS_FILE)}`;
     await executeHostCommand(cmd);
 }
 
