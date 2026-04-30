@@ -2,6 +2,9 @@
 # Stage 1: Dependencies (for build)
 # =============================================================================
 FROM node:20-alpine AS deps
+# python3+make+g++ are needed to compile node-pty (native binding for the
+# in-app web terminal) against musl.
+RUN apk add --no-cache python3 make g++ linux-headers
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
@@ -45,8 +48,10 @@ RUN rm -rf settings-dashboard/.next/cache settings-dashboard/.next/trace
 # =============================================================================
 FROM node:20-alpine AS runner
 
-# Install runtime dependencies
-RUN apk add --no-cache iproute2 openssh-client
+# Install runtime dependencies. python3+make+g++ are needed at install time
+# to compile node-pty's native binding against musl in this stage's
+# isolated --prod install (deps stage's binaries don't make it here).
+RUN apk add --no-cache iproute2 openssh-client python3 make g++ linux-headers
 
 # Install pnpm for production
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -65,6 +70,10 @@ RUN --mount=type=cache,id=pnpm-prod,target=/root/.local/share/pnpm/store \
     rm -rf node_modules/.pnpm/@next+swc-linux-x64-gnu* \
            node_modules/.pnpm/@next+swc-linux-arm64-gnu* \
            node_modules/.pnpm/typescript@*
+
+# Drop the build toolchain now that node-pty is compiled — keeps the runner
+# image lean.
+RUN apk del python3 make g++ linux-headers
 
 # Copy built application
 COPY --from=builder /app/settings-dashboard/.next ./settings-dashboard/.next

@@ -5,14 +5,14 @@ import {getConfig} from "@/configuration/getConfigBackend";
 
 const adminKeyComment = 'local-admin-access';
 const defaultAuthorizedKeysPath = '/host_ssh/authorized_keys';
-const defaultPrivateKeyPath = '/app/container_ssh_key';
-const defaultHostUser = 'admin';
+export const defaultPrivateKeyPath = '/app/container_ssh_key';
+export const defaultHostUser = 'admin';
 
 /**
  * Detects the host IP address from inside the container
  * @returns Promise<string> - Host IP address
  */
-async function detectHostIP(): Promise<string> {
+export async function detectHostIP(): Promise<string> {
     if(getConfig("HOST_ADDRESS")){
         return getConfig("HOST_ADDRESS");
     }
@@ -227,6 +227,19 @@ export async function setupSSHAccess(
         // Step 4: Write the updated content
         await fs.writeFile(authorizedKeysPath, newContent, 'utf8');
         await fs.chmod(authorizedKeysPath, 0o600);
+
+        // Step 5: Match the parent .ssh dir's ownership. We run as root inside
+        // the admin container, so writes land as root:root in the bind-mounted
+        // volume. sshd reads authorized_keys *as the target user* (admin), and
+        // a root-owned, mode-0600 file is unreadable to admin → "Permission
+        // denied (publickey)" even though the key is correct. Mirroring the
+        // dir's owner (set by ensure-admin-user.sh) makes the file admin-readable.
+        try {
+            const parentStat = await fs.stat(path.dirname(authorizedKeysPath));
+            await fs.chown(authorizedKeysPath, parentStat.uid, parentStat.gid);
+        } catch (error) {
+            console.warn('Could not chown authorized_keys to parent dir owner:', error);
+        }
 
         console.log('SSH access configured');
 

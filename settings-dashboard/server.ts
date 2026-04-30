@@ -4,6 +4,7 @@ import next from 'next'
 import {start} from "@/backend/server";
 import {initializeAllContexts} from "@/backend/server/initializeAllContexts";
 import { initializeEnvironment } from "@/configuration/loadEnvironment";
+import { handleTerminalUpgrade } from "@/backend/server/Terminal/TerminalHandler";
 
 // Load environment variables from .env files before anything else
 initializeEnvironment();
@@ -26,6 +27,14 @@ app.prepare().then(async () => {
         // Handle all routes with Next.js
         handle(req, res, parsedUrl)
     })
+
+    // Terminal panel WebSocket. Once any `upgrade` listener is attached,
+    // Node no longer auto-closes unmatched upgrade requests, so we must
+    // destroy the socket ourselves for anything that isn't our endpoint.
+    server.on('upgrade', (req, socket, head) => {
+        if (handleTerminalUpgrade(req, socket, head)) return;
+        socket.destroy();
+    });
 
     await initializeAllContexts();
 

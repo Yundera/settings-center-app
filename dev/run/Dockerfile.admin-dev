@@ -5,7 +5,11 @@
 # heal at runtime.
 FROM node:20-alpine
 
-RUN apk add --no-cache iproute2 openssh-client
+# Runtime deps + build toolchain. The toolchain (python3 + make + g++) is
+# needed to compile node-pty (native module backing the in-app web terminal)
+# against musl. Kept in the dev image because the bind-mounted source is
+# rebuilt against the in-image node_modules.
+RUN apk add --no-cache iproute2 openssh-client python3 make g++ linux-headers
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app

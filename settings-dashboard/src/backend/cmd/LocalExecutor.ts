@@ -50,7 +50,9 @@ export async function execute(cmd: string,verbose=true): Promise<{ stdout: strin
             if (code === 0) {
                 resolve({ stdout, stderr });
             } else {
-                reject(new Error(`Command failed with code ${code}`));
+                const detail = (stderr || stdout).trim();
+                const suffix = detail ? `: ${detail}` : '';
+                reject(new Error(`Command failed with code ${code}${suffix}`));
             }
         });
 
