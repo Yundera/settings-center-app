@@ -12,20 +12,6 @@ interface DefaultAppRequest {
 const HOST_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 const PORT_RE = /^\d{1,5}$/;
 
-function upsertEnvVar(content: string, key: string, value: string): string {
-    const lines = content.split('\n');
-    const idx = lines.findIndex(l => l.startsWith(`${key}=`));
-    const newLine = `${key}=${value}`;
-    if (idx >= 0) {
-        lines[idx] = newLine;
-    } else if (lines.length === 1 && lines[0] === '') {
-        lines[0] = newLine;
-    } else {
-        lines.push(newLine);
-    }
-    return lines.join('\n');
-}
-
 async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
         return res.status(405).json({error: 'Method not allowed'});
@@ -43,29 +29,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     try {
         const composeFolder = getConfig("COMPOSE_FOLDER_PATH") || "/DATA/AppData/casaos/apps/yundera/";
         const envFilePath = path.join(composeFolder, '.pcs.env');
+        // Per-key atomic edits via env-file-manager.sh. The previous full-file
+        // round-trip silently truncated .pcs.env on read failure (file mode
+        // 0600 owned by pcs after env-file-manager's mv-from-mktemp side-effect),
+        // dropping every other key (YND_PROVIDER, YUNDERA_USER_API, PUBLIC_IP*).
+        const envMgr = path.join(composeFolder, 'scripts/tools/env-file-manager.sh');
 
-        // Read current .pcs.env content (may not exist yet).
-        let envContent = '';
-        try {
-            const result = await executeHostCommand(`cat "${envFilePath}"`);
-            envContent = result.stdout;
-        } catch {
-            envContent = '';
-        }
-
-        envContent = upsertEnvVar(envContent, 'DEFAULT_SERVICE_HOST', host);
-        envContent = upsertEnvVar(envContent, 'DEFAULT_SERVICE_PORT', port);
-
-        // .pcs.env is owned by pcs:pcs (set by ensure-template-sync.sh), so the
-        // admin SSH session elevates via sudo -n NOPASSWD to write it. Mirrors
-        // update-channel.ts — no dependency on env-file-manager.sh being
-        // present on the host (ensure-template-sync.sh's rsync --delete can
-        // remove it if the upstream template is older).
-        await executeHostCommand(`sudo -n mkdir -p "${path.dirname(envFilePath)}"`);
-        const escapedContent = envContent.replace(/"/g, '\\"');
-        await executeHostCommand(
-            `echo "${escapedContent}" | sudo -n tee "${envFilePath}" > /dev/null`
-        );
+        // host/port are already constrained to the regexes above, so no shell
+        // metacharacters can reach the single-quoted argument.
+        await executeHostCommand(`sudo -n "${envMgr}" set DEFAULT_SERVICE_HOST '${host}' "${envFilePath}"`);
+        await executeHostCommand(`sudo -n "${envMgr}" set DEFAULT_SERVICE_PORT '${port}' "${envFilePath}"`);
 
         res.status(200).json({status: 'success', host, port});
     } catch (error) {

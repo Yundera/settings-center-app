@@ -43,6 +43,11 @@ export interface AccessInfoResponse {
 // user; the admin SSH session can't read them directly. We sudo each
 // file-touching call (test/cat/ssh-keygen) — getent and last only need
 // world-readable sources, no elevation needed.
+//
+// The script is base64-piped into bash on the host because executeHostCommand
+// wraps the command in double quotes for SSH, which lets the LOCAL shell
+// expand any `$var` (e.g. `$home`, `$ak`) before the script reaches the
+// remote — clobbering the loop variables and silently producing zero keys.
 const COLLECT_SCRIPT = `
 echo '===PASSWD==='
 getent passwd
@@ -63,6 +68,8 @@ getent passwd | while IFS=: read -r name _ uid _ _ home shell; do
 done
 echo '===END==='
 `.trim();
+
+const COLLECT_SCRIPT_B64 = Buffer.from(COLLECT_SCRIPT, 'utf8').toString('base64');
 
 function parsePasswd(block: string): HostAccount[] {
     const accounts: HostAccount[] = [];
@@ -225,7 +232,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     try {
-        const result = await executeHostCommand(COLLECT_SCRIPT);
+        const result = await executeHostCommand(`echo ${COLLECT_SCRIPT_B64} | base64 -d | bash`);
         const sections = splitSections(result.stdout);
 
         const accounts = parsePasswd(sections.PASSWD || '');

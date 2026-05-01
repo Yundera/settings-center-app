@@ -18,30 +18,28 @@ async function updateChannelHandler(req: NextApiRequest, res: NextApiResponse<Up
   const remoteDataApp = getConfig("COMPOSE_FOLDER_PATH") || "/DATA/AppData/casaos/apps/yundera/";
 
   const envFilePath = path.join(remoteDataApp, '.pcs.env');
+  // Per-key atomic edits via env-file-manager.sh — never round-trip the whole
+  // file. The previous read-modify-write design silently truncated .pcs.env
+  // when `cat` failed (file mode 0600 owned by pcs after env-file-manager's
+  // mv-from-mktemp side-effect), losing every other key (YND_PROVIDER,
+  // YUNDERA_USER_API, PUBLIC_IP*, ...).
+  const envMgr = path.join(remoteDataApp, 'scripts/tools/env-file-manager.sh');
 
   try {
     if (req.method === 'GET') {
-      // Read current UPDATE_URL value
       try {
-        // Try to read the .pcs.env file
-        const result = await executeHostCommand(`cat "${envFilePath}"`);
-        const lines = result.stdout.split('\n');
-        const updateUrlLine = lines.find(line => line.startsWith('UPDATE_URL='));
-        
-        let updateUrl: string | null = null;
-        if (updateUrlLine) {
-          updateUrl = updateUrlLine.substring('UPDATE_URL='.length) || null;
-        }
-
-        return res.status(200).json({
-          success: true,
-          updateUrl
-        });
+        const result = await executeHostCommand(
+          `sudo -n "${envMgr}" get UPDATE_URL "${envFilePath}"`
+        );
+        const updateUrl = result.stdout.trim() || null;
+        return res.status(200).json({ success: true, updateUrl });
       } catch (error) {
-        // File might not exist, return null
-        return res.status(200).json({
-          success: true,
-          updateUrl: null
+        // Distinct from the old code: no silent truncation. A read failure
+        // surfaces as a 500 so the operator sees it instead of clobbering
+        // the file on the subsequent save.
+        return res.status(500).json({
+          success: false,
+          message: error instanceof Error ? error.message : 'Failed to read update channel'
         });
       }
     }
@@ -49,44 +47,18 @@ async function updateChannelHandler(req: NextApiRequest, res: NextApiResponse<Up
     if (req.method === 'POST') {
       const { updateUrl }: UpdateChannelRequest = req.body;
 
-      // Read current .pcs.env content or create if it doesn't exist
-      let envContent = '';
-      try {
-        const result = await executeHostCommand(`cat "${envFilePath}"`);
-        envContent = result.stdout;
-      } catch (error) {
-        // File doesn't exist, create empty content
-        envContent = '';
+      // Reject anything that would break out of single-quote shell quoting,
+      // newlines, or absurd lengths. Empty string is allowed (clears the key).
+      if (typeof updateUrl !== 'string' || updateUrl.includes("'") || /[\r\n]/.test(updateUrl) || updateUrl.length > 2048) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid updateUrl'
+        });
       }
 
-      const lines = envContent.split('\n');
-      const updateUrlLineIndex = lines.findIndex(line => line.startsWith('UPDATE_URL='));
-
-      // Update or add UPDATE_URL line
-      const newUpdateUrlLine = `UPDATE_URL=${updateUrl}`;
-      
-      if (updateUrlLineIndex >= 0) {
-        // Replace existing line
-        lines[updateUrlLineIndex] = newUpdateUrlLine;
-      } else {
-        // Add new line, but avoid adding to completely empty file
-        if (lines.length === 1 && lines[0] === '') {
-          lines[0] = newUpdateUrlLine;
-        } else {
-          lines.push(newUpdateUrlLine);
-        }
-      }
-
-      const newEnvContent = lines.join('\n');
-
-      // Write the updated content back to the file. The .pcs.env file is
-      // owned by pcs:pcs (see ensure-pcs-user.sh), so the admin SSH session
-      // elevates via sudo to write it.
-      await executeHostCommand(`sudo -n mkdir -p "${path.dirname(envFilePath)}"`);
-
-      // Write via tee so the redirect runs under sudo, not under admin's shell.
-      const escapedContent = newEnvContent.replace(/"/g, '\\"');
-      await executeHostCommand(`echo "${escapedContent}" | sudo -n tee "${envFilePath}" > /dev/null`);
+      await executeHostCommand(
+        `sudo -n "${envMgr}" set UPDATE_URL '${updateUrl}' "${envFilePath}"`
+      );
 
       return res.status(200).json({
         success: true,
