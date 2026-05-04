@@ -25,10 +25,14 @@ export const colors = {
     primaryLight: '#27b4e1',       // Lighter variant used in gradient borders
 
     // Backgrounds — layered from darkest (app) to lightest (card)
+    // NOTE: bgSidebar/bgPage names are historically swapped in the codebase —
+    // bgSidebar is used by RaLayout content, bgPage is used by the actual
+    // sidebar nav. Don't rely on the names; check theme overrides for what
+    // each one actually paints.
     bgApp: '#0a273f',              // Outermost app background (behind sidebar + content)
-    bgSidebar: '#3d5b7c',         // Sidebar navigation background
-    bgPage: '#496d8e',            // Main content area background
-    bgCard: '#5883a3',            // Card component background
+    bgSidebar: '#3d5b7c',         // (actually the main content area background — see note)
+    bgPage: '#496d8e',            // (actually the sidebar nav background — see note)
+    bgCard: 'rgba(255, 255, 255, 0.04)', // Subtle section tint, used sparingly
     bgInput: 'rgba(61, 91, 124, 0.5)', // Semi-transparent input field background
     bgOverlay: 'rgba(255, 255, 255, 0.05)', // Subtle hover overlay
 
@@ -53,7 +57,7 @@ export const colors = {
 };
 
 export const radius = {
-    card: '20px',       // Card container border radius
+    card: '8px',        // Card container border radius — subtle modern radius
     button: '30px',     // Pill-shaped buttons and sidebar menu items
     chipLarge: '50px',  // Large status chip (fully rounded)
     chipSmall: '12px',  // Small tag chip
@@ -70,12 +74,12 @@ export const font = {
 };
 
 export const spacing = {
-    cardPadding: '30px',              // Inner padding of card content area
-    headerPadding: '24px 25px 25px 35px', // Card header padding (top right bottom left)
-    itemGap: '25px',                  // Gap between list items inside cards
-    cardGap: '50px',                  // Gap between card sections on a page
-    pageY: '70px',                    // Vertical padding for page-level sections
-    pageX: '40px',                    // Horizontal padding for page-level sections
+    cardPadding: '24px',              // Inner padding of card content area
+    headerPadding: '16px 24px',       // Card header padding (now a flat title bar, not a coloured banner)
+    itemGap: '20px',                  // Gap between list items inside cards
+    cardGap: '32px',                  // Gap between card sections on a page
+    pageY: '24px',                    // Vertical padding for page-level sections
+    pageX: '24px',                    // Horizontal padding for page-level sections
     iconLeft: '5px',                  // Left margin for status icons
     iconRight: '30px',                // Right margin for status icons (space before text)
 };
@@ -84,19 +88,22 @@ export const spacing = {
 // Reusable sx Styles (imported and applied via sx prop in components)
 // ============================================================
 
-// Card — shared layout for all card containers (UpdateChannel, DockerUpdate, SelfCheck, EnvConfiguration)
+// Card — flat section container. No coloured chrome; sections read as part
+// of the page, separated only by a subtle border and a flat title bar.
 export const card = {
     root: {
-        backgroundColor: colors.bgCard,
+        backgroundColor: 'transparent',
         borderRadius: radius.card,
+        border: `1px solid ${colors.borderMuted}`,
+        boxShadow: 'none',
         width: '100%',
-        maxWidth: '800px',
-        margin: '0 auto',
     },
-    // Blue header bar at the top of each card
+    // Flat title bar — no coloured fill, just bold text and a hairline
+    // separator from the content below.
     header: {
-        backgroundColor: colors.primary,
+        backgroundColor: 'transparent',
         padding: spacing.headerPadding,
+        borderBottom: `1px solid ${colors.borderMuted}`,
         borderRadius: `${radius.card} ${radius.card} 0 0`,
     },
     content: {

@@ -13,6 +13,7 @@ import {
     DialogContentText,
     DialogTitle,
     Divider,
+    IconButton,
     Stack,
     Table,
     TableBody,
@@ -24,6 +25,7 @@ import {
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import AddIcon from "@mui/icons-material/Add";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { apiRequest } from "@/core/authApi";
 import { button, card, colors, font, spacing, text, title } from "@/app/pages/softTheme";
 
@@ -81,11 +83,18 @@ const tableBodyCell = {
  * AccessPanel — "Access" page. Lists Linux user accounts on the host, the
  * authorized SSH keys per account, and recent login history (time + IP).
  */
+interface RemoveTarget {
+    username: string;
+    fingerprint: string;
+    comment: string;
+}
+
 export const AccessPanel: React.FC = () => {
     const [data, setData] = useState<AccessInfoResponse | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [addKeyTarget, setAddKeyTarget] = useState<string | null>(null);
+    const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -109,7 +118,6 @@ export const AccessPanel: React.FC = () => {
 
     return (
         <Box sx={{
-            backgroundColor: colors.bgPage,
             paddingTop: spacing.pageY,
             paddingBottom: spacing.pageY,
             paddingX: spacing.pageX,
@@ -171,6 +179,11 @@ export const AccessPanel: React.FC = () => {
                                     key={account.username}
                                     account={account}
                                     onAddKey={() => setAddKeyTarget(account.username)}
+                                    onRemoveKey={(key) => setRemoveTarget({
+                                        username: account.username,
+                                        fingerprint: key.fingerprint,
+                                        comment: key.comment,
+                                    })}
                                 />
                             ))}
                         </Stack>
@@ -247,11 +260,24 @@ export const AccessPanel: React.FC = () => {
                     fetchData();
                 }}
             />
+
+            <RemoveKeyDialog
+                target={removeTarget}
+                onClose={() => setRemoveTarget(null)}
+                onRemoved={() => {
+                    setRemoveTarget(null);
+                    fetchData();
+                }}
+            />
         </Box>
     );
 };
 
-const AccountBlock: React.FC<{ account: HostAccount; onAddKey: () => void }> = ({ account, onAddKey }) => {
+const AccountBlock: React.FC<{
+    account: HostAccount;
+    onAddKey: () => void;
+    onRemoveKey: (key: AuthorizedKey) => void;
+}> = ({ account, onAddKey, onRemoveKey }) => {
     return (
         <Box sx={{
             border: `1px solid ${colors.borderMuted}`,
@@ -319,6 +345,7 @@ const AccountBlock: React.FC<{ account: HostAccount; onAddKey: () => void }> = (
                                 <TableCell sx={tableHeadCell}>Fingerprint</TableCell>
                                 <TableCell sx={tableHeadCell}>Comment</TableCell>
                                 <TableCell sx={tableHeadCell}>Tag</TableCell>
+                                <TableCell sx={tableHeadCell} align="right"></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -341,6 +368,23 @@ const AccountBlock: React.FC<{ account: HostAccount; onAddKey: () => void }> = (
                                         ) : (
                                             <Chip label="user" size="small" />
                                         )}
+                                    </TableCell>
+                                    <TableCell sx={tableBodyCell} align="right">
+                                        <IconButton
+                                            size="small"
+                                            disabled={!key.fingerprint || key.isAdminKey}
+                                            title={
+                                                !key.fingerprint
+                                                    ? 'Cannot remove: fingerprint unavailable'
+                                                    : key.isAdminKey
+                                                        ? 'Dashboard key — managed automatically'
+                                                        : 'Remove this key'
+                                            }
+                                            onClick={() => onRemoveKey(key)}
+                                            sx={{ color: colors.textMuted }}
+                                        >
+                                            <DeleteOutlineIcon fontSize="small" />
+                                        </IconButton>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -422,6 +466,78 @@ const AddKeyDialog: React.FC<{
                     startIcon={submitting ? <CircularProgress size={14} /> : null}
                 >
                     Add key
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
+
+const RemoveKeyDialog: React.FC<{
+    target: RemoveTarget | null;
+    onClose: () => void;
+    onRemoved: () => void;
+}> = ({ target, onClose, onRemoved }) => {
+    const [submitting, setSubmitting] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (target !== null) {
+            setError(null);
+            setSubmitting(false);
+        }
+    }, [target]);
+
+    const handleSubmit = async () => {
+        if (!target) return;
+        setSubmitting(true);
+        setError(null);
+        try {
+            await apiRequest<{ status: string; removed: number }>(
+                "/api/admin/access-remove-key",
+                "POST",
+                { username: target.username, fingerprint: target.fingerprint },
+            );
+            onRemoved();
+        } catch (err: any) {
+            setError(err?.message || "Failed to remove key");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <Dialog open={target !== null} onClose={onClose} maxWidth="sm" fullWidth>
+            <DialogTitle>Remove SSH key?</DialogTitle>
+            <DialogContent>
+                <DialogContentText sx={{ mb: 2 }}>
+                    This will remove the following key from <code>{target?.username}</code>'s
+                    <code> ~/.ssh/authorized_keys</code>. Anyone holding the matching private key
+                    will lose SSH access immediately.
+                </DialogContentText>
+                <Box sx={{
+                    p: 1.5,
+                    border: `1px solid ${colors.borderMuted}`,
+                    borderRadius: 1,
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    fontSize: 13,
+                    wordBreak: 'break-all',
+                    mb: 2,
+                }}>
+                    <div>{target?.fingerprint}</div>
+                    {target?.comment && <div style={{ opacity: 0.7, marginTop: 4 }}>{target.comment}</div>}
+                </Box>
+                {error && <Alert severity="error">{error}</Alert>}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+                <Button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    color="error"
+                    variant="contained"
+                    startIcon={submitting ? <CircularProgress size={14} /> : <DeleteOutlineIcon />}
+                >
+                    Remove
                 </Button>
             </DialogActions>
         </Dialog>

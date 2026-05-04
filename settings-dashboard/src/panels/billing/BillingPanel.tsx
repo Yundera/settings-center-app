@@ -8,7 +8,6 @@ import {button, colors, font, spacing} from '@/app/pages/softTheme';
 export const BillingPanel = () => {
     return (
         <Box sx={{
-            backgroundColor: colors.bgPage,
             paddingTop: spacing.pageY,
             paddingBottom: spacing.pageY,
             paddingX: spacing.pageX,

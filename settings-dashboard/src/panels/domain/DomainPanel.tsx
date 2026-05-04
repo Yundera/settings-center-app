@@ -191,7 +191,6 @@ export const DomainPanel: React.FC = () => {
 
     return (
         <Box sx={{
-            backgroundColor: colors.bgPage,
             paddingTop: spacing.pageY,
             paddingBottom: spacing.pageY,
             paddingX: spacing.pageX,

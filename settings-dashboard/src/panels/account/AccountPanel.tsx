@@ -28,7 +28,6 @@ export const AccountPanel = () => {
 
     return (
         <Box sx={{
-            backgroundColor: colors.bgPage,
             paddingTop: spacing.pageY,
             paddingBottom: spacing.pageY,
             paddingX: spacing.pageX,

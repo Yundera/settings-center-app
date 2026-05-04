@@ -17,6 +17,11 @@ type Config = {
     DEFAULT_SERVICE_HOST: string;
     DEFAULT_SERVICE_PORT: string;
 
+    YUNDERA_USER_API: string; // Orchestrator base URL, used for support-key fetch
+    SMTP_HOST: string;        // Local PCS smtp service hostname (default: smtp)
+    SMTP_PORT: string;        // Local PCS smtp service port (default: 587)
+    SUPPORT_EMAIL: string;    // Override support recipient (default: support@yundera.com)
+
 } & BaseConfig;
 
 export function getConfig(key: keyof Config): string {

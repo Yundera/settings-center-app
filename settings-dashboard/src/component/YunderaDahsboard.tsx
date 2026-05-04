@@ -15,7 +15,6 @@ export const YunderaDashboard: React.FC = () => {
 
     return (
         <Box sx={{
-            backgroundColor: colors.bgPage,
             paddingTop: spacing.pageY,
             paddingBottom: '30px',
             paddingX: spacing.pageX,

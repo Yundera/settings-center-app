@@ -27,12 +27,13 @@ export const TerminalPanel: React.FC = () => {
     const termRef = useRef<XTerm | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
-    const [status, setStatus] = useState<Status>("connecting");
+    const [status, setStatus] = useState<Status>("closed");
     const [error, setError] = useState<string | null>(null);
-    const [reconnectKey, setReconnectKey] = useState<number>(0);
+    const [connectKey, setConnectKey] = useState<number>(0);
 
     useEffect(() => {
         if (!containerRef.current) return;
+        if (connectKey === 0) return;
 
         const term = new XTerm({
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
@@ -128,17 +129,16 @@ export const TerminalPanel: React.FC = () => {
             termRef.current = null;
             fitRef.current = null;
         };
-    }, [reconnectKey]);
+    }, [connectKey]);
 
-    const reconnect = () => {
+    const connect = () => {
         setStatus("connecting");
         setError(null);
-        setReconnectKey(k => k + 1);
+        setConnectKey(k => k + 1);
     };
 
     return (
         <Box sx={{
-            backgroundColor: colors.bgPage,
             paddingTop: spacing.pageY,
             paddingBottom: spacing.pageY,
             paddingX: spacing.pageX,
@@ -174,12 +174,12 @@ export const TerminalPanel: React.FC = () => {
                                 <StatusBadge status={status} />
                             </Stack>
                             <Button
-                                onClick={reconnect}
+                                onClick={connect}
                                 startIcon={<RefreshIcon />}
                                 sx={button.primary}
                                 disabled={status === "connecting"}
                             >
-                                Reconnect
+                                {connectKey === 0 ? "Connect" : "Reconnect"}
                             </Button>
                         </Stack>
                     </Box>
