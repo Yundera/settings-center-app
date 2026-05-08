@@ -13,8 +13,10 @@ import {
     DialogContentText,
     DialogTitle,
     Divider,
+    FormControlLabel,
     IconButton,
     Stack,
+    Switch,
     Table,
     TableBody,
     TableCell,
@@ -226,6 +228,8 @@ export const AccessPanel: React.FC = () => {
                     />
                 )}
 
+                <SupportEnsureCard onChanged={fetchData} />
+
                 {/* Accounts and keys card */}
                 <Card sx={card.root}>
                     <Box sx={card.header}>
@@ -351,6 +355,117 @@ export const AccessPanel: React.FC = () => {
                 }}
             />
         </Box>
+    );
+};
+
+interface SupportEnsureStatus {
+    ensure: boolean;
+    accessEnabled: boolean;
+    username: string;
+    fingerprint: string;
+    comment: string;
+}
+
+const SupportEnsureCard: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
+    const notify = useNotify();
+    const [status, setStatus] = useState<SupportEnsureStatus | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [toggling, setToggling] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchStatus = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await apiRequest<SupportEnsureStatus>("/api/admin/support-ensure", "GET");
+            setStatus(res);
+            setError(null);
+        } catch (err: any) {
+            setError(err?.message || "Failed to load support access status");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchStatus();
+    }, [fetchStatus]);
+
+    const handleToggle = async (next: boolean) => {
+        setToggling(true);
+        try {
+            await apiRequest("/api/admin/support-ensure", "POST", { ensure: next });
+            await fetchStatus();
+            onChanged();
+            notify(
+                next ? 'Yundera support access enabled' : 'Yundera support access disabled',
+                { type: 'success' },
+            );
+        } catch (err: any) {
+            setError(err?.message || "Failed to update support access");
+        } finally {
+            setToggling(false);
+        }
+    };
+
+    return (
+        <Card sx={card.root}>
+            <Box sx={card.header}>
+                <Typography sx={title.small}>Yundera support access</Typography>
+            </Box>
+            <CardContent sx={card.content}>
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                <Typography sx={{ ...text.detail, mb: 2 }}>
+                    When enabled, Yundera support staff can SSH into <code>{status?.username || 'admin'}</code> using
+                    the orchestrator's support key. A periodic self-check re-asserts this so the key isn't
+                    silently lost on a manual edit or image refresh.
+                </Typography>
+
+                <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1.5, flexWrap: 'wrap' }}>
+                    <FormControlLabel
+                        sx={{ m: 0 }}
+                        control={
+                            <Switch
+                                checked={!!status?.ensure}
+                                onChange={(_, v) => handleToggle(v)}
+                                disabled={loading || toggling || !status}
+                            />
+                        }
+                        label={
+                            <Typography sx={{ ...text.label }}>
+                                {status?.ensure ? "Enabled" : "Disabled"}
+                            </Typography>
+                        }
+                    />
+                    {(loading || toggling) && <CircularProgress size={16} />}
+                    {status && (
+                        <Chip
+                            label={status.accessEnabled ? "Key present" : "Key absent"}
+                            color={status.accessEnabled ? "success" : "default"}
+                            size="small"
+                        />
+                    )}
+                </Stack>
+
+                {status && status.ensure !== status.accessEnabled && (
+                    <Alert severity="warning" sx={{ mt: 1 }}>
+                        {status.ensure
+                            ? "Support access is enabled but the key is not currently in admin's authorized_keys. The next self-check tick will re-add it."
+                            : "Support key is currently in admin's authorized_keys but the safety net is opted out. It will not be re-added if removed."}
+                    </Alert>
+                )}
+
+                {status?.fingerprint && (
+                    <Typography sx={{
+                        ...text.detail,
+                        mt: 1.5,
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                        wordBreak: 'break-all',
+                    }}>
+                        {status.fingerprint} <span style={{ opacity: 0.7 }}>({status.comment})</span>
+                    </Typography>
+                )}
+            </CardContent>
+        </Card>
     );
 };
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     Alert,
     Box,
@@ -19,7 +19,8 @@ import { apiRequest } from "@/core/authApi";
 import { colors, font } from "@/app/pages/softTheme";
 
 interface SupportAccessStatus {
-    enabled: boolean;
+    ensure: boolean;
+    accessEnabled: boolean;
     username: string;
     fingerprint: string;
     comment: string;
@@ -54,10 +55,37 @@ export const SupportPanel: React.FC = () => {
     const [sending, setSending] = useState<boolean>(false);
     const [sendResult, setSendResult] = useState<{ ok: boolean; text: string } | null>(null);
 
+    // Auto-enable flow: when the page is opened with `?autoEnable=1` in the
+    // hash query, we toggle support access on as soon as the status check
+    // confirms it's currently off. Used by the cloud dashboard's "Add support
+    // key" button so the user gets a single-click experience instead of
+    // having to also click the toggle here. The hint flag itself is read
+    // once via the ref so we don't keep flipping the toggle if the user
+    // later disables it manually.
+    const [autoEnableHint] = useState<boolean>(() => {
+        if (typeof window === 'undefined') return false;
+        // HashRouter: location.hash looks like "#/support?autoEnable=1".
+        // Strip the leading `#` and pull the query out of the resulting
+        // pseudo-URL. Falls back to the regular location.search in case a
+        // future route change moves us off HashRouter.
+        const raw = window.location.hash || '';
+        const queryStart = raw.indexOf('?');
+        const search = queryStart >= 0 ? raw.slice(queryStart) : window.location.search;
+        try {
+            return new URLSearchParams(search).get('autoEnable') === '1';
+        } catch {
+            return false;
+        }
+    });
+    const autoEnableTried = useRef<boolean>(false);
+    const [autoEnableResult, setAutoEnableResult] = useState<'pending' | 'enabled' | 'failed' | null>(
+        autoEnableHint ? 'pending' : null,
+    );
+
     const fetchStatus = useCallback(async () => {
         setStatusLoading(true);
         try {
-            const res = await apiRequest<SupportAccessStatus>("/api/admin/support-access", "GET");
+            const res = await apiRequest<SupportAccessStatus>("/api/admin/support-ensure", "GET");
             setStatus(res);
             setStatusError(null);
         } catch (err: any) {
@@ -71,10 +99,34 @@ export const SupportPanel: React.FC = () => {
         fetchStatus();
     }, [fetchStatus]);
 
+    // After status loads: if the URL asked us to auto-enable AND access is
+    // currently disabled, toggle it on. Runs at most once per mount even on
+    // re-renders (the ref guards re-entry).
+    useEffect(() => {
+        if (!autoEnableHint) return;
+        if (autoEnableTried.current) return;
+        if (statusLoading || !status) return;
+        autoEnableTried.current = true;
+        if (status.accessEnabled && status.ensure) {
+            setAutoEnableResult('enabled');
+            return;
+        }
+        (async () => {
+            try {
+                await apiRequest("/api/admin/support-ensure", "POST", { ensure: true });
+                await fetchStatus();
+                setAutoEnableResult('enabled');
+            } catch (err: any) {
+                setStatusError(err?.message || 'Failed to auto-enable support access');
+                setAutoEnableResult('failed');
+            }
+        })();
+    }, [autoEnableHint, status, statusLoading, fetchStatus]);
+
     const handleToggle = async (next: boolean) => {
         setToggling(true);
         try {
-            await apiRequest("/api/admin/support-access", "POST", { enable: next });
+            await apiRequest("/api/admin/support-ensure", "POST", { ensure: next });
             await fetchStatus();
         } catch (err: any) {
             setStatusError(err?.message || "Failed to update support access");
@@ -139,9 +191,29 @@ export const SupportPanel: React.FC = () => {
 
             {statusError && <Alert severity="error" sx={{ mb: 2 }}>{statusError}</Alert>}
 
+            {autoEnableHint && autoEnableResult === 'pending' && (
+                <Alert severity="info" sx={{ mb: 2 }} icon={<CircularProgress size={16} />}>
+                    Enabling support access automatically (opened from the cloud dashboard)…
+                </Alert>
+            )}
+            {autoEnableHint && autoEnableResult === 'enabled' && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                    Support access is enabled. You can close this tab and return to the
+                    dashboard — re-check from there to start the migration.
+                </Alert>
+            )}
+            {autoEnableHint && autoEnableResult === 'failed' && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                    Couldn't enable support access automatically. Toggle it on manually below.
+                </Alert>
+            )}
+
             <Typography sx={{ color: colors.textMuted, fontSize: font.detail, mb: 2 }}>
                 When enabled, Yundera support staff can SSH into <code>{status?.username || 'admin'}</code> on
-                this PCS using the orchestrator's support key. You can revoke access at any time.
+                this PCS using the orchestrator's support key. The setting is durable: a periodic
+                self-check re-asserts it, so an accidental key removal won't lock support out.
+                You can revoke at any time — the key is removed immediately and the safety net
+                stops re-adding it.
             </Typography>
 
             <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1.5 }}>
@@ -149,26 +221,34 @@ export const SupportPanel: React.FC = () => {
                     sx={{ m: 0 }}
                     control={
                         <Switch
-                            checked={!!status?.enabled}
+                            checked={!!status?.ensure}
                             onChange={(_, v) => handleToggle(v)}
                             disabled={statusLoading || toggling || !status}
                         />
                     }
                     label={
                         <Typography sx={{ color: colors.textWhite, fontSize: font.label }}>
-                            {status?.enabled ? "Enabled" : "Disabled"}
+                            {status?.ensure ? "Enabled" : "Disabled"}
                         </Typography>
                     }
                 />
                 {toggling && <CircularProgress size={16} />}
                 {status && (
                     <Chip
-                        label={status.enabled ? "Access granted" : "No access"}
-                        color={status.enabled ? "success" : "default"}
+                        label={status.accessEnabled ? "Access granted" : "No access"}
+                        color={status.accessEnabled ? "success" : "default"}
                         size="small"
                     />
                 )}
             </Stack>
+
+            {status && status.ensure !== status.accessEnabled && (
+                <Alert severity="warning" sx={{ mt: 1, mb: 1.5 }}>
+                    {status.ensure
+                        ? "Support key is enabled but not currently present in admin's authorized_keys. The next self-check tick will re-add it."
+                        : "Support key is currently present in admin's authorized_keys but the safety net is opted out. It will not be re-added if removed."}
+                </Alert>
+            )}
 
             {status?.fingerprint && (
                 <Typography sx={{
@@ -244,7 +324,7 @@ export const SupportPanel: React.FC = () => {
                         }
                         label={
                             <Typography sx={{ color: colors.textWhite, fontSize: font.detail }}>
-                                {status?.enabled
+                                {status?.accessEnabled
                                     ? "Support access is already enabled"
                                     : "Grant Yundera support SSH access (you can revoke any time)"}
                             </Typography>
