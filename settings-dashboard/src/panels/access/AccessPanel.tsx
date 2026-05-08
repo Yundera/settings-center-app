@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Box,
@@ -26,8 +26,47 @@ import {
 import RefreshIcon from "@mui/icons-material/Refresh";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import { useNotify } from "react-admin";
+import { useSearchParams } from "react-router-dom";
 import { apiRequest } from "@/core/authApi";
 import { button, card, colors, font, spacing, text, title } from "@/app/pages/softTheme";
+
+const VALID_KEY_TYPE_RE = /^(ssh-(rsa|dss|ed25519)|ecdsa-sha2-nistp(256|384|521)|sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\.com)$/;
+
+interface ParsedKey {
+    type: string;
+    b64: string;
+    comment: string;
+    full: string;
+}
+
+function parsePublicKey(raw: string | null): ParsedKey | null {
+    if (typeof raw !== 'string') return null;
+    const line = raw.replace(/\r/g, '').trim();
+    if (!line || line.includes('\n')) return null;
+    const parts = line.split(/\s+/);
+    if (parts.length < 2) return null;
+    const [type, b64, ...rest] = parts;
+    if (!VALID_KEY_TYPE_RE.test(type)) return null;
+    if (!/^[A-Za-z0-9+/=]+$/.test(b64)) return null;
+    return { type, b64, comment: rest.join(' '), full: line };
+}
+
+async function computeFingerprint(b64: string): Promise<string | null> {
+    try {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const hash = await crypto.subtle.digest('SHA-256', bytes);
+        const hashBytes = new Uint8Array(hash);
+        let s = '';
+        for (let i = 0; i < hashBytes.length; i++) s += String.fromCharCode(hashBytes[i]);
+        return `SHA256:${btoa(s).replace(/=+$/, '')}`;
+    } catch {
+        return null;
+    }
+}
 
 interface AuthorizedKey {
     type: string;
@@ -90,11 +129,28 @@ interface RemoveTarget {
 }
 
 export const AccessPanel: React.FC = () => {
+    const notify = useNotify();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [data, setData] = useState<AccessInfoResponse | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [addKeyTarget, setAddKeyTarget] = useState<string | null>(null);
     const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
+    const [deeplinkDismissed, setDeeplinkDismissed] = useState<boolean>(false);
+
+    const deeplinkAccount = searchParams.get('account');
+    const deeplinkPubkey = searchParams.get('pubkey');
+    const deeplinkActive = !deeplinkDismissed && (deeplinkAccount !== null || deeplinkPubkey !== null);
+
+    const clearDeeplink = useCallback(() => {
+        setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            next.delete('account');
+            next.delete('pubkey');
+            return next;
+        }, { replace: true });
+        setDeeplinkDismissed(true);
+    }, [setSearchParams]);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -145,6 +201,26 @@ export const AccessPanel: React.FC = () => {
                 maxWidth: '1000px',
                 width: '100%',
             }}>
+                {deeplinkActive && (
+                    <AuthorizeDeeplinkCard
+                        requestedAccount={deeplinkAccount}
+                        rawPubkey={deeplinkPubkey}
+                        accounts={data?.accounts ?? null}
+                        accountsLoaded={data !== null}
+                        onDismiss={clearDeeplink}
+                        onAdded={(status) => {
+                            clearDeeplink();
+                            fetchData();
+                            notify(
+                                status === 'already-present'
+                                    ? 'Key was already authorized — nothing changed'
+                                    : 'SSH key added',
+                                { type: status === 'already-present' ? 'info' : 'success' },
+                            );
+                        }}
+                    />
+                )}
+
                 {/* Accounts and keys card */}
                 <Card sx={card.root}>
                     <Box sx={card.header}>
@@ -542,4 +618,189 @@ const RemoveKeyDialog: React.FC<{
             </DialogActions>
         </Dialog>
     );
+};
+
+const AuthorizeDeeplinkCard: React.FC<{
+    requestedAccount: string | null;
+    rawPubkey: string | null;
+    accounts: HostAccount[] | null;
+    accountsLoaded: boolean;
+    onDismiss: () => void;
+    onAdded: (status: 'added' | 'already-present' | 'unknown') => void;
+}> = ({ requestedAccount, rawPubkey, accounts, accountsLoaded, onDismiss, onAdded }) => {
+    const parsedKey = useMemo(() => parsePublicKey(rawPubkey), [rawPubkey]);
+    const [fingerprint, setFingerprint] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (parsedKey) {
+            computeFingerprint(parsedKey.b64).then(fp => {
+                if (!cancelled) setFingerprint(fp);
+            });
+        } else {
+            setFingerprint(null);
+        }
+        return () => { cancelled = true; };
+    }, [parsedKey]);
+
+    const accountExists = accountsLoaded && accounts !== null && requestedAccount !== null
+        && accounts.some(a => a.username === requestedAccount);
+    const accountUnknown = accountsLoaded && !accountExists;
+
+    let problem: string | null = null;
+    if (!requestedAccount) {
+        problem = 'This authorization link is missing the target account name.';
+    } else if (!rawPubkey) {
+        problem = 'This authorization link is missing the public key.';
+    } else if (!parsedKey) {
+        problem = 'The public key in this link is malformed or uses an unsupported type.';
+    } else if (accountUnknown) {
+        problem = `Account '${requestedAccount}' does not exist on this PCS.`;
+    }
+
+    const handleConsent = async () => {
+        if (!requestedAccount || !parsedKey) return;
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            const res = await apiRequest<{ status: 'added' | 'already-present' | 'unknown' }>(
+                '/api/admin/access-add-key',
+                'POST',
+                { username: requestedAccount, publicKey: parsedKey.full },
+            );
+            onAdded(res.status);
+        } catch (err: any) {
+            setSubmitError(err?.message || 'Failed to add key');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <Card sx={dangerCard}>
+            <Box sx={card.header}>
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                    <WarningAmberIcon sx={{ color: colors.statusErrorAlt }} />
+                    <Typography sx={{ ...title.small, color: colors.statusErrorAlt }}>
+                        Authorize SSH access?
+                    </Typography>
+                </Stack>
+            </Box>
+            <CardContent sx={card.content}>
+                <Stack spacing={2}>
+                    <Alert severity="error" icon={false} sx={{ '& .MuiAlert-message': { width: '100%' } }}>
+                        <Typography sx={{ ...text.bodyWhite, fontWeight: 700, mb: 1 }}>
+                            An external link is asking to add an SSH key to this PCS.
+                        </Typography>
+                        <Typography sx={text.bodyWhite}>
+                            If you grant this, the holder of the matching private key will be able to log in
+                            over SSH and gain full control of this PCS. They can:
+                        </Typography>
+                        <Box component="ul" sx={{ ...text.bodyWhite, pl: 3, my: 1 }}>
+                            <li>Read every file on this PCS — documents, photos, app data, secrets.</li>
+                            <li>Modify or <strong>permanently delete</strong> any file. Deleted files cannot be recovered.</li>
+                            <li>Install, remove, or replace any application or service.</li>
+                            <li>Install hidden backdoors that can survive reboots and key removal.</li>
+                        </Box>
+                        <Typography sx={{ ...text.bodyWhite, fontWeight: 700 }}>
+                            Only proceed if you personally trust the person who sent you this link AND you
+                            asked them for access. If you did not ask for this, or the link came from an
+                            unexpected source, cancel.
+                        </Typography>
+                    </Alert>
+
+                    {problem ? (
+                        <Alert severity="error">
+                            {problem} Request rejected — nothing was changed.
+                        </Alert>
+                    ) : !accountsLoaded ? (
+                        <Stack direction="row" alignItems="center" spacing={1.5}>
+                            <CircularProgress size={16} />
+                            <Typography sx={text.bodyMuted}>Verifying target account…</Typography>
+                        </Stack>
+                    ) : (
+                        <Box sx={{
+                            border: `1px solid ${colors.borderMuted}`,
+                            borderRadius: 2,
+                            p: 2,
+                        }}>
+                            <Typography sx={{ ...text.label, mb: 1.5 }}>The link wants to add this key:</Typography>
+                            <DeeplinkField label="Account" value={requestedAccount!} />
+                            <DeeplinkField label="Key type" value={parsedKey!.type} />
+                            <DeeplinkField
+                                label="Fingerprint"
+                                value={fingerprint || 'computing…'}
+                                mono
+                            />
+                            {parsedKey!.comment && (
+                                <DeeplinkField label="Comment" value={parsedKey!.comment} />
+                            )}
+                        </Box>
+                    )}
+
+                    {submitError && <Alert severity="error">{submitError}</Alert>}
+
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="flex-end">
+                        <Button
+                            onClick={onDismiss}
+                            disabled={submitting}
+                            sx={{ ...button.primary, padding: '12px 30px' }}
+                        >
+                            I don&apos;t understand — cancel
+                        </Button>
+                        <Button
+                            onClick={handleConsent}
+                            disabled={submitting || problem !== null || !accountsLoaded}
+                            startIcon={submitting ? <CircularProgress size={14} /> : undefined}
+                            sx={dangerOutlineButton}
+                        >
+                            I consent to give access to the person who gave me the link
+                        </Button>
+                    </Stack>
+                </Stack>
+            </CardContent>
+        </Card>
+    );
+};
+
+const DeeplinkField: React.FC<{ label: string; value: string; mono?: boolean }> = ({ label, value, mono }) => (
+    <Stack direction="row" spacing={1.5} sx={{ mb: 0.5, flexWrap: 'wrap' }}>
+        <Typography sx={{ ...text.detail, minWidth: 110, fontWeight: 700 }}>{label}:</Typography>
+        <Typography
+            sx={{
+                ...text.detail,
+                wordBreak: 'break-all',
+                fontFamily: mono
+                    ? 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+                    : undefined,
+            }}
+        >
+            {value}
+        </Typography>
+    </Stack>
+);
+
+const dangerCard = {
+    ...card.root,
+    border: `2px solid ${colors.statusErrorAlt}`,
+};
+
+const dangerOutlineButton = {
+    fontSize: font.label,
+    fontWeight: 700,
+    padding: '12px 30px',
+    borderRadius: '30px',
+    textTransform: 'none' as const,
+    color: colors.statusErrorAlt,
+    border: `1px solid ${colors.statusErrorAlt}`,
+    '&:hover': {
+        borderColor: colors.statusErrorAlt,
+        backgroundColor: 'rgba(244, 67, 54, 0.08)',
+    },
+    '&.Mui-disabled': {
+        color: 'rgba(244, 67, 54, 0.4)',
+        borderColor: 'rgba(244, 67, 54, 0.3)',
+    },
 };
