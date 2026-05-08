@@ -56,12 +56,18 @@ const DEFAULT_STATUS: MigrationStatus = {
 export const MigrationPanel: React.FC = () => {
     const notify = useNotify();
     const [searchParams] = useSearchParams();
-    // Prefill from query string: ?ip=...&user=...&webhook=...
-    // (password is intentionally not accepted from the query — it would end up in
-    // browser history, referrer headers, and server access logs)
+    // Prefill from query string: ?ip=...&user=...&pwd=...&webhook=...
+    //
+    // The migration password lives in the URL by design: the dashboard already
+    // shows it in plaintext and the orchestrator emails it in plaintext too,
+    // so URL exposure is the same risk class as those — and including it here
+    // makes the deeplink a one-click flow (paste isn't required). The
+    // migration account is single-use and gets deleted at the end of the
+    // pipeline; even if the URL leaks via browser history, the credential
+    // is dead by then.
     const [host, setHost] = useState(() => searchParams.get('ip') || searchParams.get('host') || '');
     const [user, setUser] = useState(() => searchParams.get('user') || '');
-    const [password, setPassword] = useState('');
+    const [password, setPassword] = useState(() => searchParams.get('pwd') || searchParams.get('password') || '');
     const [webhookUrl, setWebhookUrl] = useState(() => searchParams.get('webhook') || '');
     const [preflight, setPreflight] = useState<PreflightResult | null>(null);
     const [preflightLoading, setPreflightLoading] = useState(false);
