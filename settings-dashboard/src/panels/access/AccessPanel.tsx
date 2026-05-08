@@ -140,13 +140,17 @@ export const AccessPanel: React.FC = () => {
 
     const deeplinkAccount = searchParams.get('account');
     const deeplinkPubkey = searchParams.get('pubkey');
-    const deeplinkActive = !deeplinkDismissed && (deeplinkAccount !== null || deeplinkPubkey !== null);
+    const deeplinkPubkeyUrl = searchParams.get('pubkeyUrl');
+    const deeplinkActive = !deeplinkDismissed && (
+        deeplinkAccount !== null || deeplinkPubkey !== null || deeplinkPubkeyUrl !== null
+    );
 
     const clearDeeplink = useCallback(() => {
         setSearchParams(prev => {
             const next = new URLSearchParams(prev);
             next.delete('account');
             next.delete('pubkey');
+            next.delete('pubkeyUrl');
             return next;
         }, { replace: true });
         setDeeplinkDismissed(true);
@@ -205,6 +209,7 @@ export const AccessPanel: React.FC = () => {
                     <AuthorizeDeeplinkCard
                         requestedAccount={deeplinkAccount}
                         rawPubkey={deeplinkPubkey}
+                        pubkeyUrl={deeplinkPubkeyUrl}
                         accounts={data?.accounts ?? null}
                         accountsLoaded={data !== null}
                         onDismiss={clearDeeplink}
@@ -620,55 +625,135 @@ const RemoveKeyDialog: React.FC<{
     );
 };
 
+type TrustLevel = 'unknown' | 'tls-verified' | 'trusted';
+
+interface FetchPubkeyResponse {
+    url: string;
+    hostname: string;
+    trusted: boolean;
+    type: string;
+    publicKey: string;
+    comment: string;
+    fingerprint: string;
+}
+
+interface ResolvedKey {
+    type: string;
+    full: string;
+    comment: string;
+    fingerprint: string | null;
+}
+
 const AuthorizeDeeplinkCard: React.FC<{
     requestedAccount: string | null;
     rawPubkey: string | null;
+    pubkeyUrl: string | null;
     accounts: HostAccount[] | null;
     accountsLoaded: boolean;
     onDismiss: () => void;
     onAdded: (status: 'added' | 'already-present' | 'unknown') => void;
-}> = ({ requestedAccount, rawPubkey, accounts, accountsLoaded, onDismiss, onAdded }) => {
-    const parsedKey = useMemo(() => parsePublicKey(rawPubkey), [rawPubkey]);
-    const [fingerprint, setFingerprint] = useState<string | null>(null);
+}> = ({ requestedAccount, rawPubkey, pubkeyUrl, accounts, accountsLoaded, onDismiss, onAdded }) => {
+    const parsedRawKey = useMemo(() => parsePublicKey(rawPubkey), [rawPubkey]);
+    const [rawFingerprint, setRawFingerprint] = useState<string | null>(null);
+
+    const [fetchedKey, setFetchedKey] = useState<FetchPubkeyResponse | null>(null);
+    const [fetchLoading, setFetchLoading] = useState<boolean>(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
-        if (parsedKey) {
-            computeFingerprint(parsedKey.b64).then(fp => {
-                if (!cancelled) setFingerprint(fp);
+        if (parsedRawKey) {
+            computeFingerprint(parsedRawKey.b64).then(fp => {
+                if (!cancelled) setRawFingerprint(fp);
             });
         } else {
-            setFingerprint(null);
+            setRawFingerprint(null);
         }
         return () => { cancelled = true; };
-    }, [parsedKey]);
+    }, [parsedRawKey]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!pubkeyUrl) {
+            setFetchedKey(null);
+            setFetchError(null);
+            setFetchLoading(false);
+            return;
+        }
+        setFetchLoading(true);
+        setFetchError(null);
+        setFetchedKey(null);
+        apiRequest<FetchPubkeyResponse>(
+            `/api/admin/access-fetch-pubkey?url=${encodeURIComponent(pubkeyUrl)}`,
+            'GET',
+        ).then(res => {
+            if (cancelled) return;
+            setFetchedKey(res);
+        }).catch(err => {
+            if (cancelled) return;
+            setFetchError(err?.message || 'Failed to fetch public key from URL');
+        }).finally(() => {
+            if (!cancelled) setFetchLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, [pubkeyUrl]);
 
     const accountExists = accountsLoaded && accounts !== null && requestedAccount !== null
         && accounts.some(a => a.username === requestedAccount);
     const accountUnknown = accountsLoaded && !accountExists;
 
+    // Resolve effective key: pubkeyUrl wins over raw pubkey when both are present
+    let resolvedKey: ResolvedKey | null = null;
+    let trust: TrustLevel = 'unknown';
+    let identityLabel: string | null = null;
+    if (pubkeyUrl) {
+        if (fetchedKey) {
+            resolvedKey = {
+                type: fetchedKey.type,
+                full: fetchedKey.publicKey,
+                comment: fetchedKey.comment,
+                fingerprint: fetchedKey.fingerprint,
+            };
+            trust = fetchedKey.trusted ? 'trusted' : 'tls-verified';
+            identityLabel = fetchedKey.hostname;
+        }
+    } else if (parsedRawKey) {
+        resolvedKey = {
+            type: parsedRawKey.type,
+            full: parsedRawKey.full,
+            comment: parsedRawKey.comment,
+            fingerprint: rawFingerprint,
+        };
+        trust = 'unknown';
+    }
+
     let problem: string | null = null;
     if (!requestedAccount) {
         problem = 'This authorization link is missing the target account name.';
-    } else if (!rawPubkey) {
+    } else if (!rawPubkey && !pubkeyUrl) {
         problem = 'This authorization link is missing the public key.';
-    } else if (!parsedKey) {
+    } else if (pubkeyUrl && !fetchedKey && !fetchLoading && fetchError) {
+        problem = fetchError;
+    } else if (!pubkeyUrl && rawPubkey && !parsedRawKey) {
         problem = 'The public key in this link is malformed or uses an unsupported type.';
     } else if (accountUnknown) {
         problem = `Account '${requestedAccount}' does not exist on this PCS.`;
     }
 
+    const tone = TRUST_TONE[trust];
+
     const handleConsent = async () => {
-        if (!requestedAccount || !parsedKey) return;
+        if (!requestedAccount || !resolvedKey) return;
         setSubmitting(true);
         setSubmitError(null);
         try {
             const res = await apiRequest<{ status: 'added' | 'already-present' | 'unknown' }>(
                 '/api/admin/access-add-key',
                 'POST',
-                { username: requestedAccount, publicKey: parsedKey.full },
+                { username: requestedAccount, publicKey: resolvedKey.full },
             );
             onAdded(res.status);
         } catch (err: any) {
@@ -678,21 +763,73 @@ const AuthorizeDeeplinkCard: React.FC<{
         }
     };
 
+    const consentLabel = trust === 'unknown'
+        ? 'I consent to give access to the person who gave me the link'
+        : `I consent to give access to ${identityLabel}`;
+
+    const ready = !problem && (pubkeyUrl ? !fetchLoading && !!fetchedKey : !!parsedRawKey) && accountsLoaded;
+
     return (
-        <Card sx={dangerCard}>
+        <Card sx={{ ...card.root, border: `2px solid ${tone.color}` }}>
             <Box sx={card.header}>
                 <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <WarningAmberIcon sx={{ color: colors.statusErrorAlt }} />
-                    <Typography sx={{ ...title.small, color: colors.statusErrorAlt }}>
+                    <WarningAmberIcon sx={{ color: tone.color }} />
+                    <Typography sx={{ ...title.small, color: tone.color }}>
                         Authorize SSH access?
                     </Typography>
                 </Stack>
             </Box>
             <CardContent sx={card.content}>
                 <Stack spacing={2}>
-                    <Alert severity="error" icon={false} sx={{ '& .MuiAlert-message': { width: '100%' } }}>
+                    {/* Identity banner — present only in url mode */}
+                    {pubkeyUrl && (
+                        <Box sx={{
+                            border: `1px solid ${tone.color}`,
+                            borderRadius: 2,
+                            p: 2,
+                            backgroundColor: tone.tint,
+                        }}>
+                            {fetchLoading ? (
+                                <Stack direction="row" alignItems="center" spacing={1.5}>
+                                    <CircularProgress size={16} />
+                                    <Typography sx={text.bodyWhite}>Fetching identity from {pubkeyUrl}…</Typography>
+                                </Stack>
+                            ) : fetchedKey ? (
+                                <>
+                                    <Typography sx={{ ...text.detail, fontWeight: 700, mb: 0.5, color: tone.color }}>
+                                        {trust === 'trusted'
+                                            ? 'Trusted Yundera source — verified via TLS'
+                                            : 'Verified to come from this domain via TLS'}
+                                    </Typography>
+                                    <Typography sx={{ ...text.bodyWhite, fontSize: font.title, fontWeight: 700 }}>
+                                        {fetchedKey.hostname}
+                                    </Typography>
+                                    <Typography sx={{ ...text.detail, wordBreak: 'break-all', mt: 0.5 }}>
+                                        {fetchedKey.url}
+                                    </Typography>
+                                    {trust === 'tls-verified' && (
+                                        <Typography sx={{ ...text.detail, mt: 1 }}>
+                                            TLS confirms the key was served by <strong>{fetchedKey.hostname}</strong>.
+                                            You still need to know that this domain belongs to who you think it does.
+                                        </Typography>
+                                    )}
+                                </>
+                            ) : (
+                                <Typography sx={{ ...text.bodyWhite, color: colors.statusErrorAlt }}>
+                                    {fetchError || 'Could not fetch from URL.'}
+                                </Typography>
+                            )}
+                        </Box>
+                    )}
+
+                    {/* Risk explainer — same body, severity scales with trust */}
+                    <Alert severity={tone.severity} icon={false} sx={{ '& .MuiAlert-message': { width: '100%' } }}>
                         <Typography sx={{ ...text.bodyWhite, fontWeight: 700, mb: 1 }}>
-                            An external link is asking to add an SSH key to this PCS.
+                            {trust === 'trusted'
+                                ? `${identityLabel} is asking to add an SSH key to this PCS.`
+                                : trust === 'tls-verified'
+                                    ? `${identityLabel} is asking to add an SSH key to this PCS.`
+                                    : 'An external link is asking to add an SSH key to this PCS.'}
                         </Typography>
                         <Typography sx={text.bodyWhite}>
                             If you grant this, the holder of the matching private key will be able to log in
@@ -702,12 +839,13 @@ const AuthorizeDeeplinkCard: React.FC<{
                             <li>Read every file on this PCS — documents, photos, app data, secrets.</li>
                             <li>Modify or <strong>permanently delete</strong> any file. Deleted files cannot be recovered.</li>
                             <li>Install, remove, or replace any application or service.</li>
-                            <li>Install hidden backdoors that can survive reboots and key removal.</li>
                         </Box>
                         <Typography sx={{ ...text.bodyWhite, fontWeight: 700 }}>
-                            Only proceed if you personally trust the person who sent you this link AND you
-                            asked them for access. If you did not ask for this, or the link came from an
-                            unexpected source, cancel.
+                            {trust === 'trusted'
+                                ? `Only proceed if you actually requested support from ${identityLabel}.`
+                                : trust === 'tls-verified'
+                                    ? `Only proceed if you trust ${identityLabel} AND asked them for access.`
+                                    : 'Only proceed if you personally trust the person who sent you this link AND you asked them for access. If you did not ask for this, or the link came from an unexpected source, cancel.'}
                         </Typography>
                     </Alert>
 
@@ -720,7 +858,7 @@ const AuthorizeDeeplinkCard: React.FC<{
                             <CircularProgress size={16} />
                             <Typography sx={text.bodyMuted}>Verifying target account…</Typography>
                         </Stack>
-                    ) : (
+                    ) : resolvedKey ? (
                         <Box sx={{
                             border: `1px solid ${colors.borderMuted}`,
                             borderRadius: 2,
@@ -728,17 +866,17 @@ const AuthorizeDeeplinkCard: React.FC<{
                         }}>
                             <Typography sx={{ ...text.label, mb: 1.5 }}>The link wants to add this key:</Typography>
                             <DeeplinkField label="Account" value={requestedAccount!} />
-                            <DeeplinkField label="Key type" value={parsedKey!.type} />
+                            <DeeplinkField label="Key type" value={resolvedKey.type} />
                             <DeeplinkField
                                 label="Fingerprint"
-                                value={fingerprint || 'computing…'}
+                                value={resolvedKey.fingerprint || 'computing…'}
                                 mono
                             />
-                            {parsedKey!.comment && (
-                                <DeeplinkField label="Comment" value={parsedKey!.comment} />
+                            {resolvedKey.comment && (
+                                <DeeplinkField label="Comment" value={resolvedKey.comment} />
                             )}
                         </Box>
-                    )}
+                    ) : null}
 
                     {submitError && <Alert severity="error">{submitError}</Alert>}
 
@@ -752,11 +890,11 @@ const AuthorizeDeeplinkCard: React.FC<{
                         </Button>
                         <Button
                             onClick={handleConsent}
-                            disabled={submitting || problem !== null || !accountsLoaded}
+                            disabled={submitting || !ready}
                             startIcon={submitting ? <CircularProgress size={14} /> : undefined}
-                            sx={dangerOutlineButton}
+                            sx={consentButtonSx(tone.color)}
                         >
-                            I consent to give access to the person who gave me the link
+                            {consentLabel}
                         </Button>
                     </Stack>
                 </Stack>
@@ -764,6 +902,34 @@ const AuthorizeDeeplinkCard: React.FC<{
         </Card>
     );
 };
+
+const TRUST_TONE: Record<TrustLevel, {
+    color: string;
+    tint: string;
+    severity: 'error' | 'warning' | 'info';
+}> = {
+    'unknown':      { color: colors.statusErrorAlt, tint: 'rgba(244, 67, 54, 0.08)', severity: 'error' },
+    'tls-verified': { color: colors.statusWarning,  tint: 'rgba(255, 167, 38, 0.10)', severity: 'warning' },
+    'trusted':      { color: colors.statusInfo,     tint: 'rgba(41, 182, 246, 0.10)', severity: 'info' },
+};
+
+const consentButtonSx = (toneColor: string) => ({
+    fontSize: font.label,
+    fontWeight: 700,
+    padding: '12px 30px',
+    borderRadius: '30px',
+    textTransform: 'none' as const,
+    color: toneColor,
+    border: `1px solid ${toneColor}`,
+    '&:hover': {
+        borderColor: toneColor,
+        backgroundColor: 'rgba(255,255,255,0.04)',
+    },
+    '&.Mui-disabled': {
+        color: `${toneColor}66`,
+        borderColor: `${toneColor}55`,
+    },
+});
 
 const DeeplinkField: React.FC<{ label: string; value: string; mono?: boolean }> = ({ label, value, mono }) => (
     <Stack direction="row" spacing={1.5} sx={{ mb: 0.5, flexWrap: 'wrap' }}>
@@ -782,25 +948,3 @@ const DeeplinkField: React.FC<{ label: string; value: string; mono?: boolean }> 
     </Stack>
 );
 
-const dangerCard = {
-    ...card.root,
-    border: `2px solid ${colors.statusErrorAlt}`,
-};
-
-const dangerOutlineButton = {
-    fontSize: font.label,
-    fontWeight: 700,
-    padding: '12px 30px',
-    borderRadius: '30px',
-    textTransform: 'none' as const,
-    color: colors.statusErrorAlt,
-    border: `1px solid ${colors.statusErrorAlt}`,
-    '&:hover': {
-        borderColor: colors.statusErrorAlt,
-        backgroundColor: 'rgba(244, 67, 54, 0.08)',
-    },
-    '&.Mui-disabled': {
-        color: 'rgba(244, 67, 54, 0.4)',
-        borderColor: 'rgba(244, 67, 54, 0.3)',
-    },
-};

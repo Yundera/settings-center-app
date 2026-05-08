@@ -41,6 +41,13 @@ export interface MigrationRequest {
     /** Target migration user's password. Used once to install an SSH key. */
     password: string;
     webhookUrl?: string;
+    /**
+     * Who initiated this migration. 'ui' is the operator-driven Path A/B
+     * flow via the admin panel. 'cli' is the orchestrator-driven Path C flow
+     * via `docker exec admin … start-migration.ts`. Recorded into the status
+     * file so support diagnostics can tell automated runs from manual ones.
+     */
+    triggeredBy?: 'ui' | 'cli';
 }
 
 export interface PreflightResult {
@@ -66,6 +73,8 @@ export interface MigrationStatus {
         user: string;
     };
     webhookUrl?: string;
+    /** Who started this migration — see MigrationRequest.triggeredBy. */
+    triggeredBy?: 'ui' | 'cli';
     steps: Record<string, MigrationStep>;
     rsync?: RsyncProgress;
     error?: string;

@@ -104,6 +104,7 @@ export async function startMigration(req: MigrationRequest): Promise<MigrationSt
             startedAt: new Date(),
             target: { host: req.host, user: req.user },
             webhookUrl: req.webhookUrl,
+            triggeredBy: req.triggeredBy ?? 'ui',
             steps,
             cancelRequested: false,
         };
