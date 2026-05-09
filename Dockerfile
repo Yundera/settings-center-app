@@ -51,7 +51,14 @@ FROM node:20-alpine AS runner
 # Install runtime dependencies. python3+make+g++ are needed at install time
 # to compile node-pty's native binding against musl in this stage's
 # isolated --prod install (deps stage's binaries don't make it here).
-RUN apk add --no-cache iproute2 openssh-client python3 make g++ linux-headers
+# `curl` is used by the orchestrator's Path C trigger: it SSHes into the
+# host and runs `docker exec admin curl … http://127.0.0.1:80/api/local/migration/start`
+# to kick off the source-driven migration pipeline. Without curl in the
+# admin image, the orchestrator's `docker exec` reports
+# `OCI runtime exec failed: exec: "curl": executable file not found in $PATH`,
+# the migrate-auto job fails with TRIGGER_FAILED, and the migration never
+# reaches the source. See doc/architecture/migration.md (Path C).
+RUN apk add --no-cache iproute2 openssh-client curl python3 make g++ linux-headers
 
 # Install pnpm for production
 RUN corepack enable && corepack prepare pnpm@latest --activate
