@@ -7,7 +7,10 @@ on:
   workflow_dispatch:
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # GHCR requires lowercase repository names. github.repository is "Yundera/settings-center-app"
+  # which docker/metadata-action lowercases automatically, but the raw `outputs:` field on
+  # docker/build-push-action does not — so we hardcode the lowercase form here.
+  IMAGE_NAME: yundera/settings-center-app
 jobs:
   build:
     strategy:
