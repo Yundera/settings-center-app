@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import { MigrationKeyPair, shq } from '../MigrationSSH';
 import { RsyncProgress } from '../MigrationTypes';
-import { getConfig } from '@/configuration/getConfigBackend';
+import { detectHostIP } from '@/backend/cmd/HostExecutor';
 
 /**
  * Runs rsync from this PCS (the source) /DATA to the target PCS /DATA,
@@ -132,16 +132,16 @@ export async function runRsync(opts: RsyncOptions): Promise<void> {
 }
 
 /**
- * Same host-IP detection logic as HostExecutor.detectHostIP, inlined to
- * keep this file self-contained for the streaming path. Resolves the
- * source PCS's host address from inside the container.
+ * Resolve the source PCS's host address from inside the container. Delegates
+ * to HostExecutor.detectHostIP so this step uses the same detection
+ * (HOST_ADDRESS env → default gateway → docker0 → 'host.docker.internal'
+ * last-resort) as every other call site. The previous implementation
+ * skipped detection entirely and went straight to 'host.docker.internal'
+ * when HOST_ADDRESS was unset, which fails on bare-metal/VPS PCS where
+ * 'host.docker.internal' isn't resolvable.
  */
 async function resolveSourceHost(): Promise<string> {
-    if (getConfig('HOST_ADDRESS')) return getConfig('HOST_ADDRESS');
-    // Best-effort: defer to HostExecutor's internal detection by running a
-    // buffered command once to prime the route.
-    // In practice HOST_ADDRESS is set in all PCS deployments.
-    return getConfig('HOST_ADDRESS') || 'host.docker.internal';
+    return detectHostIP();
 }
 
 /**

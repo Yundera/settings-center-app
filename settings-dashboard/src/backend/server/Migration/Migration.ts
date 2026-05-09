@@ -1,4 +1,3 @@
-import { JsonFileContext } from '../SimpleMutex';
 import {
     MigrationStatus,
     MigrationRequest,
@@ -23,56 +22,52 @@ const DEFAULT_STATUS: MigrationStatus = {
     cancelRequested: false,
 };
 
-let context: JsonFileContext<MigrationStatus> | null = null;
-
-export async function getContext(): Promise<JsonFileContext<MigrationStatus>> {
-    if (!context) {
-        context = new JsonFileContext('migration-status', DEFAULT_STATUS);
-        await context.initialize();
-    }
-    return context;
-}
+// In-memory state. The migration runs as async work inside this Node
+// process (rsync child + pipeline orchestration), so durability across
+// admin restarts is not achievable here regardless of where state lives —
+// killing the process kills the migration. Persisting to a JSON file
+// caused write storms during rsync progress updates that corrupted the
+// file and lost step history. Going pure in-memory: state is honest
+// (matches what the process is actually doing), no FS I/O, no atomic
+// rename races. Long-running terminal state lives orchestrator-side
+// (Firestore migrationAutoStatus + target PCS record) for cross-restart
+// visibility.
+let state: MigrationStatus = { ...DEFAULT_STATUS };
 
 export async function getMigrationStatus(): Promise<MigrationStatus> {
-    const ctx = await getContext();
-    return ctx.read();
+    return state;
 }
 
 export async function requestCancel(): Promise<void> {
-    const ctx = await getContext();
-    await ctx.update(s => ({ ...s, cancelRequested: true }));
+    state = { ...state, cancelRequested: true };
 }
 
 async function setPhase(phase: MigrationPhase, patch: Partial<MigrationStatus> = {}): Promise<void> {
-    const ctx = await getContext();
-    await ctx.update(s => ({ ...s, phase, ...patch }));
+    state = { ...state, phase, ...patch };
 }
 
 async function setStep(key: string, status: MigrationStepStatus, message?: string): Promise<void> {
-    const ctx = await getContext();
-    await ctx.update(s => {
-        const now = new Date();
-        const existing = s.steps[key];
-        const step: MigrationStep = {
-            name: key,
-            status,
-            message,
-            startedAt: status === 'running' ? now : existing?.startedAt,
-            finishedAt: status === 'success' || status === 'failed' || status === 'skipped' ? now : existing?.finishedAt,
-        };
-        return { ...s, steps: { ...s.steps, [key]: step } };
-    });
+    const now = new Date();
+    const existing = state.steps[key];
+    const step: MigrationStep = {
+        name: key,
+        status,
+        message,
+        startedAt: status === 'running' ? now : existing?.startedAt,
+        finishedAt:
+            status === 'success' || status === 'failed' || status === 'skipped'
+                ? now
+                : existing?.finishedAt,
+    };
+    state = { ...state, steps: { ...state.steps, [key]: step } };
 }
 
 export async function updateRsyncProgress(p: RsyncProgress): Promise<void> {
-    const ctx = await getContext();
-    await ctx.update(s => ({ ...s, rsync: p }));
+    state = { ...state, rsync: p };
 }
 
 async function isCancelled(): Promise<boolean> {
-    const ctx = await getContext();
-    const s = await ctx.read();
-    return s.cancelRequested;
+    return state.cancelRequested;
 }
 
 /**
@@ -86,40 +81,33 @@ async function isCancelled(): Promise<boolean> {
  * Throws if a migration is already in flight.
  */
 export async function startMigration(req: MigrationRequest): Promise<MigrationStatus> {
-    const ctx = await getContext();
-
-    let canStart = false;
-    await ctx.update(s => {
-        if (isActivePhase(s.phase)) {
-            return s;
-        }
-        canStart = true;
-        const steps: Record<string, MigrationStep> = {};
-        for (const { key } of MIGRATION_STEPS) {
-            steps[key] = { name: key, status: 'pending' };
-        }
-        return {
-            ...DEFAULT_STATUS,
-            phase: 'preflight',
-            startedAt: new Date(),
-            target: { host: req.host, user: req.user },
-            webhookUrl: req.webhookUrl,
-            triggeredBy: req.triggeredBy ?? 'ui',
-            steps,
-            cancelRequested: false,
-        };
-    });
-
-    if (!canStart) {
+    // Single-runtime guard: if a migration is mid-flight in this process,
+    // refuse. Node is single-threaded so this read+write doesn't race.
+    if (isActivePhase(state.phase)) {
         throw new Error('A migration is already in progress');
     }
+
+    const steps: Record<string, MigrationStep> = {};
+    for (const { key } of MIGRATION_STEPS) {
+        steps[key] = { name: key, status: 'pending' };
+    }
+    state = {
+        ...DEFAULT_STATUS,
+        phase: 'preflight',
+        startedAt: new Date(),
+        target: { host: req.host, user: req.user },
+        webhookUrl: req.webhookUrl,
+        triggeredBy: req.triggeredBy ?? 'ui',
+        steps,
+        cancelRequested: false,
+    };
 
     // Fire-and-forget; errors are recorded in state
     runMigration(req).catch(err => {
         console.error('[Migration] unhandled error:', err);
     });
 
-    return ctx.read();
+    return state;
 }
 
 function isActivePhase(phase: MigrationPhase): boolean {
@@ -217,6 +205,14 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         await setPhase('done', { finishedAt: new Date() });
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+
+        // Whichever step was 'running' when we threw is the one that failed.
+        // Without this the dashboard keeps showing a spinner on that step
+        // even though the overall phase is 'failed'/'rolled_back'.
+        const runningKey = Object.keys(state.steps).find(k => state.steps[k]?.status === 'running');
+        if (runningKey) {
+            await setStep(runningKey, 'failed', msg);
+        }
 
         if (sourceStopped) {
             // Rollback: bring source back up so the user has a serving PCS.

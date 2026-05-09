@@ -37,6 +37,21 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
         return { ok: false, checks };
     }
 
+    // 1b. Wipe any stale host key for the target IP from the source's
+    //     known_hosts. Migration targets come from a recycled IP pool — the
+    //     same IP can return with a fresh host key on a later attempt, and
+    //     ssh's `accept-new` policy (used by every step below: preflight,
+    //     pushKey, rsync) will hard-fail with "REMOTE HOST IDENTIFICATION
+    //     HAS CHANGED" rather than re-trust. We're authenticating with
+    //     a one-time password the orchestrator just minted for this exact
+    //     target, so the prior key is meaningless here. Idempotent: ssh-keygen
+    //     -R succeeds even if the host has no entry.
+    try {
+        await executeHostCommand(`ssh-keygen -R ${shq(req.host)} >/dev/null 2>&1; sudo -n ssh-keygen -R ${shq(req.host)} >/dev/null 2>&1; true`);
+    } catch {
+        // Best-effort — if it errors we'll catch the consequence at the next SSH step.
+    }
+
     // 2. SSH reachability to target with provided password
     try {
         const out = await sshpassToTarget(req, 'echo OK');
@@ -82,9 +97,15 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
     // 5. Target free space on /DATA (or its parent if /DATA doesn't exist yet)
     try {
         // Fall back to / if /DATA doesn't exist on target yet (bare Ubuntu case).
+        // No `$variables` here on purpose: HostExecutor.executeHostCommand
+        // wraps the whole command in outer double-quotes and only escapes `"`
+        // — `$NAME` gets expanded by the *host's* shell before it ever reaches
+        // the target, which silently turns "$P" into "" and breaks df.
+        // Earlier piped form `df /DATA … | tail -n1 || df / …` also fails
+        // because tail exits 0 on empty input, so the || never fires.
         const out = await sshpassToTarget(
             req,
-            `df --output=avail -B1 /DATA 2>/dev/null | tail -n1 || df --output=avail -B1 / | tail -n1`
+            `if [ -d /DATA ]; then df --output=avail -B1 /DATA | tail -n1; else df --output=avail -B1 / | tail -n1; fi`
         );
         targetFreeBytes = parseInt(out.stdout.trim(), 10);
         if (!Number.isFinite(targetFreeBytes) || targetFreeBytes <= 0) {

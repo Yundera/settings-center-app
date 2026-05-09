@@ -77,10 +77,25 @@ export async function generateSSHKey(): Promise<{publicKey: string, privateKeyPa
 }
 
 /**
- * Executes a command on the host system via SSH
- * @param command - The command to execute on the host
+ * Executes a command on the host system via SSH.
+ *
+ * Quoting strategy: the previous implementation wrapped `command` in outer
+ * double-quotes and only escaped `"`. That broke for any command containing
+ * `$`, backticks, single-quote-escape idioms (`'\''`), nested $(...), or
+ * heredocs — the local /bin/sh would expand `$VARS`, mangle inner quotes,
+ * or fail with `unterminated quoted string`. Migration steps with
+ * non-trivial bash scripts (df, find, multi-line bash -c '...') hit this
+ * repeatedly.
+ *
+ * New strategy: base64-encode the entire command and pipe it through
+ * `base64 -d | bash` on the host. The OUTER ssh argument is then
+ * alphanumeric-only, so /bin/sh does no expansion or quote interpretation
+ * at all. The inner bash sees the script verbatim, exactly as written.
+ * Same pattern is already used by `installAdminKeyOnHost` further down.
+ *
+ * @param command - The command to execute on the host (any valid bash script)
  * @param options - Optional configuration
- * @returns Promise<string> - Command output
+ * @returns Promise<{stdout, stderr}> - Command output
  */
 export async function executeHostCommand(
     command: string,
@@ -108,25 +123,31 @@ export async function executeHostCommand(
             host = 'host.docker.internal'; // fallback
         }
 
-        // SSH command with options
+        // Base64-encode the command so no character in the script gets
+        // interpreted by either the local shell or the remote shell. Plain
+        // ASCII (A-Z, a-z, 0-9, +, /, =) is safe inside single quotes.
+        // The remote runner MUST be a single quoted argument so the local
+        // /bin/sh doesn't parse the `| base64 -d | bash` pipeline locally
+        // — without the wrapping quotes it would try to pipe ssh's stdout
+        // through base64 and bash in the *admin container* (Alpine, no
+        // bash), producing `bash: not found`.
+        const commandB64 = Buffer.from(command, 'utf8').toString('base64');
+        const remoteRunner = `'echo ${commandB64} | base64 -d | bash'`;
+
         const sshCmd = [
             'ssh',
             '-i', keyPath,
             '-o', 'StrictHostKeyChecking=no',
-            //'-o', 'UserKnownHostsFile=/dev/null',
             '-o', `ConnectTimeout=${Math.floor(timeout / 1000)}`,
             '-o', 'BatchMode=yes',
             `${user}@${host}`,
-            `"${command.replace(/"/g, '\\"')}"`
+            remoteRunner,
         ].join(' ');
 
-        // Execute the SSH command
-        const result = await execute(sshCmd,false);
-
+        const result = await execute(sshCmd, false);
         return result;
-
     } catch (error) {
-        throw new Error(`Failed to execute host command "${command}" : ${ error.message || error}`);
+        throw new Error(`Failed to execute host command "${command.slice(0, 200)}${command.length > 200 ? '…' : ''}" : ${ error.message || error}`);
     }
 }
 
