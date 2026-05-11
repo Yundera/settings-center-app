@@ -17,12 +17,16 @@ import { executeHostCommand } from '@/backend/cmd/HostExecutor';
  * the script outlives this Node process. The script sleeps long enough
  * for the pipeline to wrap up cleanly, then runs `docker compose down`.
  *
- * Step ordering: this MUST be the last step. `cleanup` (remove migration
- * SSH key from target) and `webhook` (notify orchestrator) both run
- * before us — they need admin alive to talk to the outside world. After
- * this step returns, the pipeline writes phase=done and the Node process
- * exits naturally; ~SWITCHOVER_DELAY_SEC later the detached script
- * tears down yundera and source goes silent.
+ * Step ordering: `cleanup` runs before us (needs admin alive to SSH the
+ * target). `webhook` runs AFTER us — the hand-off signal is the final
+ * step. Webhook fires HTTP-only and is fast (<2s typical); the detached
+ * teardown script sleeps SWITCHOVER_DELAY_SEC (default 60s) before
+ * `docker compose down`, which is plenty of slack for webhook +
+ * phase=done writes to land before admin dies. The orchestrator's
+ * webhook handler then drives `pcs-mig-* → pcs-<pcsId>` rename + source
+ * soft-delete via the provider API; its Contabo-API stop typically
+ * races ahead of the detached teardown, and both paths converge on
+ * "source goes silent."
  *
  * Path B (manual) vs Path C (orchestrator-driven): both paths land here
  * the same way. The orchestrator's `promoteMigrationAndDeleteSource`

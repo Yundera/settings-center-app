@@ -7,6 +7,7 @@ export type MigrationPhase =
     | 'stop_source'
     | 'offline_rsync'
     | 'target_self_check'
+    | 'start_user_apps'
     | 'webhook'
     | 'cleanup'
     | 'switchover'
@@ -82,6 +83,12 @@ export interface MigrationStatus {
     cancelRequested: boolean;
 }
 
+// `webhook` is intentionally LAST: it's the final hand-off signal to the
+// orchestrator (or, when ORCHESTRATOR_PUBLIC_URL isn't set, the manual
+// "Complete migration" button the dashboard surfaces in its place). All
+// source-side work — cleanup of the migration SSH key, scheduling the
+// source-stack teardown — runs before that signal. The pcs-dashboard
+// MigrationCard mirrors this order; keep the two in sync.
 export const MIGRATION_STEPS: Array<{ key: string; label: string }> = [
     { key: 'preflight', label: 'Preflight checks' },
     { key: 'push_key', label: 'Install SSH key on target migration account' },
@@ -90,7 +97,8 @@ export const MIGRATION_STEPS: Array<{ key: string; label: string }> = [
     { key: 'stop_source', label: 'Stop local containers + disable self-check cron' },
     { key: 'offline_rsync', label: 'Offline diff rsync (push to target)' },
     { key: 'target_self_check', label: 'Run self-check on target' },
-    { key: 'webhook', label: 'Fire webhook' },
+    { key: 'start_user_apps', label: 'Start user apps on target' },
     { key: 'cleanup', label: 'Cleanup (remove SSH key from target)' },
     { key: 'switchover', label: 'Switchover (source goes silent so target takes over)' },
+    { key: 'webhook', label: 'Fire webhook' },
 ];

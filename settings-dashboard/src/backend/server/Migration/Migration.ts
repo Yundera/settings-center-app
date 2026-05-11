@@ -13,6 +13,7 @@ import { runRsync } from './steps/rsync';
 import { pullImagesOnTarget } from './steps/dockerPull';
 import { stopSource, restartSource } from './steps/stopSource';
 import { triggerTargetSelfCheck } from './steps/targetSelfCheck';
+import { startUserAppsOnTarget } from './steps/startUserApps';
 import { fireWebhook } from './steps/webhook';
 import { scheduleSwitchover } from './steps/switchover';
 import { MigrationKeyPair } from './MigrationSSH';
@@ -185,16 +186,21 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         await triggerTargetSelfCheck(keypair, req.host);
         await setStep('target_self_check', 'success');
 
-        // ---- Webhook ----
-        if (req.webhookUrl) {
-            await setStep('webhook', 'running');
-            await setPhase('webhook');
-            const current = await getMigrationStatus();
-            await fireWebhook(req.webhookUrl, { status: 'success', startedAt: current.startedAt });
-            await setStep('webhook', 'success');
-        } else {
-            await setStep('webhook', 'skipped', 'No webhook URL configured');
-        }
+        // ---- Start user apps on target ----
+        // Brings up the per-app docker compose stacks that were rsynced into
+        // /DATA/AppData/casaos/apps/<app>/. The target's normal self-check
+        // (above) only re-renders compose for apps already running — correct
+        // on a healthy box but wrong post-migration, when nothing is running
+        // yet because the apps just landed via rsync. This step calls the
+        // same script with FORCE_START=1 to bypass that gate exactly once.
+        // Runs AFTER target_self_check so the target's .env has been
+        // regenerated with the target's IP/domain (ensure-public-ip.sh ran
+        // during the self-check) — env injection uses the new host's values,
+        // not the rsynced source values.
+        await setStep('start_user_apps', 'running');
+        await setPhase('start_user_apps');
+        await startUserAppsOnTarget(keypair, req.host);
+        await setStep('start_user_apps', 'success');
 
         // ---- Cleanup (remove our SSH key from the target migration user) ----
         await setStep('cleanup', 'running');
@@ -205,7 +211,10 @@ async function runMigration(req: MigrationRequest): Promise<void> {
 
         // ---- Switchover (schedule source-side teardown of the yundera
         // system stack so target becomes the sole mesh-router agent for
-        // this domain). MUST be the last step — see switchover.ts header.
+        // this domain). `scheduleSwitchover` only schedules a detached
+        // teardown with a ~60s delay; the admin process running this
+        // pipeline stays alive long enough to fire the webhook below and
+        // write phase=done. See switchover.ts header.
         await setStep('switchover', 'running');
         await setPhase('switchover');
         try {
@@ -219,6 +228,25 @@ async function runMigration(req: MigrationRequest): Promise<void> {
             const swMsg = swErr instanceof Error ? swErr.message : String(swErr);
             console.error('[Migration] schedule switchover failed:', swMsg);
             await setStep('switchover', 'failed', `Scheduling failed: ${swMsg}. Bring down /DATA/AppData/casaos/apps/yundera manually before promoting.`);
+        }
+
+        // ---- Webhook (final hand-off signal — last step) ----
+        // The orchestrator's webhook handler runs `promoteMigrationAndDelete-
+        // Source`, which renames the target to `pcs-<pcsId>` and soft-deletes
+        // this source via the Contabo API. That hard-stop will likely race
+        // ahead of the 60s detached teardown scheduled above, which is fine —
+        // both paths converge on "source goes silent." When ORCHESTRATOR_PUBLIC
+        // _URL is unset (typical in dev), the step records 'skipped' and the
+        // user clicks the dashboard's "Complete migration" button, which hits
+        // the same promote path.
+        if (req.webhookUrl) {
+            await setStep('webhook', 'running');
+            await setPhase('webhook');
+            const current = await getMigrationStatus();
+            await fireWebhook(req.webhookUrl, { status: 'success', startedAt: current.startedAt });
+            await setStep('webhook', 'success');
+        } else {
+            await setStep('webhook', 'skipped', 'No webhook URL configured');
         }
 
         await setPhase('done', { finishedAt: new Date() });
