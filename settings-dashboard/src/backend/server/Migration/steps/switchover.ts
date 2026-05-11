@@ -78,12 +78,18 @@ export async function scheduleSwitchover(): Promise<void> {
     // Pass the script body via base64 so we don't have to escape it
     // through HostExecutor's command pipeline.
     const scriptB64 = Buffer.from(script, 'utf8').toString('base64');
+    // Why a subshell for the spawn line: joining "setsid … &" with " && disown"
+    // produces "setsid … & && disown" — bash treats "& &&" as a syntax error and
+    // the whole one-liner aborts before any of it runs (we saw exactly that
+    // failure in a migration: "syntax error near unexpected token `&&'"). The
+    // subshell `(setsid … &)` runs the spawn-and-backgrounding inside a child
+    // shell that exits immediately, leaving the detached script alive. setsid
+    // already starts a new session so SIGHUP from the parent shell exiting
+    // won't reach it — explicit `disown` is unnecessary.
     const remoteCmd = [
         `echo ${scriptB64} | base64 -d > ${SWITCHOVER_SCRIPT_PATH}`,
         `chmod +x ${SWITCHOVER_SCRIPT_PATH}`,
-        `setsid ${SWITCHOVER_SCRIPT_PATH} </dev/null >>${SWITCHOVER_LOG_PATH} 2>&1 &`,
-        // Disown so the trailing `&` doesn't keep stdin held open.
-        'disown',
+        `(setsid ${SWITCHOVER_SCRIPT_PATH} </dev/null >>${SWITCHOVER_LOG_PATH} 2>&1 &)`,
         // Sanity check: the script file should exist now. If this fails,
         // the spawn was the problem and we want to fail the step loudly.
         `test -x ${SWITCHOVER_SCRIPT_PATH}`,
