@@ -14,6 +14,7 @@ import { pullImagesOnTarget } from './steps/dockerPull';
 import { stopSource, restartSource } from './steps/stopSource';
 import { triggerTargetSelfCheck } from './steps/targetSelfCheck';
 import { fireWebhook } from './steps/webhook';
+import { scheduleSwitchover } from './steps/switchover';
 import { MigrationKeyPair } from './MigrationSSH';
 
 const DEFAULT_STATUS: MigrationStatus = {
@@ -201,6 +202,24 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         await cleanupMigrationKey(keypair, req);
         keypair = undefined;
         await setStep('cleanup', 'success');
+
+        // ---- Switchover (schedule source-side teardown of the yundera
+        // system stack so target becomes the sole mesh-router agent for
+        // this domain). MUST be the last step — see switchover.ts header.
+        await setStep('switchover', 'running');
+        await setPhase('switchover');
+        try {
+            await scheduleSwitchover();
+            await setStep('switchover', 'success', 'Source teardown scheduled (will go silent in ~60s)');
+        } catch (swErr) {
+            // Don't blow up the whole migration if scheduling the
+            // switchover failed — the migration data is already on
+            // target and the orchestrator can drive a manual cutover
+            // (the operator runs `compose down` from any SSH session).
+            const swMsg = swErr instanceof Error ? swErr.message : String(swErr);
+            console.error('[Migration] schedule switchover failed:', swMsg);
+            await setStep('switchover', 'failed', `Scheduling failed: ${swMsg}. Bring down /DATA/AppData/casaos/apps/yundera manually before promoting.`);
+        }
 
         await setPhase('done', { finishedAt: new Date() });
     } catch (err) {

@@ -9,6 +9,7 @@ export type MigrationPhase =
     | 'target_self_check'
     | 'webhook'
     | 'cleanup'
+    | 'switchover'
     | 'done'
     | 'failed'
     | 'rolling_back'
@@ -91,4 +92,5 @@ export const MIGRATION_STEPS: Array<{ key: string; label: string }> = [
     { key: 'target_self_check', label: 'Run self-check on target' },
     { key: 'webhook', label: 'Fire webhook' },
     { key: 'cleanup', label: 'Cleanup (remove SSH key from target)' },
+    { key: 'switchover', label: 'Switchover (source goes silent so target takes over)' },
 ];
