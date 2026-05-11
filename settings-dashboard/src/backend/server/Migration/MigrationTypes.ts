@@ -8,6 +8,7 @@ export type MigrationPhase =
     | 'offline_rsync'
     | 'target_self_check'
     | 'start_user_apps'
+    | 'verify_destination'
     | 'webhook'
     | 'cleanup'
     | 'switchover'
@@ -98,7 +99,8 @@ export const MIGRATION_STEPS: Array<{ key: string; label: string }> = [
     { key: 'offline_rsync', label: 'Offline diff rsync (push to target)' },
     { key: 'target_self_check', label: 'Run self-check on target' },
     { key: 'start_user_apps', label: 'Start user apps on target' },
-    { key: 'cleanup', label: 'Cleanup (remove SSH key from target)' },
+    { key: 'verify_destination', label: 'Verify destination serves domain' },
+    { key: 'cleanup', label: 'Revoke target migration access' },
     { key: 'switchover', label: 'Switchover (source goes silent so target takes over)' },
-    { key: 'webhook', label: 'Fire webhook' },
+    { key: 'webhook', label: 'Delete source PCS (via webhook → orchestrator)' },
 ];

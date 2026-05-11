@@ -14,6 +14,7 @@ import { pullImagesOnTarget } from './steps/dockerPull';
 import { stopSource, restartSource } from './steps/stopSource';
 import { triggerTargetSelfCheck } from './steps/targetSelfCheck';
 import { startUserAppsOnTarget } from './steps/startUserApps';
+import { verifyDestination } from './steps/verifyDestination';
 import { fireWebhook } from './steps/webhook';
 import { scheduleSwitchover } from './steps/switchover';
 import { MigrationKeyPair } from './MigrationSSH';
@@ -70,6 +71,47 @@ export async function updateRsyncProgress(p: RsyncProgress): Promise<void> {
 
 async function isCancelled(): Promise<boolean> {
     return state.cancelRequested;
+}
+
+/**
+ * Format the final rsync state into a short human message for setStep().
+ * The orchestrator's source pipeline emits `RsyncProgress.bytesTransferred`
+ * on every progress2 line — the *last* value before rsync exits is the
+ * total bytes pushed in that pass. Using it as a step.message gives the
+ * operator a concrete "X GB transferred" sub-line in the dashboard's step
+ * list (matches the live rsync chip while the step is running).
+ */
+function describeRsyncResult(
+    rsync: RsyncProgress | undefined,
+    verb: string,
+    suffix: string,
+): string {
+    if (!rsync || !rsync.bytesTransferred || rsync.bytesTransferred <= 0) {
+        return `${verb} ${suffix}`;
+    }
+    return `${verb} ${humanBytes(rsync.bytesTransferred)} ${suffix}`;
+}
+
+function humanBytes(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return '0B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let v = n;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${v.toFixed(i <= 1 ? 0 : 1)}${units[i]}`;
+}
+
+/**
+ * Split "wisera.inojob.com" → {userDomain: "wisera", serverDomain: "inojob.com"}.
+ * The mesh-router-backend resolves on the user-domain piece alone (everything
+ * before the first dot); everything after the first dot is the server zone
+ * the backend lives under. Returns empty strings if the input doesn't have
+ * the expected shape — caller should treat as "skip the check".
+ */
+function splitDomain(fqdn: string): {userDomain: string; serverDomain: string} {
+    const idx = fqdn.indexOf('.');
+    if (idx <= 0 || idx === fqdn.length - 1) return {userDomain: '', serverDomain: ''};
+    return {userDomain: fqdn.slice(0, idx), serverDomain: fqdn.slice(idx + 1)};
 }
 
 /**
@@ -149,14 +191,26 @@ async function runMigration(req: MigrationRequest): Promise<void> {
             onProgress: updateRsyncProgress,
             isCancelled,
         });
-        await setStep('online_rsync', 'success');
+        await setStep('online_rsync', 'success',
+            describeRsyncResult(state.rsync, 'pushed', `to ${req.host}`));
         if (await isCancelled()) throw new Error('Cancelled');
 
-        // ---- Pre-pull docker images on target ----
+        // ---- Pre-pull docker images on target (per compose stack) ----
         await setStep('docker_pull', 'running');
         await setPhase('docker_pull');
-        const pulled = await pullImagesOnTarget(keypair, req.host);
-        await setStep('docker_pull', 'success', `Pulled ${pulled.length} images on target`);
+        const pullResult = await pullImagesOnTarget(keypair, req.host);
+        const pullMsgParts: string[] = [];
+        if (pullResult.installedDocker) pullMsgParts.push('docker installed');
+        if (pullResult.composeFilesPulled.length > 0) {
+            pullMsgParts.push(`pulled images for ${pullResult.composeFilesPulled.length} stack${pullResult.composeFilesPulled.length === 1 ? '' : 's'}`);
+        }
+        if (pullResult.failedFiles.length > 0) {
+            pullMsgParts.push(`${pullResult.failedFiles.length} failed (will retry during self-check)`);
+        }
+        if (pullResult.composeFilesPulled.length === 0 && pullResult.failedFiles.length === 0) {
+            pullMsgParts.push('no compose files found');
+        }
+        await setStep('docker_pull', 'success', pullMsgParts.join(' · '));
         if (await isCancelled()) throw new Error('Cancelled');
 
         // ---- Stop source (LOCAL — bring our own apps + cron down) ----
@@ -164,7 +218,8 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         await setPhase('stop_source');
         await stopSource();
         sourceStopped = true;
-        await setStep('stop_source', 'success');
+        await setStep('stop_source', 'success',
+            'User compose stacks stopped, self-check cron disabled — source data is quiescent');
         if (await isCancelled()) throw new Error('Cancelled');
 
         // ---- Offline diff rsync (with --delete) ----
@@ -177,14 +232,16 @@ async function runMigration(req: MigrationRequest): Promise<void> {
             onProgress: updateRsyncProgress,
             isCancelled,
         });
-        await setStep('offline_rsync', 'success');
+        await setStep('offline_rsync', 'success',
+            describeRsyncResult(state.rsync, 'synced delta', `with --delete`));
         if (await isCancelled()) throw new Error('Cancelled');
 
         // ---- Trigger self-check on target (handover) ----
         await setStep('target_self_check', 'running');
         await setPhase('target_self_check');
         await triggerTargetSelfCheck(keypair, req.host);
-        await setStep('target_self_check', 'success');
+        await setStep('target_self_check', 'success',
+            'ensure-*.sh chain ran — target users created, docker installed, system stack up');
 
         // ---- Start user apps on target ----
         // Brings up the per-app docker compose stacks that were rsynced into
@@ -200,14 +257,43 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         await setStep('start_user_apps', 'running');
         await setPhase('start_user_apps');
         await startUserAppsOnTarget(keypair, req.host);
-        await setStep('start_user_apps', 'success');
+        await setStep('start_user_apps', 'success',
+            'docker compose up -d ran for every user app with the target\'s env');
 
-        // ---- Cleanup (remove our SSH key from the target migration user) ----
+        // ---- Verify destination serves the domain (pre-cutover check) ----
+        // Validates BEFORE switchover that the target is ready to take over:
+        // (a) HTTPS-probes the target's IP with the user's FQDN as Host —
+        //     proves caddy on the target routes the right vhost to the
+        //     right container, independent of DNS / CF / gateway.
+        // (b) Queries the mesh-router-backend's resolve endpoint to confirm
+        //     the target's agent has registered its IP under the user's
+        //     domain — without this, traffic won't actually flip once the
+        //     source goes silent.
+        // Failure here aborts the migration with rollback, while the source
+        // is still serving and recovery is cheap. The orchestrator's
+        // post-cutover waitForDomainReady is a *secondary* check after
+        // promote; this one is the primary pre-flight.
+        await setStep('verify_destination', 'running');
+        await setPhase('verify_destination');
+        const {userDomain, serverDomain} = splitDomain(process.env.DOMAIN || process.env.PCS_DOMAIN || '');
+        if (!userDomain || !serverDomain) {
+            await setStep('verify_destination', 'skipped',
+                `Could not parse DOMAIN env (got "${process.env.DOMAIN ?? ''}") — skipping pre-cutover check`);
+        } else {
+            const verifyResult = await verifyDestination(keypair, req.host, userDomain, serverDomain);
+            if (!verifyResult.ok) {
+                throw new Error(`Destination verification failed — ${verifyResult.summary}`);
+            }
+            await setStep('verify_destination', 'success', verifyResult.summary);
+        }
+
+        // ---- Revoke target migration access (remove our SSH key) ----
         await setStep('cleanup', 'running');
         await setPhase('cleanup');
         await cleanupMigrationKey(keypair, req);
         keypair = undefined;
-        await setStep('cleanup', 'success');
+        await setStep('cleanup', 'success',
+            'Migration SSH key removed from target — source can no longer reach it');
 
         // ---- Switchover (schedule source-side teardown of the yundera
         // system stack so target becomes the sole mesh-router agent for
