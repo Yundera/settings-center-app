@@ -8,28 +8,34 @@ import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
  * during the orchestrator's post-cutover `waitForDomainReady`, which fires
  * after source has been soft-deleted and rollback is no longer cheap.
  *
- * Two checks:
+ * Two checks, polled until both pass or the deadline elapses:
  *   1. HTTPS probe of the target's IP with the user's domain in the
  *      Host header. This validates that the target's mesh-router-caddy /
  *      casaos chain serves real content for `<domain>` — independent of
  *      DNS / CF / gateway routing (since DNS still resolves to source at
  *      this point).
  *   2. Backend route lookup at `https://<serverDomain>/router/api/resolve/v2/<domainName>`.
- *      The target's mesh-router-agent should have registered its public IP
- *      against the user's domain when it started up during target_self_check.
- *      A response that includes the target IP means "external traffic will
- *      route here once source's agent drops out."
+ *      The target's mesh-router-agent registers asynchronously after the
+ *      system stack comes up (backend healthcheck → public-IP detect →
+ *      cert request → first registerRoutes). On a clean run this completes
+ *      in ~10–60s; with a transient blip the agent backs off for
+ *      ERROR_RETRY_INTERVAL (default 600s) before retrying. Polling here
+ *      bridges the normal-case gap without waiting for the worst case.
  *
- * Both probes run from the SOURCE host (via execOnTarget — same SSH path
- * as the rest of the migration). The source is the closest verifiable
- * vantage point and has network access to both the target IP and the
- * backend.
+ * Both probes run on the target (via execOnTarget — same SSH path as the
+ * rest of the migration). The target is the closest verifiable vantage
+ * point and has network access to both itself and the public backend.
  */
+
+const POLL_DEADLINE_MS = 120_000; // 2 min — covers normal agent cold-start; well under ERROR_RETRY_INTERVAL=600s
+const POLL_INTERVAL_MS = 5_000;
 
 export interface VerifyDestinationResult {
     ok: boolean;
     /** Human-readable summary suitable for step.message. */
     summary: string;
+    /** How long we polled before settling on this result. */
+    waitedMs: number;
     /** Details for failure diagnosis. */
     httpOk: boolean;
     httpStatus?: number;
@@ -39,6 +45,77 @@ export interface VerifyDestinationResult {
     backendError?: string;
 }
 
+interface HttpProbe {
+    ok: boolean;
+    status?: number;
+    error?: string;
+}
+
+interface BackendProbe {
+    ok: boolean;
+    routes?: VerifyDestinationResult['backendRoutes'];
+    error?: string;
+}
+
+async function probeHttp(
+    keypair: MigrationKeyPair,
+    target: string,
+    domainFqdn: string,
+): Promise<HttpProbe> {
+    // `--resolve` pins the FQDN to the target's IP regardless of the
+    // target host's own DNS. `-k` because the target's cert at this stage
+    // may not yet match the FQDN. `-w '%{http_code}'` so we get the status
+    // code on stdout even when the body is empty.
+    const cmd =
+        `curl -s -k -o /dev/null -w '%{http_code}' ` +
+        `--connect-timeout 5 --max-time 10 ` +
+        `--resolve ${shq(`${domainFqdn}:443:${target}`)} ` +
+        `${shq(`https://${domainFqdn}/`)}`;
+    try {
+        const out = await execOnTarget(keypair, target, cmd);
+        const code = parseInt(out.stdout.trim(), 10);
+        const status = Number.isFinite(code) ? code : undefined;
+        // 2xx/3xx/4xx (anything < 500) means caddy answered for the right
+        // vhost. 5xx / 000 means the path is broken.
+        const ok = status != null && status > 0 && status < 500;
+        return { ok, status };
+    } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+}
+
+async function probeBackend(
+    keypair: MigrationKeyPair,
+    target: string,
+    domain: string,
+    serverDomain: string,
+): Promise<BackendProbe> {
+    const cmd =
+        `curl -s --connect-timeout 5 --max-time 10 ` +
+        `${shq(`https://${serverDomain}/router/api/resolve/v2/${domain}`)}`;
+    try {
+        const out = await execOnTarget(keypair, target, cmd);
+        const body = (out.stdout || '').trim();
+        if (!body) return { ok: false, error: 'empty backend response' };
+        const parsed = JSON.parse(body);
+        const routes: VerifyDestinationResult['backendRoutes'] =
+            Array.isArray(parsed?.routes) ? parsed.routes : [];
+        // Match the target IP anywhere in the routes — `ip` field for
+        // direct routes, embedded in `domain` (e.g. 1-2-3-4.sslip.io) for
+        // nip.io/sslip.io routes registered by the agent.
+        const ipDash = target.replace(/\./g, '-');
+        const ok = routes.some(r =>
+            r.ip === target ||
+            (typeof r.domain === 'string' && r.domain.includes(ipDash)),
+        );
+        return { ok, routes };
+    } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+}
+
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
 export async function verifyDestination(
     keypair: MigrationKeyPair,
     target: string,
@@ -46,79 +123,52 @@ export async function verifyDestination(
     serverDomain: string,
 ): Promise<VerifyDestinationResult> {
     const domainFqdn = serverDomain ? `${domain}.${serverDomain}` : domain;
+    const startedAt = Date.now();
 
-    // ---- 1. Direct HTTPS probe of the target IP with the right Host header.
-    //         `--resolve` pins the FQDN to the target's IP regardless of the
-    //         source host's DNS (which still points at source). `-k` because
-    //         the target's cert at this stage may not yet match the FQDN.
-    //         `-w '%{http_code}'` so we get the status code on stdout even
-    //         when the body is empty. Times out at 10s — if the target's
-    //         caddy isn't answering for the user's domain by now, there's no
-    //         point waiting.
-    const probeCmd =
-        `curl -s -k -o /dev/null -w '%{http_code}' ` +
-        `--connect-timeout 5 --max-time 10 ` +
-        `--resolve ${shq(`${domainFqdn}:443:${target}`)} ` +
-        `${shq(`https://${domainFqdn}/`)}`;
-    let httpOk = false;
-    let httpStatus: number | undefined;
-    let httpError: string | undefined;
-    try {
-        const out = await execOnTarget(keypair, target, probeCmd);
-        const code = parseInt(out.stdout.trim(), 10);
-        httpStatus = Number.isFinite(code) ? code : undefined;
-        // Any 2xx/3xx/4xx (other than CF / proxy errors) means the target's
-        // caddy answered for the right vhost. 5xx with no body / 000 (curl
-        // can't connect) means the path is broken.
-        httpOk = httpStatus != null && httpStatus > 0 && httpStatus < 500;
-    } catch (err) {
-        httpError = err instanceof Error ? err.message : String(err);
+    let http: HttpProbe = { ok: false };
+    let backend: BackendProbe = { ok: false };
+    let attempt = 0;
+
+    while (true) {
+        attempt++;
+        // Re-probe whichever check hasn't yet succeeded. Once a check
+        // passes, freeze it — agent registration only goes one way during
+        // this window, and re-probing risks a flap (e.g. source's agent
+        // re-registers and clobbers the route briefly).
+        if (!http.ok) http = await probeHttp(keypair, target, domainFqdn);
+        if (!backend.ok) backend = await probeBackend(keypair, target, domain, serverDomain);
+
+        if (http.ok && backend.ok) break;
+        if (Date.now() - startedAt >= POLL_DEADLINE_MS) break;
+        await sleep(POLL_INTERVAL_MS);
     }
 
-    // ---- 2. Backend route lookup. The mesh-router-backend resolves the
-    //         domain name (not the FQDN) to a list of registered routes.
-    //         We're looking for ANY route that mentions the target IP —
-    //         the dash-form sslip.io / nip.io routes also carry it.
-    const backendCmd =
-        `curl -s --connect-timeout 5 --max-time 10 ` +
-        `${shq(`https://${serverDomain}/router/api/resolve/v2/${domain}`)}`;
-    let backendOk = false;
-    let backendRoutes: VerifyDestinationResult['backendRoutes'];
-    let backendError: string | undefined;
-    try {
-        const out = await execOnTarget(keypair, target, backendCmd);
-        const body = (out.stdout || '').trim();
-        if (!body) {
-            backendError = 'empty backend response';
-        } else {
-            const parsed = JSON.parse(body);
-            backendRoutes = Array.isArray(parsed?.routes) ? parsed.routes : [];
-            // Look for the target IP anywhere in the routes — `ip` field for
-            // direct routes, embedded in `domain` (e.g. 1-2-3-4.sslip.io)
-            // for DNS-tunnel routes.
-            const ipDash = target.replace(/\./g, '-');
-            backendOk = (backendRoutes || []).some(r =>
-                r.ip === target ||
-                (typeof r.domain === 'string' && r.domain.includes(ipDash)),
-            );
-        }
-    } catch (err) {
-        backendError = err instanceof Error ? err.message : String(err);
-    }
+    const waitedMs = Date.now() - startedAt;
+    const ok = http.ok && backend.ok;
 
-    const ok = httpOk && backendOk;
-    const summary = (() => {
-        const httpPart = httpOk
-            ? `${domainFqdn} responds (HTTP ${httpStatus}) on target ${target}`
-            : `${domainFqdn} did NOT respond on target ${target}` +
-              (httpStatus != null ? ` (HTTP ${httpStatus})` : '') +
-              (httpError ? ` — ${httpError}` : '');
-        const backendPart = backendOk
-            ? `${serverDomain} backend route points at ${target}`
-            : `${serverDomain} backend route does NOT yet include ${target}` +
-              (backendError ? ` — ${backendError}` : '');
-        return `${httpPart} · ${backendPart}`;
-    })();
+    const waitedPart = waitedMs >= POLL_INTERVAL_MS
+        ? ` (after ${Math.round(waitedMs / 1000)}s, ${attempt} attempts)`
+        : '';
+    const httpPart = http.ok
+        ? `${domainFqdn} responds (HTTP ${http.status}) on target ${target}`
+        : `${domainFqdn} did NOT respond on target ${target}` +
+          (http.status != null ? ` (HTTP ${http.status})` : '') +
+          (http.error ? ` — ${http.error}` : '');
+    const backendPart = backend.ok
+        ? `${serverDomain} backend route points at ${target}`
+        : `${serverDomain} backend route does NOT yet include ${target}` +
+          (backend.error ? ` — ${backend.error}` : '');
+    const summary = `${httpPart} · ${backendPart}${waitedPart}`;
 
-    return { ok, summary, httpOk, httpStatus, httpError, backendOk, backendRoutes, backendError };
+    return {
+        ok,
+        summary,
+        waitedMs,
+        httpOk: http.ok,
+        httpStatus: http.status,
+        httpError: http.error,
+        backendOk: backend.ok,
+        backendRoutes: backend.routes,
+        backendError: backend.error,
+    };
 }
