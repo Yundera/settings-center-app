@@ -3,7 +3,7 @@ import type { Duplex } from 'stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import * as pty from 'node-pty';
 
-import { verifyToken } from '@/backend/auth/jwt';
+import { readSessionFromCookieHeader } from '@/backend/auth/session';
 import { defaultHostUser, defaultPrivateKeyPath, detectHostIP } from '@/backend/cmd/HostExecutor';
 
 export const TERMINAL_WS_PATH = '/api/terminal/ws';
@@ -86,27 +86,32 @@ async function startSession(ws: WebSocket): Promise<void> {
 }
 
 /**
- * Hook this onto the http.Server's `upgrade` event. Validates the JWT from
- * the `?token=` query string (browsers can't set headers on WebSocket
- * handshakes), then runs an `ssh admin@host` PTY session piped to the WS.
+ * Hook this onto the http.Server's `upgrade` event. Validates the session
+ * cookie (same one used by the rest of the app — browsers attach it to the
+ * WebSocket handshake automatically), then runs an `ssh admin@host` PTY
+ * session piped to the WS.
  */
 export function handleTerminalUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean {
     if (!req.url) return false;
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname !== TERMINAL_WS_PATH) return false;
 
-    const token = url.searchParams.get('token');
-    if (!token || !verifyToken(token)) {
-        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
-        socket.destroy();
-        return true;
-    }
-
-    wss.handleUpgrade(req, socket, head, ws => {
-        startSession(ws).catch(err => {
-            console.error('Terminal session error:', err);
-            try { ws.close(); } catch { /* ignore */ }
+    // jwtVerify is async; the upgrade callback isn't, so we hand the request
+    // to an async closure and decide there. We must respond on `socket`
+    // ourselves either way because we've claimed the upgrade.
+    (async () => {
+        const user = await readSessionFromCookieHeader(req.headers.cookie || '');
+        if (!user) {
+            socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+            socket.destroy();
+            return;
+        }
+        wss.handleUpgrade(req, socket, head, ws => {
+            startSession(ws).catch(err => {
+                console.error('Terminal session error:', err);
+                try { ws.close(); } catch { /* ignore */ }
+            });
         });
-    });
+    })();
     return true;
 }

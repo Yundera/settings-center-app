@@ -12,7 +12,6 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { localAuthProvider } from "@/configuration/LocalAuthProvider";
 import { button, card, colors, font, spacing, text, title } from "@/app/pages/softTheme";
 
 type Status = "connecting" | "open" | "closed" | "error";
@@ -60,18 +59,13 @@ export const TerminalPanel: React.FC = () => {
         let ws: WebSocket | null = null;
 
         (async () => {
-            let token: string;
-            try {
-                token = await localAuthProvider.getIdToken();
-            } catch (err: any) {
-                setError(err?.message || "Could not get auth token");
-                setStatus("error");
-                return;
-            }
             if (cancelled) return;
 
+            // No query-string token: the session cookie attaches to the
+            // WebSocket handshake automatically (same-origin). The server
+            // verifies it on upgrade.
             const proto = window.location.protocol === "https:" ? "wss" : "ws";
-            const url = `${proto}://${window.location.host}/api/terminal/ws?token=${encodeURIComponent(token)}`;
+            const url = `${proto}://${window.location.host}/api/terminal/ws`;
             ws = new WebSocket(url);
             ws.binaryType = "arraybuffer";
             wsRef.current = ws;

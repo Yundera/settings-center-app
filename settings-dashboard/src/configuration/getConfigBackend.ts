@@ -2,11 +2,14 @@ import {BaseConfig, getConfig as getConfigBackend} from "dashboard-core/backend/
 
 type Config = {
     BASE_PATH: string;
-    JWT_SECRET: string;
+    SESSION_KEY: string;          // optional, base64 HMAC key (dev). If unset, key is read/written at SESSION_KEY_PATH.
+    SESSION_KEY_PATH: string;     // optional path override (default: /app/data/admin-session-key).
     COMPOSE_FOLDER_PATH: string;
     HOST_ADDRESS: string; //optional, used for host commands
     MOCK: string;
     OIDC_REGISTRAR_URL: string;
+    YUNDERA_OIDC_ISSUER: string;  // when set, Yundera shows up in the provider chooser.
+    AUTHORITY_ENDPOINT: string;   // CasaOS UserService base (e.g. https://8080-casaos-${DOMAIN}/v1/users). Falls back to http://casaos:8080/v1/users.
 
     DOMAIN: string;
     PROVIDER_STR: string;

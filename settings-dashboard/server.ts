@@ -5,6 +5,7 @@ import {start} from "@/backend/server";
 import {initializeAllContexts} from "@/backend/server/initializeAllContexts";
 import { initializeEnvironment } from "@/configuration/loadEnvironment";
 import { handleTerminalUpgrade } from "@/backend/server/Terminal/TerminalHandler";
+import { applyAuthGate } from "@/backend/auth/serverGate";
 
 // Load environment variables from .env files before anything else
 initializeEnvironment();
@@ -21,8 +22,15 @@ const app = next({ dev, hostname, port })
 const handle = app.getRequestHandler()
 
 app.prepare().then(async () => {
-    const server = createServer((req, res) => {
+    const server = createServer(async (req, res) => {
         const parsedUrl = parse(req.url!, true)
+        const pathname = parsedUrl.pathname || '/'
+
+        // Gate every page request behind a valid session cookie before Next.js
+        // ever sees it. Bypass list is in serverGate.ts (login chooser, public
+        // APIs, static assets). This is what kills the "401 storm before
+        // Authelia redirect" problem — the SPA can't mount unauthenticated.
+        if (await applyAuthGate(req, res, pathname)) return
 
         // Handle all routes with Next.js
         handle(req, res, parsedUrl)

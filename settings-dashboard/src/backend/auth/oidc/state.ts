@@ -1,17 +1,11 @@
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import {NextApiRequest, NextApiResponse} from 'next';
-import {getConfig} from '@/configuration/getConfigBackend';
+import {SignJWT, jwtVerify} from 'jose';
+import {SESSION_KEY} from '../sessionKey';
 import {OIDCStateClaim} from './types';
 
 const STATE_COOKIE = 'oidc_state';
 const STATE_TTL_SECONDS = 300;
-
-function secret(): string {
-  const s = getConfig('JWT_SECRET');
-  if (!s) throw new Error('JWT_SECRET required for OIDC state signing');
-  return s;
-}
 
 function base64url(buf: Buffer): string {
   return buf.toString('base64')
@@ -43,19 +37,23 @@ function cookieAttrs(req: NextApiRequest, maxAge: number): string {
   ].filter(Boolean).join('; ');
 }
 
-export function setStateCookie(
+export async function setStateCookie(
   res: NextApiResponse,
   req: NextApiRequest,
   claim: OIDCStateClaim,
-): void {
-  const token = jwt.sign(claim as object, secret(), {expiresIn: STATE_TTL_SECONDS});
+): Promise<void> {
+  const token = await new SignJWT(claim as any)
+    .setProtectedHeader({alg: 'HS256'})
+    .setIssuedAt()
+    .setExpirationTime(`${STATE_TTL_SECONDS}s`)
+    .sign(SESSION_KEY);
   res.setHeader('Set-Cookie', `${STATE_COOKIE}=${token}; ${cookieAttrs(req, STATE_TTL_SECONDS)}`);
 }
 
-export function consumeStateCookie(
+export async function consumeStateCookie(
   req: NextApiRequest,
   res: NextApiResponse,
-): OIDCStateClaim | null {
+): Promise<OIDCStateClaim | null> {
   const cookieHeader = req.headers.cookie || '';
   const match = cookieHeader.split(/;\s*/).find(c => c.startsWith(`${STATE_COOKIE}=`));
 
@@ -66,9 +64,10 @@ export function consumeStateCookie(
   const token = match.substring(STATE_COOKIE.length + 1);
 
   try {
-    const payload = jwt.verify(token, secret()) as OIDCStateClaim;
-    if (!payload?.state || !payload?.codeVerifier || !payload?.redirectUri) return null;
-    return payload;
+    const {payload} = await jwtVerify(token, SESSION_KEY);
+    const claim = payload as unknown as OIDCStateClaim;
+    if (!claim?.state || !claim?.codeVerifier || !claim?.redirectUri) return null;
+    return claim;
   } catch {
     return null;
   }

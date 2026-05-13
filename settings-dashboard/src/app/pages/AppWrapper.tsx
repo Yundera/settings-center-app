@@ -25,7 +25,6 @@ import {
 } from "dashboard-core";
 import {Layout as RaLayout, AppBar as RaAppBar} from 'react-admin';
 import {Box, useMediaQuery, Typography} from "@mui/material";
-import {Login} from "@/app/pages/Login";
 import { colors, font, radius, spacing } from '@/app/pages/softTheme';
 
 interface AppProps {
@@ -260,7 +259,7 @@ const App = ({
       dataProvider={dataProvider}
       authProvider={authProvider}
       dashboard={dashboard}
-      loginPage={Login}
+      loginPage={false}
       layout={Layout(panels)}
       i18nProvider={i18nProvider(panels)}
       disableTelemetry

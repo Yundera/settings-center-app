@@ -8,8 +8,15 @@ import {getConfig} from '@/configuration/getConfigBackend';
 // ${DOMAIN}, so if DOMAIN doesn't resolve, OIDC can't work anyway.
 const SUBDOMAIN = 'admin';
 
-export function buildRedirectUri(): string {
+// Authelia ('default') is registered at the un-namespaced /callback path
+// since that's the URL the existing auth-registrar wrote to clients.d/admin.yml
+// and re-registration is a no-op. Additional providers (Yundera, etc.) get
+// their own subfolder and use the same builder with their name.
+export function buildRedirectUri(provider: 'default' | string = 'default'): string {
   const domain = getConfig('DOMAIN');
   if (!domain) throw new Error('DOMAIN not configured; cannot build OIDC redirect URI');
-  return `https://${SUBDOMAIN}-${domain}/api/auth/oidc/callback`;
+  const path = provider === 'default'
+    ? '/api/auth/oidc/callback'
+    : `/api/auth/oidc/${provider}/callback`;
+  return `https://${SUBDOMAIN}-${domain}${path}`;
 }

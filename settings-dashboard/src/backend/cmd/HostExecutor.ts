@@ -55,6 +55,13 @@ export async function generateSSHKey(): Promise<{publicKey: string, privateKeyPa
         // Generate SSH key with ed25519 algorithm
         const passphrase = '';
 
+        // Remove any pre-existing key files first. ssh-keygen prompts
+        // "Overwrite (y/n)?" on existing -f targets and we run it
+        // non-interactively, so a leftover key from a previous boot would
+        // hang the process forever. The private key lives in the container's
+        // writable layer (not a volume), so it survives `docker restart`.
+        await execute(`rm -f ${defaultPrivateKeyPath} ${defaultPrivateKeyPath}.pub`, false);
+
         // Execute ssh-keygen command
         const sshKeygenCmd = `ssh-keygen -t ed25519 -f ${defaultPrivateKeyPath} -N "${passphrase}" -C "${adminKeyComment}-$(date +%s)"`;
 

@@ -3,7 +3,8 @@ import axios from 'axios';
 import {getOIDCClient} from '@/backend/auth/oidc/registration';
 import {getDiscovery, verifyIdToken} from '@/backend/auth/oidc/discovery';
 import {consumeStateCookie} from '@/backend/auth/oidc/state';
-import {generateToken} from '@/backend/auth/jwt';
+import {setSession} from '@/backend/auth/session';
+import {appendSetCookie} from '@/backend/auth/cookies';
 
 interface TokenResponse {
   id_token: string;
@@ -11,17 +12,6 @@ interface TokenResponse {
   refresh_token?: string;
   token_type: string;
   expires_in: number;
-}
-
-interface UserBlob {
-  user: {
-    id: string;
-    fullName: string;
-    email: string;
-    avatar: string;
-    role: string;
-  };
-  authToken: string;
 }
 
 function deriveRole(groups: unknown): string {
@@ -43,7 +33,7 @@ function htmlError(res: NextApiResponse, message: string, status = 400) {
   res.send(
     `<!DOCTYPE html><html><head><title>Sign-in failed</title></head><body>` +
     `<h1>Sign-in failed</h1><pre>${escapeHtml(message)}</pre>` +
-    `<p><a href="/">Return to dashboard</a></p></body></html>`
+    `<p><a href="/login">Back to sign-in</a></p></body></html>`
   );
 }
 
@@ -52,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({message: 'Method not allowed'});
   }
 
-  const stateClaim = consumeStateCookie(req, res);
+  const stateClaim = await consumeStateCookie(req, res);
   if (!stateClaim) {
     return htmlError(res, 'Missing or expired auth state. Please retry sign-in.');
   }
@@ -112,36 +102,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const groups = (claims as any).groups as unknown;
 
     const userId = preferredUsername || sub;
-    const blob: UserBlob = {
-      user: {
-        id: userId,
-        fullName: name || preferredUsername || sub,
-        email: email || '',
-        avatar: '',
-        role: deriveRole(groups),
-      },
-      authToken: generateToken(userId),
-    };
+    await setSession(req, res, {
+      id: userId,
+      fullName: name || preferredUsername || sub,
+      email: email || '',
+      avatar: '',
+      role: deriveRole(groups),
+      provider: 'authelia',
+    });
+    appendSetCookie(res, `last_provider=authelia; Path=/; Max-Age=${60 * 60 * 24 * 90}; SameSite=Lax`);
 
     const returnTo = stateClaim.returnTo || '/';
-    const userJson = JSON.stringify(blob);
-
-    res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(`<!DOCTYPE html>
-<html>
-  <head><title>Signing you in…</title><meta name="robots" content="noindex"></head>
-  <body>
-    <p>Signing you in…</p>
-    <script>
-      try { localStorage.setItem('user', ${JSON.stringify(userJson)}); } catch (e) {}
-      location.replace(${JSON.stringify(returnTo)});
-    </script>
-    <noscript>JavaScript is required to complete sign-in. <a href="/">Continue</a></noscript>
-  </body>
-</html>`);
+    res.redirect(302, returnTo);
   } catch (err: any) {
     const detail = err?.response?.data || err?.message || String(err);
-    console.error('OIDC callback error:', detail);
+    console.error('Authelia OIDC callback error:', detail);
     return htmlError(res, typeof detail === 'string' ? detail : JSON.stringify(detail), 500);
   }
 }

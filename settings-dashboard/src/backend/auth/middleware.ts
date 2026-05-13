@@ -1,39 +1,25 @@
-// middleware/auth.ts
-import { NextApiRequest, NextApiResponse } from 'next';
-import {verifyToken} from "@/backend/auth/jwt";
+import {NextApiRequest, NextApiResponse} from 'next';
+import {readSession, SessionUser} from './session';
 
 export function authMiddleware(
-  handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void>
+  handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void,
 ) {
   return async (req: NextApiRequest, res: NextApiResponse) => {
     try {
-      const authHeader = req.headers.authorization;
-
-      if (!authHeader?.startsWith('Bearer ')) {
-        return res.status(401).json({
-          message: 'No token provided'
-        });
+      const user = await readSession(req);
+      if (!user) {
+        return res.status(401).json({message: 'Not authenticated'});
       }
-
-      const token = authHeader.split(' ')[1];
-      const decoded = verifyToken(token);
-
-      if (!decoded) {
-        return res.status(401).json({
-          message: 'Invalid token'
-        });
-      }
-
-      // Add user info to request
-      (req as any).user = decoded;
-
-      // Continue to the actual handler
+      (req as any).user = user;
       return handler(req, res);
     } catch (error) {
       console.error('Auth middleware error:', error);
-      return res.status(500).json({
-        message: 'Internal server error'
-      });
+      return res.status(500).json({message: 'Internal server error'});
     }
   };
+}
+
+// Helper for routes that want the typed session user without wrapping.
+export async function getSessionUser(req: NextApiRequest): Promise<SessionUser | null> {
+  return readSession(req);
 }

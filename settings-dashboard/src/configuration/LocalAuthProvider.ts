@@ -1,79 +1,79 @@
 import {AuthProvider} from "ra-core";
-import axios from "axios";
 import {AuthProviderAPIAccess} from "dashboard-core/interface/AuthProviderAPIAccess";
 
-interface LocalUser{
-  user: {
-    id: string
-    fullName: string
-    email: string
-    avatar: string
-    role: string
-  },
-  authToken: string
-}
+// The server-side gate in server.ts redirects unauthenticated page loads to
+// /login before the SPA ever mounts, so checkAuth here is just a sanity
+// probe — any 401 from /api/me means the cookie expired between page load
+// and a downstream call.
 
-function redirectToOIDCLogin(): Promise<never> {
-  if (typeof window === "undefined") {
-    return Promise.reject(new Error("Not authenticated"));
-  }
+function bounceToLogin(): Promise<never> {
+  if (typeof window === "undefined") return Promise.reject(new Error("Not authenticated"));
   const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
-  window.location.replace(`/api/auth/oidc/login?returnTo=${returnTo}`);
+  window.location.replace(`/login?returnTo=${returnTo}`);
   return new Promise<never>(() => {}); // navigation in progress
 }
 
-export const localAuthProvider : ( AuthProvider & AuthProviderAPIAccess)= {
+interface MeUser {
+  id: string;
+  fullName: string;
+  email: string;
+  avatar: string;
+  role: string;
+  provider: string;
+}
+
+async function fetchMe(): Promise<MeUser | null> {
+  try {
+    const res = await fetch('/api/me', {credentials: 'same-origin'});
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.user || null;
+  } catch {
+    return null;
+  }
+}
+
+export const localAuthProvider: AuthProvider & AuthProviderAPIAccess = {
   async listPermissions() {
     return {};
   },
   async login() {
-    return redirectToOIDCLogin();
+    return bounceToLogin();
   },
   async checkError(error) {
-    const status = error.status;
+    const status = error?.status;
     if (status === 401 || status === 403) {
-      localStorage.removeItem('user');
-      return redirectToOIDCLogin();
+      return bounceToLogin();
     }
-    // other error codes (404, 500, etc): no need to log out
   },
   async checkAuth() {
-    if (!localStorage.getItem('user')) {
-      return redirectToOIDCLogin();
-    }
-    const token = await this.getIdToken();
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    };
-    const response = await axios.post('/api/local/auth/check-auth', {}, {
-      headers: headers
-    });
-    if (response.status !== 200) {
-      localStorage.removeItem('user');
-      return redirectToOIDCLogin();
-    }
+    const me = await fetchMe();
+    if (!me) return bounceToLogin();
   },
   async logout() {
-    localStorage.removeItem('user');
-    if (typeof window !== "undefined") {
-      window.location.replace('/api/auth/oidc/logout');
-      return new Promise<never>(() => {});
+    try {
+      await fetch('/api/auth/logout', {method: 'POST', credentials: 'same-origin'});
+    } catch {
+      // Even if the logout call fails, force the user back to the chooser —
+      // any stale cookie will be replaced on next sign-in.
     }
+    return bounceToLogin();
   },
   async getIdentity() {
-    const user = JSON.parse(localStorage.getItem('user') || '{user:{}}') as LocalUser;
+    const me = await fetchMe();
+    if (!me) throw new Error('not authenticated');
     return {
-      id: user.user.id,
-      fullName: user.user.fullName,
-      avatar: user.user.avatar,
-      email: user.user.email,
-      role: user.user.role,
-      authToken: user.authToken
+      id: me.id,
+      fullName: me.fullName,
+      avatar: me.avatar,
+      email: me.email,
+      role: me.role,
+      authToken: '', // legacy field; no longer used (cookies do the work).
     };
   },
   async getIdToken(): Promise<string> {
-    const user = JSON.parse(localStorage.getItem('user') || '{user:{}}') as LocalUser;
-    return user.authToken;
-  }
+    // Kept for interface compatibility — callers now rely on the session
+    // cookie attached automatically to same-origin requests.
+    return '';
+  },
 };

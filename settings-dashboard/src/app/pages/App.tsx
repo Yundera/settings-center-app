@@ -12,34 +12,53 @@ import {
 import {softDarkTheme, softLightTheme} from "@/app/pages/softTheme";
 import {Dashboard} from "@/app/pages/Dashboard";
 import {AppWrapper} from "@/app/pages/AppWrapper";
-import {securityPanel} from "@/panels/security/Config";
 import {AuthProvider} from "ra-core";
-import {healthPanel} from "@/panels/health/Config";
-import {migrationPanel} from "@/panels/migration/Config";
-import {systemInformationPanel} from "@/panels/system-information/Config";
-import {billingPanel} from "@/panels/billing/Config";
-import {accountPanel} from "@/panels/account/Config";
-import {domainPanel} from "@/panels/domain/Config";
-import {accessPanel} from "@/panels/access/Config";
-import {terminalPanel} from "@/panels/terminal/Config";
-import {supportPanel} from "@/panels/support/Config";
-import {perfPanel} from "@/panels/perf/Config";
+import {definePanel, PanelInterface} from "dashboard-core";
+
+import VpnKeyIcon from "@mui/icons-material/VpnKey";
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import LanguageIcon from "@mui/icons-material/Language";
+import DeveloperBoardIcon from "@mui/icons-material/DeveloperBoard";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import SpeedIcon from "@mui/icons-material/Speed";
+import SupportAgentIcon from "@mui/icons-material/SupportAgent";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import TerminalIcon from "@mui/icons-material/Terminal";
+
+import {AccessPanel} from "@/panels/access/AccessPanel";
+import {AccountPanel} from "@/panels/account/AccountPanel";
+import {BillingPanel} from "@/panels/billing/BillingPanel";
+import {DomainPanel} from "@/panels/domain/DomainPanel";
+import {HealthPanel} from "@/panels/health/HealthPanel";
+import {MigrationPanel} from "@/panels/migration/MigrationPanel";
+import {ResourcesPanel} from "@/panels/resources/ResourcesPanel";
+import {SupportPanel} from "@/panels/support/SupportPanel";
+import {SystemInformationPanel} from "@/panels/system-information/SystemInformationPanel";
+import {TerminalPanel} from "@/panels/terminal/TerminalPanel";
 
 const MyApp = ({authProvider, dataProvider, permissions}: {
-  authProvider:AuthProvider,
+  authProvider: AuthProvider,
   dataProvider: any,
   permissions: Record<string, boolean>
 }) => {
 
-  let availablePanels: any[] = [systemInformationPanel, accountPanel, domainPanel, accessPanel, terminalPanel, healthPanel, perfPanel, migrationPanel, billingPanel, supportPanel]
-  let panels: any[] = [];
-  for (const availablePanel of availablePanels) {
-    if (availablePanel.permissions && !!permissions[availablePanel.permissions]) {
-      panels.push(availablePanel);
-    } else if (!availablePanel.permissions) {
-      panels.push(availablePanel);
-    }
-  }
+  const availablePanels: PanelInterface[] = [
+    definePanel({name: 'system-information', component: SystemInformationPanel, icon: InfoOutlinedIcon, label: 'System Information'}),
+    definePanel({name: 'account',            component: AccountPanel,           icon: AccountCircleIcon,  label: 'Account'}),
+    definePanel({name: 'domain',             component: DomainPanel,            icon: LanguageIcon,       label: 'Domain'}),
+    definePanel({name: 'access',             component: AccessPanel,            icon: VpnKeyIcon,         label: 'Access'}),
+    definePanel({name: 'terminal',           component: TerminalPanel,          icon: TerminalIcon,       label: 'Terminal'}),
+    definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health'}),
+    definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources'}),
+    definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration'}),
+    definePanel({name: 'billing',            component: BillingPanel,           icon: ReceiptLongIcon,    label: 'Billing'}),
+    definePanel({name: 'support',            component: SupportPanel,           icon: SupportAgentIcon,   label: 'Support'}),
+  ];
+
+  const panels = availablePanels.filter(panel =>
+    !panel.permissions || !!permissions[panel.permissions]
+  );
 
   return (
     <AppWrapper

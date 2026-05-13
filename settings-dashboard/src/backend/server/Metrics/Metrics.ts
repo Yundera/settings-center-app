@@ -99,14 +99,38 @@ export interface MetricsSnapshot {
 // State
 // ============================================================
 
-let previous: RawSample | null = null;
-let snapshot: MetricsSnapshot = {
-    sample: null,
-    rates: { cpuBusyFrac: null, diskReadBps: {}, diskWriteBps: {}, netRxBps: {}, netTxBps: {} },
-    lastRefreshedAt: null,
-    lastError: null,
-};
-let refreshTimer: NodeJS.Timeout | null = null;
+// Pinned to globalThis because Next.js dev mode compiles API routes through
+// its own bundler and gives them a separate module instance from the one
+// loaded by tsx for server.ts. Module-level `let`s end up duplicated: the
+// background refresh writes to the tsx copy, while /api/admin/metrics reads
+// from a pristine route copy. globalThis is the single process-wide object
+// both copies share.
+const STATE_KEY = "__yundera_metrics_state__" as const;
+
+interface MetricsState {
+    previous: RawSample | null;
+    snapshot: MetricsSnapshot;
+    refreshTimer: NodeJS.Timeout | null;
+}
+
+function getState(): MetricsState {
+    const g = globalThis as unknown as Record<string, MetricsState | undefined>;
+    let s = g[STATE_KEY];
+    if (!s) {
+        s = {
+            previous: null,
+            snapshot: {
+                sample: null,
+                rates: { cpuBusyFrac: null, diskReadBps: {}, diskWriteBps: {}, netRxBps: {}, netTxBps: {} },
+                lastRefreshedAt: null,
+                lastError: null,
+            },
+            refreshTimer: null,
+        };
+        g[STATE_KEY] = s;
+    }
+    return s;
+}
 
 const SECTOR_BYTES = 512;
 
@@ -115,33 +139,35 @@ const SECTOR_BYTES = 512;
 // ============================================================
 
 export function getMetricsSnapshot(): MetricsSnapshot {
-    return snapshot;
+    return getState().snapshot;
 }
 
 export async function refreshMetricsSnapshot(): Promise<void> {
+    const state = getState();
     try {
         const result = await executeHostCommand(COLLECT_SCRIPT);
         const current = parse(result.stdout || "", Date.now());
-        const rates = previous ? computeRates(previous, current) : emptyRates();
-        snapshot = {
+        const rates = state.previous ? computeRates(state.previous, current) : emptyRates();
+        state.snapshot = {
             sample: current,
             rates,
             lastRefreshedAt: new Date().toISOString(),
             lastError: null,
         };
-        previous = current;
+        state.previous = current;
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn("Metrics: failed to refresh from host:", msg);
-        snapshot = { ...snapshot, lastError: msg };
+        state.snapshot = { ...state.snapshot, lastError: msg };
     }
 }
 
 export function startMetricsRefresh(): void {
-    if (refreshTimer) return;
+    const state = getState();
+    if (state.refreshTimer) return;
     void refreshMetricsSnapshot();
-    refreshTimer = setInterval(() => void refreshMetricsSnapshot(), REFRESH_INTERVAL_MS);
-    refreshTimer.unref?.();
+    state.refreshTimer = setInterval(() => void refreshMetricsSnapshot(), REFRESH_INTERVAL_MS);
+    state.refreshTimer.unref?.();
 }
 
 // ============================================================
