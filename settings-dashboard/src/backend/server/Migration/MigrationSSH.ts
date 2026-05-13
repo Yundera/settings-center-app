@@ -46,6 +46,20 @@ export function shq(s: string): string {
 }
 
 /**
+ * Bracket-wrap an IPv6 address for tools that parse `host:port` or
+ * `user@host:path` and would otherwise misinterpret the embedded colons.
+ * Bare-host (IPv4 / DNS) passes through unchanged. Used by rsync's
+ * `user@host:/path` remote spec — OpenSSH's `user@host` form does NOT
+ * need this and bracket-wrapping there would break it.
+ *
+ * Heuristic: any colon means IPv6 (IPv4 octets and DNS labels can't
+ * contain colons).
+ */
+export function bracketIpv6(host: string): string {
+    return host.includes(':') ? `[${host}]` : host;
+}
+
+/**
  * Build the SSH command used to talk to the target from the source host.
  * Uses key auth, strict options, and a short connect timeout.
  */

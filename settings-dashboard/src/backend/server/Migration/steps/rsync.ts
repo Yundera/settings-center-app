@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { MigrationKeyPair, shq } from '../MigrationSSH';
+import { MigrationKeyPair, bracketIpv6, shq } from '../MigrationSSH';
 import { RsyncProgress } from '../MigrationTypes';
 import { detectHostIP } from '@/backend/cmd/HostExecutor';
 
@@ -54,7 +54,7 @@ export async function runRsync(opts: RsyncOptions): Promise<void> {
     if (deleteFlag) flags.push('--delete');
 
     const localSource = '/DATA/';
-    const remoteSpec = `${keypair.migrationUser}@${target}:/DATA/`;
+    const remoteSpec = `${keypair.migrationUser}@${bracketIpv6(target)}:/DATA/`;
 
     // We invoke rsync via `ssh -t source-host "..."` so it runs on the source
     // host, not in the container. executeHostCommand buffers output — we
