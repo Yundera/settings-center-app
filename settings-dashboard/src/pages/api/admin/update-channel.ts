@@ -21,8 +21,8 @@ async function updateChannelHandler(req: NextApiRequest, res: NextApiResponse<Up
   // Per-key atomic edits via env-file-manager.sh — never round-trip the whole
   // file. The previous read-modify-write design silently truncated .pcs.env
   // when `cat` failed (file mode 0600 owned by pcs after env-file-manager's
-  // mv-from-mktemp side-effect), losing every other key (YND_PROVIDER,
-  // YUNDERA_USER_API, PUBLIC_IP*, ...).
+  // mv-from-mktemp side-effect), losing every other key (YUNDERA_USER_API,
+  // PUBLIC_IP*, etc.).
   const envMgr = path.join(remoteDataApp, 'scripts/tools/env-file-manager.sh');
 
   try {
