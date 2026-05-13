@@ -10,6 +10,11 @@ const BYPASS_PREFIXES = [
   '/api/auth/',          // login, logout, providers, oidc/*
   '/api/me',             // does its own session check
   '/api/health',         // public probe
+  '/api/local/',         // loopback-only routes (orchestrator's Path C trigger,
+                         //   source's migration-status poll) — gated by
+                         //   `loopbackOnly` middleware on the handler itself;
+                         //   must skip the session gate so unauthenticated
+                         //   loopback callers can reach `loopbackOnly`.
   '/_next/',             // Next.js runtime
   '/login',              // chooser
   '/favicon',
