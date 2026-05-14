@@ -19,16 +19,26 @@ import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
  *      system stack comes up (backend healthcheck → public-IP detect →
  *      cert request → first registerRoutes). On a clean run this completes
  *      in ~10–60s; with a transient blip the agent backs off for
- *      ERROR_RETRY_INTERVAL (default 600s) before retrying. Polling here
- *      bridges the normal-case gap without waiting for the worst case.
+ *      ERROR_RETRY_INTERVAL (default 600s) before retrying. The poll
+ *      deadline below is set generously so the worst-case (multiple agent
+ *      retry windows + at least one backend TTL refresh) still resolves
+ *      to success rather than triggering rollback for what is in practice
+ *      an eventually-consistent registration.
  *
  * Both probes run on the target (via execOnTarget — same SSH path as the
  * rest of the migration). The target is the closest verifiable vantage
  * point and has network access to both itself and the public backend.
  */
 
-const POLL_DEADLINE_MS = 120_000; // 2 min — covers normal agent cold-start; well under ERROR_RETRY_INTERVAL=600s
-const POLL_INTERVAL_MS = 5_000;
+// 3 hours total. Backend route TTL is at least 10 min and agent retries on
+// error every 10 min, so 3h gives the agent ~17 retry windows + lets a
+// stuck TTL expire and re-register at least once. Earlier (2 min) the
+// budget was tuned to "fail loudly when the worst case hits"; experience
+// showed the worst case is just slower-than-expected agent startup that
+// would have succeeded with another 30s of patience, so fail-loud was
+// costing us false rollbacks.
+const POLL_DEADLINE_MS = 3 * 60 * 60 * 1000;
+const POLL_INTERVAL_MS = 15_000;
 
 export interface VerifyDestinationResult {
     ok: boolean;
