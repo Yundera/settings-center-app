@@ -21,9 +21,9 @@ const TTL_MS = 5 * 60 * 1000;
 export async function fetchSupportKey(): Promise<SupportKey> {
     if (cached && Date.now() < cached.expiresAt) return cached.value;
 
-    const base = getConfig("YUNDERA_USER_API");
+    const base = getConfig("YUNDERA_API");
     if (!base) {
-        throw new Error("YUNDERA_USER_API not configured — cannot reach orchestrator");
+        throw new Error("YUNDERA_API not configured — cannot reach orchestrator");
     }
     const url = `${base.replace(/\/$/, "")}/support/ssh-key`;
 

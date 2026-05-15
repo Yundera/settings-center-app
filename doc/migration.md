@@ -41,7 +41,7 @@ Target is a blank freshly-provisioned PCS, so the policy is **copy everything un
 
 ## Identity transfer: what carries the PCS identity
 
-The PCS identity is a single bearer token: `USER_JWT`, stored at `/DATA/AppData/casaos/apps/yundera/.pcs.secret.env`. `ensure-yundera-user-data.sh` calls `${YUNDERA_USER_API}/info` (default `https://app.yundera.com/service/pcs/user/info`) with that token and receives back `{uid, email, domain, domainSignature → PROVIDER_STR, userJWT}`. Copying the JWT is the identity takeover — no keypair push, no backend-side re-registration needed from our side.
+The PCS identity is a single bearer token: `USER_JWT`, stored at `/DATA/AppData/casaos/apps/yundera/.pcs.secret.env`. `ensure-yundera-user-data.sh` calls `${YUNDERA_API}/user/info` (default `https://app.yundera.com/service/pcs/user/info`) with that token and receives back `{uid, email, domain, domainSignature → PROVIDER_STR, userJWT}`. Copying the JWT is the identity takeover — no keypair push, no backend-side re-registration needed from our side.
 
 ### JWT rotation (sharp edge)
 
