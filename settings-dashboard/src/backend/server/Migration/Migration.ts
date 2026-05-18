@@ -256,9 +256,23 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         // not the rsynced source values.
         await setStep('start_user_apps', 'running');
         await setPhase('start_user_apps');
-        await startUserAppsOnTarget(keypair, req.host);
-        await setStep('start_user_apps', 'success',
-            'docker compose up -d ran for every user app with the target\'s env');
+        const startResult = await startUserAppsOnTarget(keypair, req.host);
+        if (startResult.failedApps.length > 0) {
+            // Per-app failures (typically a deleted/renamed upstream image)
+            // are NOT migration-fatal — the target data is already in place
+            // and `verify_destination` below is the safety net for the user's
+            // primary serving domain. Report the list on the step message so
+            // the dashboard surfaces it; user reinstalls the listed apps
+            // after the migration completes.
+            const list = startResult.failedApps
+                .map(a => `${a.name} (${a.reason})`)
+                .join(', ');
+            await setStep('start_user_apps', 'success',
+                `${startResult.failedApps.length} app(s) failed to start — migration continues. User must reinstall: ${list}`);
+        } else {
+            await setStep('start_user_apps', 'success',
+                'docker compose up -d ran for every user app with the target\'s env');
+        }
 
         // ---- Verify destination serves the domain (pre-cutover check) ----
         // Validates BEFORE switchover that the target is ready to take over:
