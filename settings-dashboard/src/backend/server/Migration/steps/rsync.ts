@@ -18,14 +18,31 @@ import { detectHostIP } from '@/backend/cmd/HostExecutor';
  * We sample the most recent line for the UI.
  */
 
+// Flag rationale (in order):
+//   -a   archive: recursive + symlinks + perms + times + group + owner + special files
+//   -H   preserve hard links (in-memory inode map; correct on trees that use them)
+//   -A   preserve ACLs
+//   -X   preserve extended attributes (SELinux contexts, file capabilities, etc.)
+//   -S   sparse-aware: postgres heap files, qcow2/vmdk images, pre-allocated
+//        media files etc. stay sparse on the destination instead of being
+//        materialised to full physical size. Safe here because we never use
+//        --inplace (the unsafe combo). Without -S a 100 GB sparse file
+//        becomes 100 GB on disk on the target.
+//   -x   one-file-system: do not cross mount points. Critical to skip FUSE
+//        mounts under /DATA (meta-fuse, rclone, sshfs etc.) — without this
+//        rsync would pull data through the FUSE driver over the network and
+//        push it to the target, which then re-mounts the same backend on
+//        top, creating divergent local copies of remote storage. Also skips
+//        bind / NFS / SMB mounts for the same reason.
+//   --numeric-ids       keep UIDs/GIDs numeric (no name-mapping across hosts)
+//   --info=progress2…   periodic progress lines for the UI to parse
+//   --partial           keep partial transfers so resume works after a crash
 const RSYNC_FLAGS_COMMON = [
-    '-aHAX',
+    '-aHAXS',
+    '-x',
     '--numeric-ids',
     '--info=progress2,stats2',
     '--partial',
-    // Skip known-ephemeral paths to avoid "vanished file" errors and needless churn
-    '--exclude=/DATA/AppData/casaos/apps/yundera/migration-markers',
-    '--exclude=/DATA/AppData/*/logs/*.tmp',
 ];
 
 export interface RsyncOptions {
