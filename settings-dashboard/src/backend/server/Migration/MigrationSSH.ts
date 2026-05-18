@@ -25,11 +25,20 @@ export interface MigrationKeyPair {
     runId: string;
 }
 
-// The migration orchestrator SSHes to the source host as the `admin` sudoer
-// and writes its keypair under admin's home (admin can't write /root).
-// Privileged steps (rsync of /DATA, sudo on remote) elevate via sudo on the
-// commands themselves, not via this directory's location.
-const MIGRATION_KEY_DIR_ON_HOST = '/home/admin/.yundera-migration';
+// Migration keypair stash on the source host. /tmp is world-writable, so the
+// `admin` sudoer (the user the orchestrator container SSHes in as) can always
+// create files here regardless of how /home/admin ended up owned. Earlier this
+// path lived under /home/admin/.yundera-migration, but on some Contabo cloud
+// images admin's home is root-owned (admin pre-exists without a home dir, so
+// `useradd -m` in ensure-admin-user.sh is skipped and the first mkdir under
+// /home/admin happens as root), which broke the very first migration step with
+// "mkdir: Permission denied". /tmp removes that coupling. It is also ephemeral
+// — abandoned keys from a crashed migration get cleaned up on the next reboot;
+// the normal happy path is handled by cleanupMigrationKey at the end of the
+// pipeline. The host still runs all privileged migration work (rsync of /DATA,
+// sudo on remote); the key just needs to exist on the host's disk for `ssh -i`
+// to read.
+const MIGRATION_KEY_DIR_ON_HOST = '/tmp/yundera-migration';
 
 export function newRunId(): string {
     const d = new Date();
