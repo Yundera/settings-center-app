@@ -204,14 +204,14 @@ export const SupportPanel: React.FC = () => {
             )}
             {autoEnableHint && autoEnableResult === 'failed' && (
                 <Alert severity="error" sx={{ mb: 2 }}>
-                    Couldn't enable support access automatically. Toggle it on manually below.
+                    Couldn&apos;t enable support access automatically. Toggle it on manually below.
                 </Alert>
             )}
 
             <Typography sx={{ color: colors.textMuted, fontSize: font.detail, mb: 2 }}>
                 When enabled, Yundera support staff can SSH into <code>{status?.username || 'admin'}</code> on
-                this PCS using the orchestrator's support key. The setting is durable: a periodic
-                self-check re-asserts it, so an accidental key removal won't lock support out.
+                this PCS using the orchestrator&apos;s support key. The setting is durable: a periodic
+                self-check re-asserts it, so an accidental key removal won&apos;t lock support out.
                 You can revoke at any time — the key is removed immediately and the safety net
                 stops re-adding it.
             </Typography>

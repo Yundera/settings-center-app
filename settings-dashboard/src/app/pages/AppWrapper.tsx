@@ -7,9 +7,9 @@ import {
   Resource,
   StoreContextProvider,
   TitlePortal,
-  DashboardMenuItem,
   MenuItemLink,
   type MenuProps,
+  useSidebarState,
   useTranslate,
   UserMenu,
   useStore
@@ -24,8 +24,14 @@ import {
   AppBarToolbar
 } from "dashboard-core";
 import {Layout as RaLayout, AppBar as RaAppBar} from 'react-admin';
-import {Box, useMediaQuery, Typography} from "@mui/material";
-import { colors, font, radius, spacing } from '@/app/pages/softTheme';
+import {Box, Tooltip, useMediaQuery, Typography} from "@mui/material";
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import { colors, font } from '@/app/pages/softTheme';
+
+const SIDEBAR_WIDTH_OPEN = 280;
+const SIDEBAR_WIDTH_CLOSED = 72;
 
 interface AppProps {
   children?: ReactNode;
@@ -93,142 +99,178 @@ export const AppBar = () => {
   );
 };
 
-// ── Sidebar Menu Item Styles ─────────────────────────────────
-// Applied directly via sx prop on each MenuItemLink / DashboardMenuItem.
-// This is more reliable than theme styleOverrides which break on page refresh.
-// Active state uses a gradient border (pink-to-blue) per PDF design specs.
-const menuItemLinkSx = {
-  borderRadius: radius.button,
-  padding: '12px 20px',
-  margin: '5px 0',
+const menuItemSx = (open: boolean) => ({
+  position: 'relative',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '16px',
+  paddingLeft: open ? '24px' : 0,
+  paddingRight: open ? '20px' : 0,
+  justifyContent: open ? 'flex-start' : 'center',
+  margin: 0,
+  minHeight: '52px',
+  width: '100%',
   fontSize: font.menuItem,
   fontWeight: 400,
   color: colors.textMuted,
-  minHeight: '50px',
-  border: '1px solid transparent',
-  transition: 'all 0.2s ease',
-  '& .MuiListItemIcon-root': { display: 'none' },  // Icons hidden per PDF design
+  borderRadius: 0,
+  border: 'none',
+  boxShadow: 'none',
+  overflow: 'hidden',
+  whiteSpace: 'nowrap',
+  transition: 'background-color 0.15s ease, color 0.15s ease, padding 0.2s ease',
+  '& .MuiListItemIcon-root, & .RaMenuItemLink-icon': {
+    display: 'flex',
+    minWidth: 'auto',
+    color: 'inherit',
+    margin: 0,
+  },
+  '& .rail-label': {
+    display: open ? 'inline' : 'none',
+  },
   '&:hover': {
     backgroundColor: colors.bgOverlay,
     color: colors.textWhite,
   },
   '&.RaMenuItemLink-active': {
     color: colors.textWhite,
-    boxShadow: `1px 3px 8px ${colors.bgApp}70`,
-    border: '1px solid transparent',
-    borderRadius: radius.button,
-    // Gradient border trick: solid background in padding-box, gradient in border-box
-    background: `linear-gradient(${colors.bgSidebar}, ${colors.bgSidebar}) padding-box, linear-gradient(90deg, ${colors.primaryLight}, #ee2a7b) border-box`,
+    backgroundColor: colors.bgOverlay,
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      left: 0,
+      top: '8px',
+      bottom: '8px',
+      width: '3px',
+      borderRadius: '0 2px 2px 0',
+      background: `linear-gradient(180deg, ${colors.primaryLight}, #ee2a7b)`,
+    },
   },
-};
+});
 
-// Renders a single panel menu item with translated label
-const MenuItem = (panel: PanelInterface, dense: boolean, translate: any) => {
-  return <MenuItemLink
-      key={panel.name}
-      to={{ pathname: '/' + panel.name }}
-      primaryText={translate(`resources.` + panel.name + `.name`, { smart_count: 2 })}
-      leftIcon={<panel.icon/>}
-      dense={dense}
-      sx={menuItemLinkSx}
-  />
-}
+type MenuEntry = { name: string; icon: React.ComponentType; path: string; label: string };
 
-// ── Sidebar Menu ─────────────────────────────────────────────
-// Builds the sidebar navigation: Dashboard link followed by one link per panel.
-// Padding is applied here (not on RaSidebar-fixed) to avoid double-padding issues on refresh.
-export const Menu = (panels: PanelInterface[]) => ({ dense = false }: MenuProps) => {
-  const translate = useTranslate();
-
+const renderMenuItem = (entry: MenuEntry, dense: boolean, open: boolean) => {
+  const Icon = entry.icon;
   return (
-      <Box sx={{ padding: '20px', boxSizing: 'border-box' }}>
-          <Box sx={{ mb: 1 }}>
-              <DashboardMenuItem sx={menuItemLinkSx} />
-          </Box>
-          <Box>
-              {panels.map(value => MenuItem(value, dense, translate))}
-          </Box>
-      </Box>
+    <MenuItemLink
+      key={entry.name}
+      to={entry.path}
+      primaryText={<span className="rail-label">{entry.label}</span>}
+      leftIcon={<Icon />}
+      dense={dense}
+      sx={menuItemSx(open)}
+    />
   );
 };
 
-// ── Layout ───────────────────────────────────────────────────
-// Main layout wrapper that controls the overall page structure.
-// Sidebar dimensions are enforced here with !important to prevent
-// content overflow on page refresh (react-admin's default width:100%
-// on .RaSidebar-fixed causes buttons to stretch beyond 315px).
-export const Layout = (panels: PanelInterface[]) => ({ children }: { children: React.ReactNode }) => (
-  <RaLayout
-    appBar={AppBar}
-    menu={Menu(panels)}
-    sx={{
-      backgroundColor: colors.bgApp,
+export const Menu = (panels: PanelInterface[]) => {
+  function MenuComponent({ dense = false }: MenuProps) {
+    const translate = useTranslate();
+    const [open, setOpen] = useSidebarState();
 
-      // App frame — area below the app bar
-      '& .RaLayout-appFrame': {
-        marginTop: '90px !important',
+  const entries: MenuEntry[] = [
+    { name: 'dashboard', icon: DashboardIcon, path: '/', label: translate('ra.page.dashboard') },
+    ...panels.map(p => ({
+      name: p.name,
+      icon: p.icon,
+      path: '/' + p.name,
+      label: translate(`resources.${p.name}.name`, { smart_count: 2 }),
+    })),
+  ];
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', paddingTop: '12px' }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        {entries.map(entry => renderMenuItem(entry, dense, open))}
+      </Box>
+      <Tooltip title={open ? '' : 'Expand'} placement="right" disableInteractive>
+        <Box
+          component="button"
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
+          sx={{
+            ...menuItemSx(open),
+            background: 'transparent',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            color: colors.textSubtle,
+            borderTop: `1px solid ${colors.borderMuted}`,
+          }}
+        >
+          {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+          {open && <Box component="span" className="rail-label">Collapse</Box>}
+        </Box>
+      </Tooltip>
+    </Box>
+  );
+  }
+  return MenuComponent;
+};
+
+export const Layout = (panels: PanelInterface[]) => {
+  function LayoutComponent({ children }: { children: React.ReactNode }) {
+    const [open] = useSidebarState();
+    const width = open ? SIDEBAR_WIDTH_OPEN : SIDEBAR_WIDTH_CLOSED;
+    return (
+    <RaLayout
+      appBar={AppBar}
+      menu={Menu(panels)}
+      sx={{
         backgroundColor: colors.bgApp,
-        padding: '0 30px 30px 30px',
-        height: 'calc(100vh - 90px)',
-        overflow: 'hidden',
-      },
 
-      // Sidebar + content container — rounded border per PDF design
-      '& .RaLayout-contentWithSidebar': {
-        backgroundColor: colors.bgPage,
-        borderRadius: radius.button,
-        border: `1px solid ${colors.textMuted}`,
-        overflow: 'hidden',
-        height: '100%',
-      },
+        '& .RaLayout-appFrame': {
+          marginTop: '90px !important',
+          backgroundColor: colors.bgApp,
+          padding: 0,
+          height: 'calc(100vh - 90px)',
+          overflow: 'hidden',
+        },
 
-      // Sidebar docked state — fixed width
-      '& .RaSidebar-docked': {
-        width: '315px !important',
-        minWidth: '315px !important',
-        height: '100%',
-      },
+        '& .RaLayout-contentWithSidebar': {
+          backgroundColor: colors.bgPage,
+          height: '100%',
+        },
 
-      // Sidebar paper — maxWidth + overflow:hidden prevents menu items from stretching beyond sidebar
-      '& .RaSidebar-paper': {
-        width: '315px !important',
-        minWidth: '315px !important',
-        maxWidth: '315px !important',
-        backgroundColor: `${colors.bgSidebar} !important`,
-        position: 'relative !important',
-        height: '100%',
-        boxShadow: 'none',
-        overflowX: 'hidden',
-        overflowY: 'auto',
-      },
+        '& .RaSidebar-docked, & .RaSidebar-paper, & .RaSidebar-fixed': {
+          width: `${width}px`,
+          minWidth: `${width}px`,
+          maxWidth: `${width}px`,
+          height: 'calc(100vh - 90px)',
+          transition: 'width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease',
+        },
 
-      // Sidebar fixed inner — padding set to 0 (padding is on Menu Box instead to avoid double-padding)
-      '& .RaSidebar-fixed': {
-        padding: '0 !important',
-        position: 'relative',
-        width: '315px !important',
-        maxWidth: '315px !important',
-        boxSizing: 'border-box !important',
-        marginTop: '0 !important',
-        height: 'auto !important',
-        overflow: 'hidden',
-      },
+        '& .RaSidebar-paper': {
+          backgroundColor: colors.bgSidebar,
+          boxShadow: 'none',
+          borderRight: `1px solid ${colors.borderMuted}`,
+        },
 
-      // Main content area — scrollable with custom scrollbar
-      '& .RaLayout-content': {
-        backgroundColor: colors.bgPage,
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        flex: 1,
-        '&::-webkit-scrollbar': { width: '8px' },
-        '&::-webkit-scrollbar-track': { backgroundColor: 'rgba(73, 109, 142, 0.3)', borderRadius: '4px' },
-        '&::-webkit-scrollbar-thumb': { backgroundColor: colors.bgPage, borderRadius: '4px' },
-      },
-    }}
-  >
-    {children}
-  </RaLayout>
-);
+        '& .RaSidebar-fixed': {
+          padding: 0,
+          height: 'calc(100vh - 90px) !important',
+          overflowX: 'hidden',
+          overflowY: 'hidden',
+        },
+
+        '& .RaLayout-content': {
+          backgroundColor: colors.bgPage,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          flex: 1,
+          '&::-webkit-scrollbar': { width: '8px' },
+          '&::-webkit-scrollbar-track': { backgroundColor: 'rgba(73, 109, 142, 0.3)', borderRadius: '4px' },
+          '&::-webkit-scrollbar-thumb': { backgroundColor: colors.bgPage, borderRadius: '4px' },
+        },
+      }}
+    >
+      {children}
+    </RaLayout>
+  );
+  }
+  return LayoutComponent;
+};
 
 const App = ({
   children,

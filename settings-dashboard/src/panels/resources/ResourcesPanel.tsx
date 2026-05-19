@@ -113,6 +113,26 @@ function formatUptime(seconds: number): string {
     return `${m}m`;
 }
 
+// Hide Docker-created bridges, veth pairs, and loopback — they clutter the UI
+// without telling the operator anything actionable. Matches `docker0`, `br-<hash>`,
+// `veth<hash>`, and `lo`.
+function isVirtualInterface(iface: string): boolean {
+    return iface === "lo"
+        || iface === "docker0"
+        || iface.startsWith("br-")
+        || iface.startsWith("veth");
+}
+
+// A device is a partition if another device in the same list is its parent
+// (e.g. `sda1` -> `sda`, `nvme0n1p1` -> `nvme0n1`, `mmcblk0p1` -> `mmcblk0`).
+function isPartition(device: string, allDevices: string[]): boolean {
+    const stripDigits = device.replace(/\d+$/, "");
+    if (stripDigits !== device && allDevices.includes(stripDigits)) return true;
+    const stripPDigits = device.replace(/p\d+$/, "");
+    if (stripPDigits !== device && allDevices.includes(stripPDigits)) return true;
+    return false;
+}
+
 // ============================================================
 // Main panel
 // ============================================================
@@ -274,7 +294,7 @@ function NetworkTab({ history }: { history: MetricsSnapshot[] }) {
     const sample = latest.sample!;
 
     // Interfaces present in the latest sample. Stable order from the sample itself.
-    const ifaces = sample.nets.map(n => n.iface);
+    const ifaces = sample.nets.map(n => n.iface).filter(i => !isVirtualInterface(i));
 
     return (
         <Box sx={{ display: "flex", flexDirection: "column", gap: spacing.cardGap }}>
@@ -335,7 +355,8 @@ function DiskTab({ history }: { history: MetricsSnapshot[] }) {
     const latest = history[history.length - 1];
     const sample = latest.sample!;
 
-    const devices = sample.disks.map(d => d.device);
+    const allDevices = sample.disks.map(d => d.device);
+    const devices = allDevices.filter(d => !isPartition(d, allDevices));
 
     return (
         <Box sx={{ display: "flex", flexDirection: "column", gap: spacing.cardGap }}>

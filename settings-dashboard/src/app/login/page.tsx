@@ -22,7 +22,7 @@ function safeReturnTo(raw: string | null | undefined): string {
 }
 
 async function hasValidSession(): Promise<boolean> {
-  const token = cookies().get(SESSION_COOKIE)?.value;
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return false;
   try {
     const {payload} = await jwtVerify(token, SESSION_KEY);
@@ -35,16 +35,17 @@ async function hasValidSession(): Promise<boolean> {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: {returnTo?: string};
+  searchParams: Promise<{returnTo?: string}>;
 }) {
-  const returnTo = safeReturnTo(searchParams.returnTo);
+  const {returnTo: rawReturnTo} = await searchParams;
+  const returnTo = safeReturnTo(rawReturnTo);
 
   if (await hasValidSession()) redirect(returnTo);
 
   const providers = enabledProviders();
-  const lastProvider = cookies().get('last_provider')?.value;
+  const lastProvider = (await cookies()).get('last_provider')?.value;
   const csrf = newCsrfToken();
-  const isHttps = (headers().get('x-forwarded-proto') || '').split(',')[0].trim() === 'https';
+  const isHttps = ((await headers()).get('x-forwarded-proto') || '').split(',')[0].trim() === 'https';
 
   const oidcProviders = providers.filter(p => p.kind === 'oidc');
   const passwordProviders = providers.filter(p => p.kind === 'password');

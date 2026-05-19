@@ -17,6 +17,7 @@ import {definePanel, PanelInterface} from "dashboard-core";
 
 import VpnKeyIcon from "@mui/icons-material/VpnKey";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import AppsIcon from "@mui/icons-material/Apps";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import LanguageIcon from "@mui/icons-material/Language";
 import DeveloperBoardIcon from "@mui/icons-material/DeveloperBoard";
@@ -28,6 +29,7 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 
 import {AccessPanel} from "@/panels/access/AccessPanel";
 import {AccountPanel} from "@/panels/account/AccountPanel";
+import {AppsPanel} from "@/panels/apps/AppsPanel";
 import {BillingPanel} from "@/panels/billing/BillingPanel";
 import {DomainPanel} from "@/panels/domain/DomainPanel";
 import {HealthPanel} from "@/panels/health/HealthPanel";
@@ -50,6 +52,7 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
     definePanel({name: 'access',             component: AccessPanel,            icon: VpnKeyIcon,         label: 'Access'}),
     definePanel({name: 'terminal',           component: TerminalPanel,          icon: TerminalIcon,       label: 'Terminal'}),
     definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health'}),
+    definePanel({name: 'apps',               component: AppsPanel,              icon: AppsIcon,           label: 'Apps'}),
     definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources'}),
     definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration'}),
     definePanel({name: 'billing',            component: BillingPanel,           icon: ReceiptLongIcon,    label: 'Billing'}),

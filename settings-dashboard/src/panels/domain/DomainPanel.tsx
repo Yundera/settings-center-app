@@ -447,7 +447,7 @@ export const DomainPanel: React.FC = () => {
                                 marginBottom: '8px',
                             },
                         }}>
-                            <li>Add your domain to Cloudflare and update your registrar's nameservers.</li>
+                            <li>Add your domain to Cloudflare and update your registrar&apos;s nameservers.</li>
                             <li>
                                 Create a <strong>CNAME</strong> record pointing your domain (or subdomain)
                                 to <code style={{

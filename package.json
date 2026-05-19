@@ -9,6 +9,26 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "node-pty"
-    ]
+    ],
+    "overrides": {
+      "form-data@^4": "^4.0.4",
+      "form-data@^2": "^2.5.4",
+      "fast-xml-parser@<4.5.4": ">=4.5.4",
+      "protobufjs@<7.5.5": ">=7.5.5",
+      "node-forge": "^1.4.0",
+      "jws@^3": "^3.2.3",
+      "jws@^4": "^4.0.1",
+      "@remix-run/router": "^1.23.2",
+      "linkifyjs": "^4.3.3",
+      "minimatch@^3": "^3.1.5",
+      "minimatch@^9": "^9.0.7",
+      "flatted": "^3.4.2",
+      "picomatch@^4": "^4.0.4",
+      "picomatch@^2": "^2.3.2",
+      "cross-spawn@^7": "^7.0.5",
+      "rollup@^4": "^4.59.0",
+      "lodash": "^4.18.0",
+      "glob@^10": "^10.5.0"
+    }
   }
 }

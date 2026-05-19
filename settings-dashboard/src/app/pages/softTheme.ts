@@ -322,35 +322,6 @@ export const softDarkTheme: any = {
             },
         },
 
-        // RaMenuItemLink: Theme styleOverrides are unstable on refresh, so actual styling is done via sx prop in AppWrapper.tsx
-        RaMenuItemLink: {
-            styleOverrides: {
-                root: {
-                    borderRadius: radius.button,
-                    padding: '12px 20px',
-                    margin: '5px 0',
-                    fontSize: font.menuItem,
-                    fontWeight: 400,
-                    color: colors.textMuted,
-                    minHeight: '50px',
-                    transition: 'all 0.2s ease',
-                    border: '1px solid transparent',
-                    '&:hover': {
-                        backgroundColor: colors.bgOverlay,
-                        color: colors.textWhite,
-                    },
-                    '&.RaMenuItemLink-active': {
-                        color: colors.textWhite,
-                        boxShadow: `1px 3px 8px ${colors.bgApp}70`,
-                        border: '1px solid transparent',
-                        borderRadius: radius.button,
-                        background: `linear-gradient(${colors.bgSidebar}, ${colors.bgSidebar}) padding-box, linear-gradient(90deg, ${colors.primaryLight}, #ee2a7b) border-box`,
-                    },
-                    '& .MuiListItemIcon-root': { display: 'none' },
-                },
-            },
-        },
-
         MuiPaper: {
             styleOverrides: {
                 root: { backgroundColor: colors.bgCard, border: 'none' },
@@ -568,35 +539,6 @@ export const softLightTheme: any = {
             },
         },
 
-        RaMenuItemLink: {
-            styleOverrides: {
-                root: {
-                    borderLeft: '3px solid transparent',
-                    borderRadius: '12px',
-                    padding: '12px 20px',
-                    margin: '5px 0',
-                    fontSize: '21px',
-                    fontWeight: 400,
-                    color: '#496d8e',
-                    minHeight: '50px',
-                    transition: 'all 0.2s ease',
-                    '&:hover': {
-                        backgroundColor: 'rgba(39, 170, 225, 0.05)',
-                        color: '#27aae1',
-                    },
-                    '&.RaMenuItemLink-active': {
-                        borderLeft: '3px solid transparent',
-                        backgroundColor: '#e3f2fd',
-                        color: '#27aae1',
-                        boxShadow: '1px 2px 6px rgba(20, 61, 102, 0.19)',
-                    },
-                    '& .MuiListItemIcon-root': {
-                        color: 'inherit',
-                        minWidth: '40px',
-                    },
-                },
-            },
-        },
 
         MuiPaper: {
             styleOverrides: {

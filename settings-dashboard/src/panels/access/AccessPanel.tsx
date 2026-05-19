@@ -416,7 +416,7 @@ const SupportEnsureCard: React.FC<{ onChanged: () => void }> = ({ onChanged }) =
                 {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
                 <Typography sx={{ ...text.detail, mb: 2 }}>
                     When enabled, Yundera support staff can SSH into <code>{status?.username || 'admin'}</code> using
-                    the orchestrator's support key. A periodic self-check re-asserts this so the key isn't
+                    the orchestrator&apos;s support key. A periodic self-check re-asserts this so the key isn&apos;t
                     silently lost on a manual edit or image refresh.
                 </Typography>
 
@@ -706,7 +706,7 @@ const RemoveKeyDialog: React.FC<{
             <DialogTitle>Remove SSH key?</DialogTitle>
             <DialogContent>
                 <DialogContentText sx={{ mb: 2 }}>
-                    This will remove the following key from <code>{target?.username}</code>'s
+                    This will remove the following key from <code>{target?.username}</code>&apos;s
                     <code> ~/.ssh/authorized_keys</code>. Anyone holding the matching private key
                     will lose SSH access immediately.
                 </DialogContentText>

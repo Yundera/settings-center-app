@@ -6,11 +6,15 @@ FROM ubuntu:latest
 # - docker.io: CLI only (we mount the host's docker.sock); ensure-auth-secrets.sh
 #   and register-oidc-client.sh shell out to `docker run authelia/authelia ...`
 #   to argon2-hash passwords + secrets, and `docker restart authelia` after re-render.
+# - docker-compose-v2: provides the `docker compose` subcommand used by
+#   ensure-user-compose-pulled.sh. Ubuntu 24.04's docker.io package no longer
+#   bundles the compose plugin, so install it explicitly.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         openssh-server \
         openssl \
         gettext-base \
         docker.io \
+        docker-compose-v2 \
         ca-certificates \
         curl \
     && rm -rf /var/lib/apt/lists/*
