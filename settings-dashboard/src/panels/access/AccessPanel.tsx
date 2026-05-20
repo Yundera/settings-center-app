@@ -76,6 +76,7 @@ interface AuthorizedKey {
     bits: number | null;
     comment: string;
     isAdminKey: boolean;
+    isLiveDashboardKey: boolean;
 }
 
 interface LoginEvent {
@@ -102,6 +103,7 @@ interface HostAccount {
 interface AccessInfoResponse {
     accounts: HostAccount[];
     recentLogins: LoginEvent[];
+    dashboardAccount: string;
     collectedAt: string;
 }
 
@@ -177,6 +179,8 @@ export const AccessPanel: React.FC = () => {
 
     const loginAccounts = (data?.accounts || []).filter(a => !a.isSystem || a.authorizedKeys.length > 0 || a.lastLoginTime);
     const otherAccounts = (data?.accounts || []).filter(a => a.isSystem && a.authorizedKeys.length === 0 && !a.lastLoginTime);
+    // Account the dashboard logs into; the admin key is delete-locked only here.
+    const dashboardAccount = data?.dashboardAccount ?? 'admin';
 
     return (
         <Box sx={{
@@ -263,6 +267,7 @@ export const AccessPanel: React.FC = () => {
                                 <AccountBlock
                                     key={account.username}
                                     account={account}
+                                    dashboardAccount={dashboardAccount}
                                     onAddKey={() => setAddKeyTarget(account.username)}
                                     onRemoveKey={(key) => setRemoveTarget({
                                         username: account.username,
@@ -471,9 +476,10 @@ const SupportEnsureCard: React.FC<{ onChanged: () => void }> = ({ onChanged }) =
 
 const AccountBlock: React.FC<{
     account: HostAccount;
+    dashboardAccount: string;
     onAddKey: () => void;
     onRemoveKey: (key: AuthorizedKey) => void;
-}> = ({ account, onAddKey, onRemoveKey }) => {
+}> = ({ account, dashboardAccount, onAddKey, onRemoveKey }) => {
     return (
         <Box sx={{
             border: `1px solid ${colors.borderMuted}`,
@@ -545,7 +551,14 @@ const AccountBlock: React.FC<{
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {account.authorizedKeys.map((key, idx) => (
+                            {account.authorizedKeys.map((key, idx) => {
+                                // Deletion is locked for dashboard-managed admin
+                                // keys, but only on the account the dashboard
+                                // logs into. A leftover copy on root (older PCS)
+                                // is stale and stays freely removable.
+                                const isProtected = key.isAdminKey
+                                    && account.username === dashboardAccount;
+                                return (
                                 <TableRow key={idx}>
                                     <TableCell sx={tableBodyCell}>
                                         {key.type}{key.bits ? ` ${key.bits}` : ''}
@@ -559,8 +572,8 @@ const AccountBlock: React.FC<{
                                     </TableCell>
                                     <TableCell sx={tableBodyCell}>{key.comment || '—'}</TableCell>
                                     <TableCell sx={tableBodyCell}>
-                                        {key.isAdminKey ? (
-                                            <Chip label="dashboard" size="small" color="info" />
+                                        {key.isLiveDashboardKey ? (
+                                            <Chip label="THIS DASHBOARD" size="small" color="info" />
                                         ) : (
                                             <Chip label="user" size="small" />
                                         )}
@@ -568,11 +581,11 @@ const AccountBlock: React.FC<{
                                     <TableCell sx={tableBodyCell} align="right">
                                         <IconButton
                                             size="small"
-                                            disabled={!key.fingerprint || key.isAdminKey}
+                                            disabled={!key.fingerprint || isProtected}
                                             title={
                                                 !key.fingerprint
                                                     ? 'Cannot remove: fingerprint unavailable'
-                                                    : key.isAdminKey
+                                                    : isProtected
                                                         ? 'Dashboard key — managed automatically'
                                                         : 'Remove this key'
                                             }
@@ -583,7 +596,8 @@ const AccountBlock: React.FC<{
                                         </IconButton>
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </Box>

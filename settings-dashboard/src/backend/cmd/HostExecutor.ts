@@ -84,6 +84,24 @@ export async function generateSSHKey(): Promise<{publicKey: string, privateKeyPa
 }
 
 /**
+ * Returns the SSH fingerprint (SHA256:...) of the container's own key — the
+ * live "dashboard" key this settings-center uses to reach the host. Returns
+ * null if it can't be read or parsed (e.g. before initializeSSHAccess has
+ * generated it). The fingerprint is computed the same way ssh-keygen does on
+ * the host, so it can be compared directly against authorized_keys entries.
+ */
+export async function getContainerKeyFingerprint(): Promise<string | null> {
+    try {
+        const result = await execute(`ssh-keygen -lf ${defaultPrivateKeyPath}.pub`, false);
+        const match = result.stdout.match(/SHA256:[A-Za-z0-9+/]+=*/);
+        return match ? match[0] : null;
+    } catch (error) {
+        console.warn('Could not compute container key fingerprint:', error);
+        return null;
+    }
+}
+
+/**
  * Executes a command on the host system via SSH.
  *
  * Quoting strategy: the previous implementation wrapped `command` in outer

@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { authMiddleware } from "@/backend/auth/middleware";
-import { executeHostCommand } from "@/backend/cmd/HostExecutor";
+import { executeHostCommand, getContainerKeyFingerprint, defaultHostUser } from "@/backend/cmd/HostExecutor";
 
 const ADMIN_KEY_COMMENT = 'local-admin-access';
 
@@ -9,7 +9,13 @@ export interface AuthorizedKey {
     fingerprint: string;
     bits: number | null;
     comment: string;
+    // True when the key's comment carries the admin-key marker. Identifies
+    // dashboard-managed keys; used to lock deletion on the dashboard account.
     isAdminKey: boolean;
+    // True only for the single key whose fingerprint matches the key this
+    // running dashboard currently uses to reach the host. Drives the
+    // "THIS DASHBOARD" tag.
+    isLiveDashboardKey: boolean;
 }
 
 export interface LoginEvent {
@@ -36,6 +42,9 @@ export interface HostAccount {
 export interface AccessInfoResponse {
     accounts: HostAccount[];
     recentLogins: LoginEvent[];
+    // Host account the dashboard logs into (defaultHostUser). The admin key is
+    // protected from deletion only on this account.
+    dashboardAccount: string;
     collectedAt: string;
 }
 
@@ -150,7 +159,7 @@ function parseRawKeyLine(line: string): { type: string; comment: string } | null
     return { type, comment };
 }
 
-function parseKeysSection(block: string): Record<string, { keys: AuthorizedKey[]; error: string | null }> {
+function parseKeysSection(block: string, liveFingerprint: string | null): Record<string, { keys: AuthorizedKey[]; error: string | null }> {
     const out: Record<string, { keys: AuthorizedKey[]; error: string | null }> = {};
     const userRe = /^---USER:(.+)---$/;
     const lines = block.split('\n');
@@ -185,6 +194,7 @@ function parseKeysSection(block: string): Record<string, { keys: AuthorizedKey[]
                 bits: fp.bits,
                 comment: rawEntries[idx]?.comment || fp.comment,
                 isAdminKey: (rawEntries[idx]?.comment || fp.comment).includes(ADMIN_KEY_COMMENT),
+                isLiveDashboardKey: !!liveFingerprint && fp.fingerprint === liveFingerprint,
             }));
         } else {
             keys = rawEntries.map(r => ({
@@ -193,6 +203,9 @@ function parseKeysSection(block: string): Record<string, { keys: AuthorizedKey[]
                 bits: null,
                 comment: r.comment,
                 isAdminKey: r.comment.includes(ADMIN_KEY_COMMENT),
+                // Raw-only fallback has no fingerprint, so it can never be
+                // positively matched to the live key.
+                isLiveDashboardKey: false,
             }));
         }
 
@@ -232,12 +245,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     try {
+        const liveFingerprint = await getContainerKeyFingerprint();
         const result = await executeHostCommand(`echo ${COLLECT_SCRIPT_B64} | base64 -d | bash`);
         const sections = splitSections(result.stdout);
 
         const accounts = parsePasswd(sections.PASSWD || '');
         const recentLogins = parseLast(sections.LAST || '');
-        const keysByUser = parseKeysSection(sections.KEYS || '');
+        const keysByUser = parseKeysSection(sections.KEYS || '', liveFingerprint);
 
         const seenLastLogin = new Set<string>();
         for (const event of recentLogins) {
@@ -261,6 +275,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         const response: AccessInfoResponse = {
             accounts,
             recentLogins,
+            dashboardAccount: defaultHostUser,
             collectedAt: new Date().toISOString(),
         };
         res.setHeader('Cache-Control', 'no-store');
