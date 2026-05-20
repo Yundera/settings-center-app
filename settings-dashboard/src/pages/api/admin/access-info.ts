@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { authMiddleware } from "@/backend/auth/middleware";
 import { executeHostCommand, getContainerKeyFingerprint, defaultHostUser } from "@/backend/cmd/HostExecutor";
+import { fetchSupportKey } from "@/backend/server/Support/SupportKey";
 
 const ADMIN_KEY_COMMENT = 'local-admin-access';
 
@@ -16,6 +17,9 @@ export interface AuthorizedKey {
     // running dashboard currently uses to reach the host. Drives the
     // "THIS DASHBOARD" tag.
     isLiveDashboardKey: boolean;
+    // True for the key whose fingerprint matches the orchestrator's support
+    // key — the key Yundera support uses to SSH in. Drives the "SUPPORT" tag.
+    isSupportKey: boolean;
 }
 
 export interface LoginEvent {
@@ -159,7 +163,7 @@ function parseRawKeyLine(line: string): { type: string; comment: string } | null
     return { type, comment };
 }
 
-function parseKeysSection(block: string, liveFingerprint: string | null): Record<string, { keys: AuthorizedKey[]; error: string | null }> {
+function parseKeysSection(block: string, liveFingerprint: string | null, supportFingerprint: string | null): Record<string, { keys: AuthorizedKey[]; error: string | null }> {
     const out: Record<string, { keys: AuthorizedKey[]; error: string | null }> = {};
     const userRe = /^---USER:(.+)---$/;
     const lines = block.split('\n');
@@ -195,6 +199,7 @@ function parseKeysSection(block: string, liveFingerprint: string | null): Record
                 comment: rawEntries[idx]?.comment || fp.comment,
                 isAdminKey: (rawEntries[idx]?.comment || fp.comment).includes(ADMIN_KEY_COMMENT),
                 isLiveDashboardKey: !!liveFingerprint && fp.fingerprint === liveFingerprint,
+                isSupportKey: !!supportFingerprint && fp.fingerprint === supportFingerprint,
             }));
         } else {
             keys = rawEntries.map(r => ({
@@ -204,8 +209,9 @@ function parseKeysSection(block: string, liveFingerprint: string | null): Record
                 comment: r.comment,
                 isAdminKey: r.comment.includes(ADMIN_KEY_COMMENT),
                 // Raw-only fallback has no fingerprint, so it can never be
-                // positively matched to the live key.
+                // positively matched to the live or support key.
                 isLiveDashboardKey: false,
+                isSupportKey: false,
             }));
         }
 
@@ -246,12 +252,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     try {
         const liveFingerprint = await getContainerKeyFingerprint();
+        // The orchestrator's support key may be unreachable (YUNDERA_API unset,
+        // orchestrator down) — non-fatal, we just can't tag it in that case.
+        const supportFingerprint = await fetchSupportKey()
+            .then(k => k.fingerprint)
+            .catch(() => null);
         const result = await executeHostCommand(`echo ${COLLECT_SCRIPT_B64} | base64 -d | bash`);
         const sections = splitSections(result.stdout);
 
         const accounts = parsePasswd(sections.PASSWD || '');
         const recentLogins = parseLast(sections.LAST || '');
-        const keysByUser = parseKeysSection(sections.KEYS || '', liveFingerprint);
+        const keysByUser = parseKeysSection(sections.KEYS || '', liveFingerprint, supportFingerprint);
 
         const seenLastLogin = new Set<string>();
         for (const event of recentLogins) {

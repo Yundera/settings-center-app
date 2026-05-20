@@ -77,6 +77,7 @@ interface AuthorizedKey {
     comment: string;
     isAdminKey: boolean;
     isLiveDashboardKey: boolean;
+    isSupportKey: boolean;
 }
 
 interface LoginEvent {
@@ -574,6 +575,8 @@ const AccountBlock: React.FC<{
                                     <TableCell sx={tableBodyCell}>
                                         {key.isLiveDashboardKey ? (
                                             <Chip label="THIS DASHBOARD" size="small" color="info" />
+                                        ) : key.isSupportKey ? (
+                                            <Chip label="SUPPORT" size="small" color="warning" />
                                         ) : (
                                             <Chip label="user" size="small" />
                                         )}
