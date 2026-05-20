@@ -211,6 +211,26 @@ function buildSshpassToTargetCommand(req: MigrationRequest, remoteCmd: string): 
 }
 
 /**
+ * Default retry budget for a single sshpassToTarget call: ~10 minutes,
+ * matching waitForTargetSSH.
+ *
+ * Every sshpassToTarget call happens during preflight or key-push — the
+ * window in which a freshly-provisioned cloud VM can still auto-reboot
+ * (unattended-upgrades / cloud-init). The waitForTargetSSH gate at the
+ * start of preflight and pushKey only proves the target was reachable
+ * *at that instant*; a reboot can still land between two later preflight
+ * checks (e.g. target_sudo passes, then the VM reboots, then
+ * target_free_space hits a refused connection). With the previous
+ * 8×10s ≈ 80s default, that single call could not outlast a 1–3 min sshd
+ * outage and failed the whole migration. Each call must be able to ride
+ * out a reboot on its own.
+ */
+const SSHPASS_TARGET_RETRY: Required<Omit<SSHRetryOptions, 'label'>> = {
+    attempts: 60,
+    delayMs: 10_000,
+};
+
+/**
  * Run a command on the target via password auth, retrying over transient
  * connection failures. Used by preflight and the key-push step only;
  * everything after push_key uses key auth (execOnTarget).
@@ -222,7 +242,7 @@ export async function sshpassToTarget(
 ): Promise<{ stdout: string; stderr: string }> {
     return retryTransientSSH(
         () => executeHostCommand(buildSshpassToTargetCommand(req, remoteCmd)),
-        { label: `target ${req.host}`, ...opts },
+        { ...SSHPASS_TARGET_RETRY, label: `target ${req.host}`, ...opts },
     );
 }
 
@@ -232,9 +252,12 @@ export async function sshpassToTarget(
  * Called at the start of push_key (and used as preflight's reachability
  * check) so the pipeline waits out a post-provision reboot of the
  * freshly-allocated target VM instead of failing the migration on the
- * first refused connection. The default budget (~4 minutes) is
- * comfortably longer than a small cloud VM's reboot cycle; a target
- * still unreachable after that is treated as a real failure.
+ * first refused connection. The default budget (~10 minutes) covers a
+ * slow cloud VM boot stacked on a late cloud-init / unattended-upgrades
+ * reboot — observed on fresh Contabo VPS targets, where the earlier
+ * 4-minute budget expired mid-reboot and failed preflight (target_ssh,
+ * "Connection refused") on a host that came back healthy moments later.
+ * A target still unreachable after that is treated as a real failure.
  *
  * A wrong password fails fast — "Permission denied" is not transient, so
  * retryTransientSSH rethrows it on the first attempt rather than waiting
@@ -244,7 +267,7 @@ export async function waitForTargetSSH(
     req: MigrationRequest,
     opts?: { attempts?: number; delayMs?: number },
 ): Promise<void> {
-    const attempts = opts?.attempts ?? 24;
+    const attempts = opts?.attempts ?? 60;
     const delayMs = opts?.delayMs ?? 10_000;
     console.log(
         `[Migration] waiting for target ${req.host} to accept SSH ` +
