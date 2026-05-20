@@ -1,6 +1,6 @@
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
 import { MigrationRequest, PreflightResult } from '../MigrationTypes';
-import { shq } from '../MigrationSSH';
+import { shq, sshpassToTarget, waitForTargetSSH } from '../MigrationSSH';
 
 /**
  * Preflight runs from the SOURCE host and verifies the TARGET is reachable
@@ -52,12 +52,11 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
         // Best-effort — if it errors we'll catch the consequence at the next SSH step.
     }
 
-    // 2. SSH reachability to target with provided password
+    // 2. SSH reachability to target with provided password. waitForTargetSSH
+    //    polls for several minutes, so a freshly-provisioned target that is
+    //    still mid-reboot is waited out rather than hard-failing preflight.
     try {
-        const out = await sshpassToTarget(req, 'echo OK');
-        if (!out.stdout.includes('OK')) {
-            throw new Error(`Unexpected response: ${out.stdout.slice(0, 200)}`);
-        }
+        await waitForTargetSSH(req);
         checks.push({ name: 'target_ssh', ok: true, message: `SSH to ${req.user}@${req.host} succeeded` });
     } catch (err) {
         checks.push({ name: 'target_ssh', ok: false, message: `SSH to target failed: ${errMsg(err)}` });
@@ -180,32 +179,6 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
     }
 
     return { ok: true, checks, sourceSizeBytes, targetFreeBytes };
-}
-
-/**
- * Run a command on the target PCS from the source host using sshpass.
- * Used only during preflight and the initial key-push step — everything
- * after that uses key auth.
- */
-async function sshpassToTarget(
-    req: MigrationRequest,
-    remoteCmd: string
-): Promise<{ stdout: string; stderr: string }> {
-    // Pass password through env var SSHPASS — never on the command line where
-    // it would land in /proc/*/cmdline and host-side shell history.
-    const cmd = [
-        `SSHPASS=${shq(req.password)}`,
-        'sshpass',
-        '-e',
-        'ssh',
-        '-o', 'StrictHostKeyChecking=accept-new',
-        '-o', 'ConnectTimeout=10',
-        '-o', 'PreferredAuthentications=password',
-        '-o', 'PubkeyAuthentication=no',
-        `${req.user}@${req.host}`,
-        shq(remoteCmd),
-    ].join(' ');
-    return executeHostCommand(cmd);
 }
 
 function errMsg(e: unknown): string {

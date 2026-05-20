@@ -1,6 +1,14 @@
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
 import { MigrationRequest } from '../MigrationTypes';
-import { MigrationKeyPair, MIGRATION_PATHS, newRunId, shq } from '../MigrationSSH';
+import {
+    MigrationKeyPair,
+    MIGRATION_PATHS,
+    newRunId,
+    retryTransientSSH,
+    shq,
+    sshpassToTarget,
+    waitForTargetSSH,
+} from '../MigrationSSH';
 
 /**
  * Generates a fresh ed25519 keypair on the SOURCE host and installs the
@@ -22,6 +30,16 @@ export async function pushMigrationKey(req: MigrationRequest): Promise<Migration
     const privateKeyPath = `${keyDir}/${runId}`;
     const publicKeyPath = `${privateKeyPath}.pub`;
 
+    // 0. Wait for the target to accept SSH before touching it. Preflight
+    //    verified reachability moments ago, but the target is a freshly
+    //    provisioned cloud VM and those auto-reboot (unattended-upgrades /
+    //    cloud-init) in the minutes after provisioning — dropping sshd for
+    //    a 1–3 min window right in the gap between preflight and here.
+    //    waitForTargetSSH polls that out instead of failing the migration
+    //    on the first refused connection. Done before keygen so an
+    //    unreachable target doesn't leave a stray key file on the host.
+    await waitForTargetSSH(req);
+
     // 1. Generate keypair on source host
     await executeHostCommand(`mkdir -p ${shq(keyDir)} && chmod 700 ${shq(keyDir)}`);
     await executeHostCommand(
@@ -32,7 +50,9 @@ export async function pushMigrationKey(req: MigrationRequest): Promise<Migration
 
     // 2. Append pubkey to target migration user's authorized_keys (idempotent).
     //    The migration user already has a home + sudo from the target's
-    //    account-enable; we only need to seed the SSH key.
+    //    account-enable; we only need to seed the SSH key. sshpassToTarget
+    //    retries transient connection failures, covering a re-blip after the
+    //    waitForTargetSSH gate above.
     const remoteScript = `
 set -e
 PUB_KEY="$1"
@@ -45,35 +65,30 @@ echo OK
 `.trim();
 
     const scriptEncoded = Buffer.from(remoteScript, 'utf8').toString('base64');
-    const sshpassCmd = [
-        `SSHPASS=${shq(req.password)}`,
-        'sshpass',
-        '-e',
-        'ssh',
-        '-o', 'StrictHostKeyChecking=accept-new',
-        '-o', 'ConnectTimeout=10',
-        '-o', 'PreferredAuthentications=password',
-        '-o', 'PubkeyAuthentication=no',
-        `${req.user}@${req.host}`,
-        shq(`echo ${scriptEncoded} | base64 -d | bash -s -- ${shq(publicKey)}`),
-    ].join(' ');
-
-    const result = await executeHostCommand(sshpassCmd);
+    const result = await sshpassToTarget(
+        req,
+        `echo ${scriptEncoded} | base64 -d | bash -s -- ${shq(publicKey)}`,
+    );
     if (!result.stdout.includes('OK')) {
         throw new Error(`Key install on target failed: ${result.stdout}\n${result.stderr}`);
     }
 
-    // 3. Verify key auth + sudo work for subsequent steps
-    const verify = await executeHostCommand(
-        [
-            'ssh',
-            '-i', shq(privateKeyPath),
-            '-o', 'StrictHostKeyChecking=accept-new',
-            '-o', 'BatchMode=yes',
-            '-o', 'ConnectTimeout=10',
-            `${migrationUser}@${req.host}`,
-            shq('sudo -n whoami'),
-        ].join(' ')
+    // 3. Verify key auth + sudo work for subsequent steps. Retries transient
+    //    SSH failures so a reboot landing between steps 2 and 3 doesn't fail
+    //    a migration whose key is already installed.
+    const verify = await retryTransientSSH(
+        () => executeHostCommand(
+            [
+                'ssh',
+                '-i', shq(privateKeyPath),
+                '-o', 'StrictHostKeyChecking=accept-new',
+                '-o', 'BatchMode=yes',
+                '-o', 'ConnectTimeout=10',
+                `${migrationUser}@${req.host}`,
+                shq('sudo -n whoami'),
+            ].join(' ')
+        ),
+        { label: `target ${req.host} key-auth verify` },
     );
     if (!verify.stdout.trim().includes('root')) {
         throw new Error(`Key auth + sudo verification on target failed: ${verify.stdout} / ${verify.stderr}`);
