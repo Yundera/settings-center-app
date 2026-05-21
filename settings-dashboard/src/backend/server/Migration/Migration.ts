@@ -303,10 +303,12 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         if (await isCancelled()) throw new Error('Cancelled');
 
         // ---- Verify destination serves the domain (post-cutover check) ----
-        // Runs AFTER deregister_source, so the route is uncontested. Hard
-        // gate: mesh-router-backend resolves the user's domain to the
-        // destination IP. A failure here still rolls back cheaply — the
-        // source's stack is only stopped, not destroyed. See verifyDestination.ts.
+        // Runs AFTER deregister_source, so the route is uncontested. Two hard
+        // gates, both must pass or the migration rolls back: the destination's
+        // admin app answers /api/health (the authoritative gate), and
+        // mesh-router-backend resolves the user's domain to the destination
+        // IP. A failure here still rolls back cheaply — the source's stack is
+        // only stopped, not destroyed. See verifyDestination.ts.
         await setStep('verify_destination', 'running');
         await setPhase('verify_destination');
         const {userDomain, serverDomain} = splitDomain(process.env.DOMAIN || process.env.PCS_DOMAIN || '');
