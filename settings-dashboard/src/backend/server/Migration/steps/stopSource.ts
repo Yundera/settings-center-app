@@ -5,7 +5,8 @@ import { shq } from '../MigrationSSH';
  * Stop THIS PCS (the source) before the offline diff rsync, so its data
  * is quiescent and so its self-check cron can't rotate USER_JWT or restart
  * apps while the target is being brought up:
- *   1. Bring down every docker-compose stack under /DATA/AppData.
+ *   1. Stop (not `down`) every user docker-compose stack under /DATA/AppData,
+ *      so a rollback restart is a plain `compose up -d`.
  *   2. Disable the local self-check cron (keeping a backup so we can restore
  *      it on rollback). Removes any matching crontab line on root + the
  *      operator user, plus any yundera systemd timer.
@@ -33,7 +34,7 @@ set +e
 for compose_file in $(sudo -n find /DATA/AppData -maxdepth 4 -type f \\( -name 'docker-compose.yml' -o -name 'compose.yml' -o -name 'docker-compose.yaml' \\) 2>/dev/null | grep -v ${shq(SYSTEM_STACK_PATH)}); do
   dir=$(dirname "$compose_file")
   echo "Stopping stack: $dir"
-  sudo -n docker compose -f "$compose_file" down --remove-orphans 2>&1 | tail -5
+  sudo -n docker compose -f "$compose_file" stop 2>&1 | tail -5
 done
 echo DONE
 `.trim();
@@ -93,10 +94,11 @@ echo DONE
 `.trim();
     await executeHostCommand(`bash -c ${shq(restoreCronScript)}`, { timeout: 60_000 });
 
-    // Symmetric to stopSource: only restart USER stacks. The yundera
-    // system stack was never stopped, so don't try to "restart" it (a
-    // `compose up -d` is harmless if already up, but skip for symmetry
-    // and to avoid touching the migration's own host environment).
+    // Bring user stacks back up, and also the yundera system stack: a
+    // rollback can run AFTER `deregister_source` stopped the system stack
+    // (everything but `admin`), so it must be restarted too. `compose up -d`
+    // is a no-op for the already-running `admin` container and for the whole
+    // system stack when `deregister_source` never ran.
     const bringUpScript = `
 set +e
 for compose_file in $(sudo -n find /DATA/AppData -maxdepth 4 -type f \\( -name 'docker-compose.yml' -o -name 'compose.yml' -o -name 'docker-compose.yaml' \\) 2>/dev/null | grep -v ${shq(SYSTEM_STACK_PATH)}); do
@@ -104,6 +106,11 @@ for compose_file in $(sudo -n find /DATA/AppData -maxdepth 4 -type f \\( -name '
   echo "Starting stack: $dir"
   sudo -n docker compose -f "$compose_file" up -d 2>&1 | tail -5
 done
+SYSTEM_COMPOSE=${shq(SYSTEM_STACK_PATH + 'docker-compose.yml')}
+if sudo -n test -f "$SYSTEM_COMPOSE"; then
+  echo "Starting system stack: $SYSTEM_COMPOSE"
+  sudo -n docker compose -f "$SYSTEM_COMPOSE" up -d 2>&1 | tail -10
+fi
 echo DONE
 `.trim();
     await executeHostCommand(`bash -c ${shq(bringUpScript)}`, { timeout: 10 * 60 * 1000 });

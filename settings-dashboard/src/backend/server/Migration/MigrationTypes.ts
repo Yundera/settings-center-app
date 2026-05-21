@@ -8,10 +8,11 @@ export type MigrationPhase =
     | 'offline_rsync'
     | 'target_self_check'
     | 'start_user_apps'
+    | 'deregister_source'
     | 'verify_destination'
-    | 'webhook'
     | 'cleanup'
-    | 'switchover'
+    | 'source_down'
+    | 'webhook'
     | 'done'
     | 'failed'
     | 'rolling_back'
@@ -84,23 +85,24 @@ export interface MigrationStatus {
     cancelRequested: boolean;
 }
 
-// `webhook` is intentionally LAST: it's the final hand-off signal to the
-// orchestrator (or, when ORCHESTRATOR_PUBLIC_URL isn't set, the manual
-// "Complete migration" button the dashboard surfaces in its place). All
-// source-side work — cleanup of the migration SSH key, scheduling the
-// source-stack teardown — runs before that signal. The pcs-dashboard
-// MigrationCard mirrors this order; keep the two in sync.
+// `webhook` is intentionally LAST: it is the terminal status push to the
+// orchestrator (POST /pcs/migration-callback). The snapshot it carries has
+// phase=done, which is what triggers promote + source soft-delete. The
+// source-side cutover happens earlier, at `deregister_source` (the source's
+// mesh-router stops); `verify_destination` then runs against the uncontested
+// route. The pcs-dashboard MigrationCard mirrors this order; keep them in sync.
 export const MIGRATION_STEPS: Array<{ key: string; label: string }> = [
     { key: 'preflight', label: 'Preflight checks' },
     { key: 'push_key', label: 'Install SSH key on target migration account' },
     { key: 'online_rsync', label: 'Online rsync (push to target)' },
     { key: 'docker_pull', label: 'Pull Docker images on target' },
-    { key: 'stop_source', label: 'Stop local containers + disable self-check cron' },
+    { key: 'stop_source', label: 'Stop user app stacks + disable self-check cron' },
     { key: 'offline_rsync', label: 'Offline diff rsync (push to target)' },
     { key: 'target_self_check', label: 'Run self-check on target' },
     { key: 'start_user_apps', label: 'Start user apps on target' },
+    { key: 'deregister_source', label: 'Deregister source (stop system stack, source goes silent)' },
     { key: 'verify_destination', label: 'Verify destination serves domain' },
     { key: 'cleanup', label: 'Revoke target migration access' },
-    { key: 'switchover', label: 'Switchover (source goes silent so target takes over)' },
-    { key: 'webhook', label: 'Delete source PCS (via webhook → orchestrator)' },
+    { key: 'source_down', label: 'Source down (schedule admin teardown)' },
+    { key: 'webhook', label: 'Signal orchestrator (terminal status push)' },
 ];

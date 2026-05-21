@@ -14,9 +14,10 @@ import { pullImagesOnTarget } from './steps/dockerPull';
 import { stopSource, restartSource } from './steps/stopSource';
 import { triggerTargetSelfCheck } from './steps/targetSelfCheck';
 import { startUserAppsOnTarget } from './steps/startUserApps';
+import { deregisterSource } from './steps/deregisterSource';
 import { verifyDestination } from './steps/verifyDestination';
-import { fireWebhook } from './steps/webhook';
-import { scheduleSwitchover } from './steps/switchover';
+import { scheduleSourceDown } from './steps/sourceDown';
+import { startStatusPusher, StatusPusher } from './MigrationStatusPush';
 import { MigrationKeyPair } from './MigrationSSH';
 
 const DEFAULT_STATUS: MigrationStatus = {
@@ -37,6 +38,11 @@ const DEFAULT_STATUS: MigrationStatus = {
 // visibility.
 let state: MigrationStatus = { ...DEFAULT_STATUS };
 
+// Set for the duration of a runMigration() call. setPhase / setStep /
+// updateRsyncProgress notify it after every state mutation; the pusher
+// coalesces those into throttled + heartbeat POSTs to the orchestrator.
+let activePusher: StatusPusher | null = null;
+
 export async function getMigrationStatus(): Promise<MigrationStatus> {
     return state;
 }
@@ -47,6 +53,7 @@ export async function requestCancel(): Promise<void> {
 
 async function setPhase(phase: MigrationPhase, patch: Partial<MigrationStatus> = {}): Promise<void> {
     state = { ...state, phase, ...patch };
+    activePusher?.notify();
 }
 
 async function setStep(key: string, status: MigrationStepStatus, message?: string): Promise<void> {
@@ -63,10 +70,12 @@ async function setStep(key: string, status: MigrationStepStatus, message?: strin
                 : existing?.finishedAt,
     };
     state = { ...state, steps: { ...state.steps, [key]: step } };
+    activePusher?.notify();
 }
 
 export async function updateRsyncProgress(p: RsyncProgress): Promise<void> {
     state = { ...state, rsync: p };
+    activePusher?.notify();
 }
 
 async function isCancelled(): Promise<boolean> {
@@ -161,6 +170,13 @@ function isActivePhase(phase: MigrationPhase): boolean {
 async function runMigration(req: MigrationRequest): Promise<void> {
     let keypair: MigrationKeyPair | undefined;
     let sourceStopped = false;
+
+    // Status push: setStep / setPhase / updateRsyncProgress notify this
+    // pusher, which coalesces + heartbeats full-snapshot POSTs to the
+    // orchestrator. After `deregister_source` the source is unreachable via
+    // its own domain, so this outbound push is the only status channel left.
+    const pusher = startStatusPusher(req.webhookUrl, () => state);
+    activePusher = pusher;
 
     try {
         // ---- Preflight ----
@@ -274,25 +290,29 @@ async function runMigration(req: MigrationRequest): Promise<void> {
                 'docker compose up -d ran for every user app with the target\'s env');
         }
 
-        // ---- Verify destination serves the domain (pre-cutover check) ----
-        // Validates BEFORE switchover that the target is ready to take over:
-        // (a) HTTPS-probes the target's IP with the user's FQDN as Host —
-        //     proves caddy on the target routes the right vhost to the
-        //     right container, independent of DNS / CF / gateway.
-        // (b) Queries the mesh-router-backend's resolve endpoint to confirm
-        //     the target's agent has registered its IP under the user's
-        //     domain — without this, traffic won't actually flip once the
-        //     source goes silent.
-        // Failure here aborts the migration with rollback, while the source
-        // is still serving and recovery is cheap. The orchestrator's
-        // post-cutover waitForDomainReady is a *secondary* check after
-        // promote; this one is the primary pre-flight.
+        // ---- Deregister source (the cutover — LOCAL on this PCS) ----
+        // Stop the yundera system stack except `admin`: the source's
+        // mesh-router-agent goes down, so the destination (publishing since
+        // target_self_check) owns the route uncontested. `admin` stays up to
+        // finish this pipeline and keep pushing status. See deregisterSource.ts.
+        await setStep('deregister_source', 'running');
+        await setPhase('deregister_source');
+        await deregisterSource();
+        await setStep('deregister_source', 'success',
+            'Source system stack stopped (admin excluded) — source mesh-router silenced');
+        if (await isCancelled()) throw new Error('Cancelled');
+
+        // ---- Verify destination serves the domain (post-cutover check) ----
+        // Runs AFTER deregister_source, so the route is uncontested. Hard
+        // gate: mesh-router-backend resolves the user's domain to the
+        // destination IP. A failure here still rolls back cheaply — the
+        // source's stack is only stopped, not destroyed. See verifyDestination.ts.
         await setStep('verify_destination', 'running');
         await setPhase('verify_destination');
         const {userDomain, serverDomain} = splitDomain(process.env.DOMAIN || process.env.PCS_DOMAIN || '');
         if (!userDomain || !serverDomain) {
             await setStep('verify_destination', 'skipped',
-                `Could not parse DOMAIN env (got "${process.env.DOMAIN ?? ''}") — skipping pre-cutover check`);
+                `Could not parse DOMAIN env (got "${process.env.DOMAIN ?? ''}") — skipping post-cutover check`);
         } else {
             const verifyResult = await verifyDestination(keypair, req.host, userDomain, serverDomain);
             if (!verifyResult.ok) {
@@ -309,47 +329,45 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         await setStep('cleanup', 'success',
             'Migration SSH key removed from target — source can no longer reach it');
 
-        // ---- Switchover (schedule source-side teardown of the yundera
-        // system stack so target becomes the sole mesh-router agent for
-        // this domain). `scheduleSwitchover` only schedules a detached
-        // teardown with a ~60s delay; the admin process running this
-        // pipeline stays alive long enough to fire the webhook below and
-        // write phase=done. See switchover.ts header.
-        await setStep('switchover', 'running');
-        await setPhase('switchover');
+        // ---- Source down (schedule detached teardown of `admin`) ----
+        // `deregister_source` already stopped the rest of the system stack;
+        // this schedules a detached, delayed `stop admin` so the pipeline can
+        // finish (terminal push below) before `admin` — the process running
+        // it — goes away. See sourceDown.ts.
+        await setStep('source_down', 'running');
+        await setPhase('source_down');
         try {
-            await scheduleSwitchover();
-            await setStep('switchover', 'success', 'Source teardown scheduled (will go silent in ~60s)');
-        } catch (swErr) {
-            // Don't blow up the whole migration if scheduling the
-            // switchover failed — the migration data is already on
-            // target and the orchestrator can drive a manual cutover
-            // (the operator runs `compose down` from any SSH session).
-            const swMsg = swErr instanceof Error ? swErr.message : String(swErr);
-            console.error('[Migration] schedule switchover failed:', swMsg);
-            await setStep('switchover', 'failed', `Scheduling failed: ${swMsg}. Bring down /DATA/AppData/casaos/apps/yundera manually before promoting.`);
+            await scheduleSourceDown();
+            await setStep('source_down', 'success', 'Admin teardown scheduled (source goes fully silent in ~60s)');
+        } catch (sdErr) {
+            // Non-fatal: the migration data is already on the target. The
+            // orchestrator's promote + Contabo-API stop silences the source
+            // anyway; an operator can also stop `admin` from any SSH session.
+            const sdMsg = sdErr instanceof Error ? sdErr.message : String(sdErr);
+            console.error('[Migration] schedule source_down failed:', sdMsg);
+            await setStep('source_down', 'failed',
+                `Scheduling failed: ${sdMsg}. Stop the admin container at /DATA/AppData/casaos/apps/yundera manually.`);
         }
 
-        // ---- Webhook (final hand-off signal — last step) ----
-        // The orchestrator's webhook handler runs `promoteMigrationAndDelete-
-        // Source`, which renames the target to `pcs-<pcsId>` and soft-deletes
-        // this source via the Contabo API. That hard-stop will likely race
-        // ahead of the 60s detached teardown scheduled above, which is fine —
-        // both paths converge on "source goes silent." When ORCHESTRATOR_PUBLIC
-        // _URL is unset (typical in dev), the step records 'skipped' and the
-        // user clicks the dashboard's "Complete migration" button, which hits
-        // the same promote path.
+        // ---- Webhook (terminal status push — last step) ----
+        // The push below carries phase=done; the orchestrator's
+        // migration-callback handler promotes the destination and soft-deletes
+        // this source on receipt. With no callback URL configured (dev /
+        // Path A) the push is a no-op and the user clicks the dashboard's
+        // "Complete migration" button, which hits the same promote path.
+        await setStep('webhook', 'running');
+        await setPhase('webhook');
         if (req.webhookUrl) {
-            await setStep('webhook', 'running');
-            await setPhase('webhook');
-            const current = await getMigrationStatus();
-            await fireWebhook(req.webhookUrl, { status: 'success', startedAt: current.startedAt });
-            await setStep('webhook', 'success');
+            await setStep('webhook', 'success', 'Terminal status pushed to orchestrator');
         } else {
-            await setStep('webhook', 'skipped', 'No webhook URL configured');
+            await setStep('webhook', 'skipped',
+                'No orchestrator callback URL — finish via the dashboard "Complete migration" button');
         }
 
         await setPhase('done', { finishedAt: new Date() });
+        // Flush the terminal (phase=done) snapshot synchronously, before the
+        // detached source_down script stops `admin`.
+        await pusher.flushTerminal();
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
 
@@ -363,6 +381,8 @@ async function runMigration(req: MigrationRequest): Promise<void> {
 
         if (sourceStopped) {
             // Rollback: bring source back up so the user has a serving PCS.
+            // restartSource() also restarts the yundera system stack, which
+            // deregister_source may have stopped.
             await setPhase('rolling_back', { error: msg });
             try {
                 await restartSource();
@@ -384,13 +404,16 @@ async function runMigration(req: MigrationRequest): Promise<void> {
             }
         }
 
-        // Fire failure webhook
-        if (req.webhookUrl) {
-            try {
-                await fireWebhook(req.webhookUrl, { status: 'failed', error: msg });
-            } catch (webhookErr) {
-                console.error('[Migration] failure webhook errored:', webhookErr);
-            }
+        // Terminal failure push — the snapshot's phase is now 'failed' or
+        // 'rolled_back'; the orchestrator records the failure and leaves the
+        // callback token in place so the user can retry.
+        try {
+            await pusher.flushTerminal();
+        } catch (pushErr) {
+            console.error('[Migration] terminal failure push errored:', pushErr);
         }
+    } finally {
+        pusher.stop();
+        activePusher = null;
     }
 }
