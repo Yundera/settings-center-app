@@ -63,7 +63,11 @@ async function setStep(key: string, status: MigrationStepStatus, message?: strin
         name: key,
         status,
         message,
-        startedAt: status === 'running' ? now : existing?.startedAt,
+        // Preserve startedAt across repeated 'running' calls — steps that
+        // push live progress (e.g. docker_pull's per-stack message) re-enter
+        // setStep with 'running' many times; only the first should stamp the
+        // start time.
+        startedAt: status === 'running' ? (existing?.startedAt ?? now) : existing?.startedAt,
         finishedAt:
             status === 'success' || status === 'failed' || status === 'skipped'
                 ? now
@@ -214,7 +218,9 @@ async function runMigration(req: MigrationRequest): Promise<void> {
         // ---- Pre-pull docker images on target (per compose stack) ----
         await setStep('docker_pull', 'running');
         await setPhase('docker_pull');
-        const pullResult = await pullImagesOnTarget(keypair, req.host);
+        const pullResult = await pullImagesOnTarget(keypair, req.host, (msg) => {
+            void setStep('docker_pull', 'running', msg);
+        });
         const pullMsgParts: string[] = [];
         if (pullResult.installedDocker) pullMsgParts.push('docker installed');
         if (pullResult.composeFilesPulled.length > 0) {

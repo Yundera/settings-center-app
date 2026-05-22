@@ -7,9 +7,12 @@ import { shq } from '../MigrationSSH';
  * apps while the target is being brought up:
  *   1. Stop (not `down`) every user docker-compose stack under /DATA/AppData,
  *      so a rollback restart is a plain `compose up -d`.
- *   2. Disable the local self-check cron (keeping a backup so we can restore
- *      it on rollback). Removes any matching crontab line on root + the
- *      operator user, plus any yundera systemd timer.
+ *   2. Disable the NIGHTLY self-check cron only (keeping a full crontab
+ *      backup so rollback can restore it). The `@reboot` self-check hook is
+ *      deliberately LEFT IN PLACE: it is the worst-case recovery wire, so a
+ *      reboot must always reconverge the source to its pre-migration state.
+ *      The dashboard blocks the source's Reboot button while a migration
+ *      runs, so a mid-migration reboot can't be user-triggered.
  *
  * If a later step fails, rollback calls restartSource() to bring this PCS
  * back to a serving state.
@@ -40,7 +43,8 @@ echo DONE
 `.trim();
     await executeHostCommand(`bash -c ${shq(bringDownScript)}`, { timeout: 10 * 60 * 1000 });
 
-    // 2. Disable self-check cron (backup so rollback can restore)
+    // 2. Disable the nightly self-check cron (backup so rollback can restore).
+    //    The @reboot recovery hook is intentionally NOT touched.
     const disableCronScript = `
 set +e
 MARKER=${shq(CRON_MARKER_FILE)}
@@ -50,13 +54,19 @@ for who in root "$USER"; do
   backup="$MARKER.$who.bak"
   if sudo -n crontab -l -u "$who" 2>/dev/null > "/tmp/ct.$who" && [ -s "/tmp/ct.$who" ]; then
     sudo -n cp "/tmp/ct.$who" "$backup"
-    grep -v 'yundera.*self-check' "/tmp/ct.$who" > "/tmp/ct.$who.new" || true
+    # Drop ONLY the nightly self-check line — it carries the YUNDERA_NIGHTLY_SELFCHECK
+    # marker comment. The '@reboot .../self-check-reboot.sh' line carries no such
+    # marker, so it is left intact: it is the worst-case recovery hook and must
+    # survive a migration so a reboot always restores the source.
+    grep -v 'YUNDERA_NIGHTLY_SELFCHECK' "/tmp/ct.$who" > "/tmp/ct.$who.new" || true
     sudo -n crontab -u "$who" "/tmp/ct.$who.new" 2>/dev/null || true
     rm -f "/tmp/ct.$who" "/tmp/ct.$who.new"
   fi
 done
 
-for unit in $(sudo -n systemctl list-timers --all --no-legend 2>/dev/null | grep -i yundera | awk '{print $NF}'); do
+# Belt-and-suspenders for timer-based setups. 'reboot'-named units are excluded
+# so a boot-recovery timer is never disabled (same rule as the @reboot cron line).
+for unit in $(sudo -n systemctl list-timers --all --no-legend 2>/dev/null | grep -i yundera | grep -vi reboot | awk '{print $NF}'); do
   sudo -n systemctl stop "$unit" 2>/dev/null || true
   sudo -n systemctl disable "$unit" 2>/dev/null || true
   echo "$unit" >> "$MARKER.timers"

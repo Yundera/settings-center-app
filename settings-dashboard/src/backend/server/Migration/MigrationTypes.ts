@@ -85,24 +85,47 @@ export interface MigrationStatus {
     cancelRequested: boolean;
 }
 
+/**
+ * Which "phase" a step belongs to, from the user's point of view — i.e. who is
+ * answering requests for their apps while the step runs:
+ *   - 'source'     — the old PCS is still serving; apps are online, no downtime.
+ *   - 'switchover' — apps are stopped on the source and not yet reachable on
+ *                    the target: the (brief) downtime window. Runs from
+ *                    `stop_source` through the `deregister_source` cutover.
+ *   - 'target'     — the new PCS is serving; `verify_destination` is the step
+ *                    that confirms apps answer again, now on the target.
+ *
+ * Note this is coarser than `MigrationPhase`: it groups steps by app
+ * availability for the UI's colour bands, it is not the live phase machine.
+ */
+export type MigrationStepPhase = 'source' | 'switchover' | 'target';
+
+/** Display metadata for each step phase — drives the dashboard colour legend. */
+export const MIGRATION_STEP_PHASES: Record<MigrationStepPhase, { label: string; description: string }> = {
+    source:     { label: 'Old PCS serving', description: 'Your apps stay online on the current PCS — no downtime.' },
+    switchover: { label: 'Switchover',      description: 'Brief downtime — apps are stopped while data and identity move to the new PCS.' },
+    target:     { label: 'New PCS serving', description: 'Your apps are back, now served by the new PCS.' },
+};
+
 // `webhook` is intentionally LAST: it is the terminal status push to the
 // orchestrator (POST /pcs/migration-callback). The snapshot it carries has
 // phase=done, which is what triggers promote + source soft-delete. The
 // source-side cutover happens earlier, at `deregister_source` (the source's
 // mesh-router stops); `verify_destination` then runs against the uncontested
-// route. The pcs-dashboard MigrationCard mirrors this order; keep them in sync.
-export const MIGRATION_STEPS: Array<{ key: string; label: string }> = [
-    { key: 'preflight', label: 'Preflight checks' },
-    { key: 'push_key', label: 'Install SSH key on target migration account' },
-    { key: 'online_rsync', label: 'Online rsync (push to target)' },
-    { key: 'docker_pull', label: 'Pull Docker images on target' },
-    { key: 'stop_source', label: 'Stop user app stacks + disable self-check cron' },
-    { key: 'offline_rsync', label: 'Offline diff rsync (push to target)' },
-    { key: 'target_self_check', label: 'Run self-check on target' },
-    { key: 'start_user_apps', label: 'Start user apps on target' },
-    { key: 'deregister_source', label: 'Deregister source (stop system stack, source goes silent)' },
-    { key: 'verify_destination', label: 'Verify destination serves domain' },
-    { key: 'cleanup', label: 'Revoke target migration access' },
-    { key: 'source_down', label: 'Source down (schedule admin teardown)' },
-    { key: 'webhook', label: 'Signal orchestrator (terminal status push)' },
+// route. The pcs-dashboard MigrationCard mirrors this order AND the per-step
+// `phase` grouping below; keep them in sync.
+export const MIGRATION_STEPS: Array<{ key: string; label: string; phase: MigrationStepPhase }> = [
+    { key: 'preflight', label: 'Preflight checks', phase: 'source' },
+    { key: 'push_key', label: 'Install SSH key on target migration account', phase: 'source' },
+    { key: 'online_rsync', label: 'Online rsync (push to target)', phase: 'source' },
+    { key: 'docker_pull', label: 'Pull Docker images on target', phase: 'source' },
+    { key: 'stop_source', label: 'Stop user app stacks + disable self-check cron', phase: 'switchover' },
+    { key: 'offline_rsync', label: 'Offline diff rsync (push to target)', phase: 'switchover' },
+    { key: 'target_self_check', label: 'Run self-check on target', phase: 'switchover' },
+    { key: 'start_user_apps', label: 'Start user apps on target', phase: 'switchover' },
+    { key: 'deregister_source', label: 'Deregister source (stop system stack, source goes silent)', phase: 'switchover' },
+    { key: 'verify_destination', label: 'Verify destination serves domain', phase: 'target' },
+    { key: 'cleanup', label: 'Revoke target migration access', phase: 'target' },
+    { key: 'source_down', label: 'Source down (schedule admin teardown)', phase: 'target' },
+    { key: 'webhook', label: 'Signal orchestrator (terminal status push)', phase: 'target' },
 ];

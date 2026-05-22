@@ -1,3 +1,4 @@
+import { basename, dirname } from 'path';
 import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
 
 /**
@@ -22,6 +23,12 @@ import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
  *
  * Result returns the list of compose files successfully pulled — callers
  * use length for the step message.
+ *
+ * `onProgress`, when supplied, is called with a short human string before
+ * the docker install and before each stack's pull. The caller maps it onto
+ * the live `docker_pull` step message so the dashboard shows which stack is
+ * pulling ("Pulling images: 3/11 (nextcloud)") instead of a bare spinner
+ * for the whole multi-minute step.
  */
 
 const DOCKER_INSTALL_SCRIPT =
@@ -37,7 +44,8 @@ export interface DockerPullResult {
 
 export async function pullImagesOnTarget(
     keypair: MigrationKeyPair,
-    target: string
+    target: string,
+    onProgress?: (msg: string) => void,
 ): Promise<DockerPullResult> {
     let installedDocker = false;
 
@@ -46,6 +54,7 @@ export async function pullImagesOnTarget(
     try {
         await execOnTarget(keypair, target, `command -v docker >/dev/null`);
     } catch {
+        onProgress?.('Installing Docker on target…');
         try {
             await execOnTarget(keypair, target, `bash ${shq(DOCKER_INSTALL_SCRIPT)}`, {
                 sudo: true,
@@ -85,7 +94,12 @@ export async function pullImagesOnTarget(
     //    window, which is the whole point of this step.
     const pulled: string[] = [];
     const failed: string[] = [];
-    for (const file of composeFiles) {
+    for (let i = 0; i < composeFiles.length; i++) {
+        const file = composeFiles[i];
+        // Compose files live at /DATA/AppData/casaos/apps/<stack>/<file> —
+        // the parent dir name is the stack the operator recognises.
+        const stack = basename(dirname(file));
+        onProgress?.(`Pulling images: ${i + 1}/${composeFiles.length} (${stack})`);
         try {
             await execOnTarget(
                 keypair,

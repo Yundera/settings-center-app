@@ -15,6 +15,7 @@ import {
     LinearProgress,
     Stack,
     TextField,
+    Tooltip,
     Typography,
 } from '@mui/material';
 import {
@@ -43,6 +44,8 @@ import {
 import {
     MigrationStatus,
     MIGRATION_STEPS,
+    MIGRATION_STEP_PHASES,
+    MigrationStepPhase,
     MigrationStepStatus,
     PreflightResult,
 } from '@/backend/server/Migration/MigrationTypes';
@@ -282,6 +285,8 @@ export const MigrationPanel: React.FC = () => {
                 {preflight && <PreflightResultCard result={preflight} />}
 
                 {status.phase !== 'idle' && <MigrationStatusCard status={status} />}
+
+                <MigrationStepsReferenceCard />
             </Box>
         </Box>
     );
@@ -362,10 +367,18 @@ const MigrationStatusCard: React.FC<{ status: MigrationStatus }> = ({ status }) 
                         </Box>
                     )}
 
-                    {MIGRATION_STEPS.map(({ key, label }) => {
+                    <PhaseLegend />
+
+                    {MIGRATION_STEPS.map(({ key, label, phase }) => {
                         const step = status.steps[key];
                         return (
-                            <Box key={key} sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }}>
+                            <Box key={key} sx={{
+                                display: 'flex',
+                                flexDirection: 'row',
+                                alignItems: 'flex-start',
+                                borderLeft: `3px solid ${phaseGroupColor(phase)}`,
+                                pl: 1,
+                            }}>
                                 <Box sx={iconStyle.container}>{stepIcon(step?.status)}</Box>
                                 <Box>
                                     <Typography sx={text.label}>{label}</Typography>
@@ -414,6 +427,109 @@ function phaseColorFor(phase: string): string {
     if (phase === 'idle') return colors.textWhite;
     return colors.statusInfo;
 }
+
+// Left-border colour for a step's phase band: green while the old PCS still
+// serves the apps, amber through the switchover downtime window, blue once the
+// new PCS serves them. See MIGRATION_STEP_PHASES in MigrationTypes.ts.
+function phaseGroupColor(phase: MigrationStepPhase): string {
+    switch (phase) {
+        case 'source': return colors.statusSuccess;
+        case 'switchover': return colors.statusWarning;
+        case 'target': return colors.statusInfo;
+    }
+}
+
+// Colour key for the per-step phase bands, shown above the step list. Each
+// entry's tooltip carries the longer explanation from MIGRATION_STEP_PHASES.
+const PhaseLegend: React.FC = () => (
+    <Stack direction="row" spacing={2} flexWrap="wrap" sx={{ rowGap: 0.5 }}>
+        {(Object.keys(MIGRATION_STEP_PHASES) as MigrationStepPhase[]).map(p => (
+            <Tooltip key={p} title={MIGRATION_STEP_PHASES[p].description}>
+                <Stack direction="row" spacing={0.75} alignItems="center" sx={{ cursor: 'help' }}>
+                    <Box sx={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: '2px',
+                        backgroundColor: phaseGroupColor(p),
+                        flexShrink: 0,
+                    }} />
+                    <Typography sx={text.detail}>{MIGRATION_STEP_PHASES[p].label}</Typography>
+                </Stack>
+            </Tooltip>
+        ))}
+    </Stack>
+);
+
+// One-line, user-facing description of what each pipeline step does. Keyed by
+// the step `key` in MIGRATION_STEPS. Sourced from the step table in
+// doc/architecture/migration.md — keep in sync if the pipeline changes.
+const STEP_DESCRIPTIONS: Record<string, string> = {
+    preflight:
+        "Checks the destination is reachable over SSH, has enough free disk, has a clean /DATA, and that both clocks agree. Nothing is changed yet.",
+    push_key:
+        "Generates a one-time SSH key and installs it on the destination's migration account using the password you entered. The password is used once, then discarded.",
+    online_rsync:
+        "Copies /DATA to the destination over SSH while your apps keep running. This is the longest step — it scales with how much data you have.",
+    docker_pull:
+        "Pre-pulls every app's Docker image on the destination — installing Docker there first if it isn't present — so the switchover doesn't wait on downloads.",
+    stop_source:
+        "Stops this PCS' apps and pauses its self-check so the data stops changing. The brief downtime window starts here.",
+    offline_rsync:
+        "A second, fast rsync pass that copies only what changed since the online copy and removes files deleted on this PCS.",
+    target_self_check:
+        "Runs the destination's self-check: installs Docker, detects its public IP, refreshes the PCS identity, and brings up the system stack.",
+    start_user_apps:
+        "Starts every app on the destination. An app whose image can no longer be pulled is reported but does not fail the migration.",
+    deregister_source:
+        "Stops this PCS' mesh-router so the destination takes over the domain uncontested. This is the cutover.",
+    verify_destination:
+        "Confirms the destination is healthy and that the domain now resolves to it. If either check fails, the migration rolls back.",
+    cleanup:
+        "Removes the temporary migration SSH key from the destination.",
+    source_down:
+        "Schedules this PCS' admin container to shut down shortly after the migration finishes reporting.",
+    webhook:
+        "Sends the final status to the orchestrator, which promotes the destination and retires this PCS. Skipped when no orchestrator is configured.",
+};
+
+// Always-visible reference at the bottom of the panel: the full step list with
+// a plain-language description of each, grouped by the same phase colour bands
+// the live status card uses. Unlike MigrationStatusCard this renders before any
+// migration has run, so a user can read what will happen up front.
+const MigrationStepsReferenceCard: React.FC = () => (
+    <Card sx={card.root}>
+        <Box sx={card.header}>
+            <Typography sx={title.small}>Migration steps explained</Typography>
+        </Box>
+        <CardContent sx={card.content}>
+            <Stack sx={{ gap: spacing.itemGap }}>
+                <Typography sx={text.bodyMuted}>
+                    The pipeline runs on this PCS (the source) and pushes your data to the
+                    destination. The colour band on each step shows whether your apps are
+                    online while it runs.
+                </Typography>
+                <PhaseLegend />
+                {MIGRATION_STEPS.map(({ key, label, phase }, i) => (
+                    <Box key={key} sx={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        alignItems: 'flex-start',
+                        borderLeft: `3px solid ${phaseGroupColor(phase)}`,
+                        pl: 1,
+                    }}>
+                        <Typography sx={{ ...text.label, minWidth: 22, opacity: 0.6 }}>
+                            {i + 1}
+                        </Typography>
+                        <Box>
+                            <Typography sx={text.label}>{label}</Typography>
+                            <Typography sx={text.detail}>{STEP_DESCRIPTIONS[key] ?? ''}</Typography>
+                        </Box>
+                    </Box>
+                ))}
+            </Stack>
+        </CardContent>
+    </Card>
+);
 
 function formatBytes(n: number): string {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -477,8 +593,8 @@ const MigrationIntroCard: React.FC = () => (
                     Migration moves a Yundera PCS — its domain, apps, and data — onto another machine.
                     The <strong>source</strong> (the PCS being moved) does all the work; the{' '}
                     <strong>destination</strong> only needs SSH and a sudoer account named{' '}
-                    <Box component="code" sx={inlineCode}>migration</Box>. A bare Ubuntu host with
-                    docker installed is enough.
+                    <Box component="code" sx={inlineCode}>migration</Box>. A bare Ubuntu host is
+                    enough — Docker is installed automatically during the migration.
                 </Typography>
                 <Typography sx={text.bodyWhite}>How it works:</Typography>
                 <Box component="ol" sx={{
