@@ -26,11 +26,13 @@ import SpeedIcon from "@mui/icons-material/Speed";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import HttpsIcon from "@mui/icons-material/Https";
 
 import {AccessPanel} from "@/panels/access/AccessPanel";
 import {AccountPanel} from "@/panels/account/AccountPanel";
 import {AppsPanel} from "@/panels/apps/AppsPanel";
 import {BillingPanel} from "@/panels/billing/BillingPanel";
+import {CertificatesPanel} from "@/panels/certificates/CertificatesPanel";
 import {DomainPanel} from "@/panels/domain/DomainPanel";
 import {HealthPanel} from "@/panels/health/HealthPanel";
 import {MigrationPanel} from "@/panels/migration/MigrationPanel";
@@ -49,6 +51,7 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
     definePanel({name: 'system-information', component: SystemInformationPanel, icon: InfoOutlinedIcon, label: 'System Information'}),
     definePanel({name: 'account',            component: AccountPanel,           icon: AccountCircleIcon,  label: 'Account'}),
     definePanel({name: 'domain',             component: DomainPanel,            icon: LanguageIcon,       label: 'Domain'}),
+    definePanel({name: 'certificates',       component: CertificatesPanel,      icon: HttpsIcon,          label: 'Certificates'}),
     definePanel({name: 'access',             component: AccessPanel,            icon: VpnKeyIcon,         label: 'Access'}),
     definePanel({name: 'terminal',           component: TerminalPanel,          icon: TerminalIcon,       label: 'Terminal'}),
     definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health'}),
