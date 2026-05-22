@@ -19,6 +19,9 @@ export interface CertRow {
     issuer: string | null;       // raw issuer DN from the served certificate
     notAfter: string | null;     // raw openssl notAfter date, e.g. "May 21 12:00:00 2026 GMT"
     expiresInDays: number | null;// days until notAfter (negative if expired)
+    reason: string | null;       // short human-readable reason there is no LE cert
+                                 // (null when status is 'letsencrypt')
+    reasonDetail: string | null; // raw Caddy log line backing `reason`, if one was found
 }
 
 export interface CertSnapshot {

@@ -73,6 +73,21 @@ const inlineCode = {
     fontSize: font.detail,
 };
 
+const logSx = {
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    color: colors.textMuted,
+    fontSize: font.caption,
+    fontFamily: 'monospace',
+    padding: '8px 12px',
+    borderRadius: '4px',
+    marginTop: '6px',
+    marginBottom: 0,
+    maxHeight: '160px',
+    overflow: 'auto',
+    whiteSpace: 'pre-wrap' as const,
+    wordBreak: 'break-word' as const,
+};
+
 // Format a raw openssl notAfter date ("May 21 12:00:00 2026 GMT") to YYYY-MM-DD.
 function formatExpiry(raw: string | null): string {
     if (!raw) return '—';
@@ -103,6 +118,7 @@ function expiryText(row: CertRow): string {
 
 const CertRowView: React.FC<{ row: CertRow }> = ({ row }) => {
     const meta = STATUS_META[row.status];
+    const [showDetail, setShowDetail] = useState(false);
     return (
         <Box sx={{
             border: `1px solid ${colors.borderMuted}`,
@@ -138,6 +154,31 @@ const CertRowView: React.FC<{ row: CertRow }> = ({ row }) => {
                         <Typography sx={{ ...text.detail, fontSize: font.caption }}>
                             issuer: {row.issuer}
                         </Typography>
+                    )}
+                    {row.reason && (
+                        <Typography sx={{ ...text.detail, color: meta.color, mt: 0.5 }}>
+                            Reason: {row.reason}
+                        </Typography>
+                    )}
+                    {row.reasonDetail && (
+                        <Box>
+                            <Link
+                                component="button"
+                                type="button"
+                                onClick={() => setShowDetail(s => !s)}
+                                sx={{
+                                    ...text.detail,
+                                    fontSize: font.caption,
+                                    color: colors.textMuted,
+                                    textAlign: 'left',
+                                }}
+                            >
+                                {showDetail ? 'Hide Caddy log line' : 'Show Caddy log line'}
+                            </Link>
+                            {showDetail && (
+                                <Box component="pre" sx={logSx}>{row.reasonDetail}</Box>
+                            )}
+                        </Box>
                     )}
                 </Box>
             </Stack>
@@ -293,10 +334,11 @@ export const CertificatesPanel: React.FC = () => {
                     Let&apos;s Encrypt. Gateway routes (your PCS domain) and
                     {' '}<Box component="code" sx={inlineCode}>.nip.io</Box> routes
                     intentionally use Yundera&apos;s internal CA, so they are not listed
-                    here. An <strong>Internal CA</strong> result on a sslip.io domain
-                    means Caddy could not obtain a Let&apos;s Encrypt certificate (rate
-                    limits, DNS, or a malformed hostname) and fell back to a self-signed
-                    one.
+                    here. An <strong>Internal CA</strong> or <strong>No response</strong>
+                    {' '}result on a sslip.io domain means Caddy could not obtain a
+                    Let&apos;s Encrypt certificate and fell back to a self-signed one — the
+                    <strong> Reason</strong> on each such domain is read from the Caddy
+                    container&apos;s recent logs.
                 </Alert>
             </Box>
         </Box>
