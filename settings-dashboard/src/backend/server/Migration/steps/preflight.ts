@@ -1,6 +1,8 @@
+import { basename, dirname } from 'path';
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
 import { MigrationRequest, PreflightResult } from '../MigrationTypes';
 import { shq, sshpassToTarget, waitForTargetSSH } from '../MigrationSSH';
+import { assertRootfulDocker, collectAppVolumes, sizeAppVolumes } from '../MigrationVolumes';
 
 /**
  * Preflight runs from the SOURCE host and verifies the TARGET is reachable
@@ -23,6 +25,7 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
     const checks: PreflightResult['checks'] = [];
     let sourceSizeBytes: number | undefined;
     let targetFreeBytes: number | undefined;
+    let volumeBytes = 0;
 
     // 1. Ensure sshpass + rsync on the source host (we initiate from here)
     try {
@@ -34,6 +37,61 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
             ok: false,
             message: `Cannot install sshpass/rsync on source host: ${errMsg(err)}`,
         });
+        return { ok: false, checks };
+    }
+
+    // Source Docker mode — named volumes are copied by a host-path rsync,
+    // which only reproduces ownership correctly on rootful Docker with the
+    // default data-root and no userns-remap. Fail loud if that ever drifts.
+    try {
+        await assertRootfulDocker();
+        checks.push({
+            name: 'docker_mode',
+            ok: true,
+            message: 'Source Docker is rootful with the default data-root',
+        });
+    } catch (err) {
+        checks.push({ name: 'docker_mode', ok: false, message: errMsg(err) });
+        return { ok: false, checks };
+    }
+
+    // Locally-built images — the target pulls images from a registry, so an
+    // app with a `build:` directive has nothing to pull. Reject it here with
+    // a clear message. (Other unpullable images surface later in docker_pull.)
+    try {
+        const findOut = await executeHostCommand(
+            `find /DATA/AppData/casaos/apps -mindepth 2 -maxdepth 2 -type f ` +
+            `\\( -name docker-compose.yml -o -name docker-compose.yaml -o -name compose.yml \\) 2>/dev/null`
+        );
+        const composeFiles = findOut.stdout.split('\n')
+            .map(l => l.trim())
+            .filter(Boolean)
+            .filter(f => basename(dirname(f)) !== 'yundera');
+        const buildApps: string[] = [];
+        for (const f of composeFiles) {
+            try {
+                const cfg = await executeHostCommand(`sudo -n docker compose -f ${shq(f)} config 2>/dev/null`);
+                // `docker compose config` emits normalized YAML; a service that
+                // builds locally has a `build:` key indented under it.
+                if (/^\s+build:/m.test(cfg.stdout)) buildApps.push(basename(dirname(f)));
+            } catch {
+                // A compose file that won't even `config` is a separate
+                // problem; docker_pull / self-check will surface it. Don't
+                // block the build-image check on it.
+            }
+        }
+        if (buildApps.length > 0) {
+            checks.push({
+                name: 'build_images',
+                ok: false,
+                message: `App(s) build their image locally and cannot be migrated: ` +
+                    `${buildApps.join(', ')}. Migration requires registry-pullable images.`,
+            });
+            return { ok: false, checks };
+        }
+        checks.push({ name: 'build_images', ok: true, message: 'All user apps use registry images' });
+    } catch (err) {
+        checks.push({ name: 'build_images', ok: false, message: `build-image scan failed: ${errMsg(err)}` });
         return { ok: false, checks };
     }
 
@@ -76,17 +134,21 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
         return { ok: false, checks };
     }
 
-    // 4. Source /DATA size (local du)
+    // 4. Source /DATA size + named-volume size (local du)
     try {
         const out = await executeHostCommand(`sudo -n du -sb /DATA 2>/dev/null | awk '{print $1}'`);
         sourceSizeBytes = parseInt(out.stdout.trim(), 10);
         if (!Number.isFinite(sourceSizeBytes) || sourceSizeBytes <= 0) {
             throw new Error(`could not parse du output: ${out.stdout.slice(0, 200)}`);
         }
+        // Named volumes are migrated alongside /DATA — count their footprint
+        // so the target free-space check below sizes the whole transfer.
+        volumeBytes = await sizeAppVolumes(await collectAppVolumes());
         checks.push({
             name: 'source_data_size',
             ok: true,
-            message: `Source /DATA: ${formatBytes(sourceSizeBytes)}`,
+            message: `Source /DATA: ${formatBytes(sourceSizeBytes)}` +
+                (volumeBytes > 0 ? ` + ${formatBytes(volumeBytes)} in named volumes` : ''),
         });
     } catch (err) {
         checks.push({ name: 'source_data_size', ok: false, message: `du /DATA on source failed: ${errMsg(err)}` });
@@ -110,14 +172,14 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
         if (!Number.isFinite(targetFreeBytes) || targetFreeBytes <= 0) {
             throw new Error(`could not parse df output: ${out.stdout.slice(0, 200)}`);
         }
-        const required = Math.ceil(sourceSizeBytes! * SAFETY_MARGIN);
+        const required = Math.ceil((sourceSizeBytes! + volumeBytes) * SAFETY_MARGIN);
         const ok = targetFreeBytes >= required;
         checks.push({
             name: 'target_free_space',
             ok,
             message: ok
                 ? `Target free: ${formatBytes(targetFreeBytes)} (required ~${formatBytes(required)})`
-                : `Target has ${formatBytes(targetFreeBytes)} free, need ~${formatBytes(required)} (source × ${SAFETY_MARGIN})`,
+                : `Target has ${formatBytes(targetFreeBytes)} free, need ~${formatBytes(required)} ((/DATA + volumes) × ${SAFETY_MARGIN})`,
         });
         if (!ok) return { ok: false, checks, sourceSizeBytes, targetFreeBytes };
     } catch (err) {

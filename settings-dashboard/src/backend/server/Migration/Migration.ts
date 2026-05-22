@@ -19,6 +19,7 @@ import { verifyDestination } from './steps/verifyDestination';
 import { scheduleSourceDown } from './steps/sourceDown';
 import { startStatusPusher, StatusPusher } from './MigrationStatusPush';
 import { MigrationKeyPair } from './MigrationSSH';
+import { syncAppVolumes, registerVolumesOnTarget, AppVolume } from './MigrationVolumes';
 
 const DEFAULT_STATUS: MigrationStatus = {
     phase: 'idle',
@@ -171,6 +172,12 @@ function isActivePhase(phase: MigrationPhase): boolean {
     return phase !== 'idle' && phase !== 'done' && phase !== 'failed' && phase !== 'rolled_back';
 }
 
+/** Step-message suffix describing how many named volumes were copied. */
+function describeVolumes(vols: AppVolume[]): string {
+    if (vols.length === 0) return '';
+    return ` + ${vols.length} named volume${vols.length === 1 ? '' : 's'}`;
+}
+
 async function runMigration(req: MigrationRequest): Promise<void> {
     let keypair: MigrationKeyPair | undefined;
     let sourceStopped = false;
@@ -211,8 +218,16 @@ async function runMigration(req: MigrationRequest): Promise<void> {
             onProgress: updateRsyncProgress,
             isCancelled,
         });
+        // Named volumes live outside /DATA — pre-seed them in the same pass.
+        const onlineVolumes = await syncAppVolumes({
+            keypair,
+            target: req.host,
+            deleteFlag: false,
+            onProgress: updateRsyncProgress,
+            isCancelled,
+        });
         await setStep('online_rsync', 'success',
-            describeRsyncResult(state.rsync, 'pushed', `to ${req.host}`));
+            describeRsyncResult(state.rsync, 'pushed', `to ${req.host}`) + describeVolumes(onlineVolumes));
         if (await isCancelled()) throw new Error('Cancelled');
 
         // ---- Pre-pull docker images on target (per compose stack) ----
@@ -254,8 +269,19 @@ async function runMigration(req: MigrationRequest): Promise<void> {
             onProgress: updateRsyncProgress,
             isCancelled,
         });
+        // Named volumes: delta pass against a now-quiescent source (stop_source
+        // stopped the user stacks), then register them with the target's Docker
+        // daemon (installed by docker_pull) so `docker compose up` adopts them.
+        const offlineVolumes = await syncAppVolumes({
+            keypair,
+            target: req.host,
+            deleteFlag: true,
+            onProgress: updateRsyncProgress,
+            isCancelled,
+        });
+        await registerVolumesOnTarget(keypair, req.host, offlineVolumes);
         await setStep('offline_rsync', 'success',
-            describeRsyncResult(state.rsync, 'synced delta', `with --delete`));
+            describeRsyncResult(state.rsync, 'synced delta', `with --delete`) + describeVolumes(offlineVolumes));
         if (await isCancelled()) throw new Error('Cancelled');
 
         // ---- Trigger self-check on target (handover) ----

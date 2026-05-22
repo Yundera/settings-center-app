@@ -51,6 +51,14 @@ export interface RsyncOptions {
     deleteFlag: boolean;
     onProgress: (p: RsyncProgress) => Promise<void>;
     isCancelled: () => Promise<boolean>;
+    /**
+     * Source path on the source host. Defaults to `/DATA/`. A trailing slash
+     * means "copy the directory's contents" (rsync semantics). Named-volume
+     * migration passes `/var/lib/docker/volumes/<name>/` here.
+     */
+    localPath?: string;
+    /** Destination path on the target host. Defaults to `/DATA/`. */
+    remotePath?: string;
 }
 
 export async function runRsync(opts: RsyncOptions): Promise<void> {
@@ -70,8 +78,8 @@ export async function runRsync(opts: RsyncOptions): Promise<void> {
     const flags = [...RSYNC_FLAGS_COMMON];
     if (deleteFlag) flags.push('--delete');
 
-    const localSource = '/DATA/';
-    const remoteSpec = `${keypair.migrationUser}@${bracketIpv6(target)}:/DATA/`;
+    const localSource = opts.localPath ?? '/DATA/';
+    const remoteSpec = `${keypair.migrationUser}@${bracketIpv6(target)}:${opts.remotePath ?? '/DATA/'}`;
 
     // We invoke rsync via `ssh -t source-host "..."` so it runs on the source
     // host, not in the container. executeHostCommand buffers output — we
