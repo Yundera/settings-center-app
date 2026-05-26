@@ -27,6 +27,16 @@ const ACTIVE_WINDOW_MS = 20 * 1000;
 // — a cycle that cannot finish in time dies instead of lingering.
 const COLLECT_TIMEOUT_MS = 15 * 1000;
 
+// Adaptive backoff: when a cycle takes longer than this fraction of the
+// timeout budget, the host is probably under load. The next delay is stretched
+// proportionally (see computeNextDelay) so we don't pile more SSH load onto a
+// sick host, while still updating the UI often enough to be useful.
+const STRESS_THRESHOLD_MS = COLLECT_TIMEOUT_MS / 2;   // 7.5 s
+// Cap for the stressed-active delay. Stays well below SLOW_INTERVAL_MS so a
+// user actively watching the panel still gets refreshes within a minute even
+// when the host is struggling.
+const MAX_ACTIVE_BACKOFF_MS = 60 * 1000;              // 60 s
+
 // History ring buffer bounds — trimmed by both age and entry count.
 const HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;  // keep up to 12 h of points
 const HISTORY_MAX_ENTRIES = 720;                // hard cap on RAM / response size
@@ -299,14 +309,32 @@ function appendHistory(state: MetricsState, sample: RawSample, rates: MetricsSna
 async function runRefreshCycle(): Promise<void> {
     const state = getState();
     state.inFlight = true;
+    const startedAt = Date.now();
     try {
         await refreshMetricsSnapshot();
     } finally {
+        const durationMs = Date.now() - startedAt;
         state.inFlight = false;
-        const delay = isActive(state) ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS;
+        const delay = computeNextDelay(state, durationMs);
         state.refreshTimer = setTimeout(() => void runRefreshCycle(), delay);
         state.refreshTimer.unref?.();
     }
+}
+
+/**
+ * Pick the next refresh delay based on whether the dashboard is being watched
+ * and how long the last cycle took. A cycle that used >50 % of the timeout
+ * budget — including one that timed out outright — triggers proportional
+ * backoff, capped so the UI doesn't stall when a user is actively viewing.
+ */
+function computeNextDelay(state: MetricsState, lastDurationMs: number): number {
+    if (!isActive(state)) {
+        return SLOW_INTERVAL_MS;
+    }
+    if (lastDurationMs > STRESS_THRESHOLD_MS) {
+        return Math.min(MAX_ACTIVE_BACKOFF_MS, Math.max(FAST_INTERVAL_MS, lastDurationMs * 2));
+    }
+    return FAST_INTERVAL_MS;
 }
 
 /** Kick off the sampling loop. Idempotent. */
