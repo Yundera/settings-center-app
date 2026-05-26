@@ -8,8 +8,10 @@ import CircularProgress from "@mui/material/CircularProgress";
 import { colors, font, spacing } from "@/app/pages/softTheme";
 import { apiRequest } from "@/core/authApi";
 
+// Frontend poll cadence for /api/admin/metrics. Each poll also signals the
+// backend that the dashboard is active, which drives its 5s sampling cadence.
+// History itself is kept in the backend ring buffer, not accumulated here.
 const REFRESH_MS = 5000;
-const MAX_HISTORY = 60; // 5 minutes at 5s polling
 
 // ============================================================
 // Types — mirror src/backend/server/Metrics/Metrics.ts
@@ -45,6 +47,24 @@ interface MetricsSnapshot {
     };
     lastRefreshedAt: string | null;
     lastError: string | null;
+}
+
+// Slim historical point from the backend ring buffer — graphs only.
+interface MetricsHistoryPoint {
+    sampledAt: number;
+    cpuBusyFrac: number | null;
+    memUsedFrac: number;
+    load1: number;
+    netRxBps: Record<string, number>;
+    netTxBps: Record<string, number>;
+    diskReadBps: Record<string, number>;
+    diskWriteBps: Record<string, number>;
+}
+
+// Shape returned by GET /api/admin/metrics.
+interface MetricsResponse {
+    current: MetricsSnapshot;
+    history: MetricsHistoryPoint[];
 }
 
 // Mirror the response shapes of /api/admin/resources/{network,disk}-test.
@@ -139,25 +159,21 @@ function isPartition(device: string, allDevices: string[]): boolean {
 
 export const ResourcesPanel = () => {
     const [tab, setTab] = useState<"network" | "disk" | "cpu">("cpu");
-    const [history, setHistory] = useState<MetricsSnapshot[]>([]);
+    const [current, setCurrent] = useState<MetricsSnapshot | null>(null);
+    const [history, setHistory] = useState<MetricsHistoryPoint[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
         async function poll() {
             try {
-                const json = await apiRequest<MetricsSnapshot>("/api/admin/metrics", "GET");
+                const json = await apiRequest<MetricsResponse>("/api/admin/metrics", "GET");
                 if (cancelled) return;
-                setError(null);
-                // Only append when the backend has a sample. Skip lookups that
-                // returned the initial all-null state (e.g. during refresh hiccup).
-                if (!json.sample) return;
-                setHistory(h => {
-                    const last = h[h.length - 1];
-                    if (last?.lastRefreshedAt === json.lastRefreshedAt) return h; // dedupe
-                    const next = [...h, json];
-                    return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
-                });
+                // History lives in the backend ring buffer now — just mirror it.
+                setCurrent(json.current);
+                setHistory(json.history);
+                // Surface a host-side SSH failure, not only a fetch failure.
+                setError(json.current.lastError ?? null);
             } catch (e) {
                 if (!cancelled) setError(e instanceof Error ? e.message : String(e));
             }
@@ -167,7 +183,7 @@ export const ResourcesPanel = () => {
         return () => { cancelled = true; clearInterval(id); };
     }, []);
 
-    const latest = history[history.length - 1];
+    const ready = current?.sample != null;
 
     return (
         <Box sx={{
@@ -216,15 +232,15 @@ export const ResourcesPanel = () => {
                     </Typography>
                 )}
 
-                {!latest && !error && (
+                {!ready && !error && (
                     <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                         <CircularProgress />
                     </Box>
                 )}
 
-                {latest && tab === "cpu"     && <CpuTab     history={history} />}
-                {latest && tab === "network" && <NetworkTab history={history} />}
-                {latest && tab === "disk"    && <DiskTab    history={history} />}
+                {ready && tab === "cpu"     && <CpuTab     current={current!} history={history} />}
+                {ready && tab === "network" && <NetworkTab current={current!} history={history} />}
+                {ready && tab === "disk"    && <DiskTab    current={current!} history={history} />}
             </Box>
         </Box>
     );
@@ -242,14 +258,11 @@ const tabSx = {
 // Tabs
 // ============================================================
 
-function CpuTab({ history }: { history: MetricsSnapshot[] }) {
-    const latest = history[history.length - 1];
-    const sample = latest.sample!;
+function CpuTab({ current, history }: { current: MetricsSnapshot; history: MetricsHistoryPoint[] }) {
+    const sample = current.sample!;
 
-    const cpuSeries = history.map(h => h.rates.cpuBusyFrac).filter((v): v is number => v != null);
-    const memSeries = history
-        .map(h => h.sample ? (h.sample.mem.totalBytes - h.sample.mem.availableBytes) / h.sample.mem.totalBytes : null)
-        .filter((v): v is number => v != null);
+    const cpuSeries = history.map(h => h.cpuBusyFrac).filter((v): v is number => v != null);
+    const memSeries = history.map(h => h.memUsedFrac).filter((v): v is number => v != null);
 
     const memUsed = sample.mem.totalBytes - sample.mem.availableBytes;
     const swapUsed = sample.mem.swapTotalBytes - sample.mem.swapFreeBytes;
@@ -259,7 +272,7 @@ function CpuTab({ history }: { history: MetricsSnapshot[] }) {
             <Row>
                 <StatCard
                     label="CPU"
-                    value={formatPercent(latest.rates.cpuBusyFrac)}
+                    value={formatPercent(current.rates.cpuBusyFrac)}
                     subtitle={`${sample.nproc} cores · uptime ${formatUptime(sample.uptime)}`}
                     sparkline={cpuSeries}
                     sparklineMax={1}
@@ -289,9 +302,8 @@ function CpuTab({ history }: { history: MetricsSnapshot[] }) {
     );
 }
 
-function NetworkTab({ history }: { history: MetricsSnapshot[] }) {
-    const latest = history[history.length - 1];
-    const sample = latest.sample!;
+function NetworkTab({ current, history }: { current: MetricsSnapshot; history: MetricsHistoryPoint[] }) {
+    const sample = current.sample!;
 
     // Interfaces present in the latest sample. Stable order from the sample itself.
     const ifaces = sample.nets.map(n => n.iface).filter(i => !isVirtualInterface(i));
@@ -300,21 +312,21 @@ function NetworkTab({ history }: { history: MetricsSnapshot[] }) {
         <Box sx={{ display: "flex", flexDirection: "column", gap: spacing.cardGap }}>
             {ifaces.map(iface => {
                 const net = sample.nets.find(n => n.iface === iface)!;
-                const rxSeries = history.map(h => h.rates.netRxBps[iface]).filter((v): v is number => v != null);
-                const txSeries = history.map(h => h.rates.netTxBps[iface]).filter((v): v is number => v != null);
+                const rxSeries = history.map(h => h.netRxBps[iface]).filter((v): v is number => v != null);
+                const txSeries = history.map(h => h.netTxBps[iface]).filter((v): v is number => v != null);
                 return (
                     <Section key={iface} title={iface}>
                         <Row>
                             <StatCard
                                 label="Download"
-                                value={formatRate(latest.rates.netRxBps[iface] ?? 0)}
+                                value={formatRate(current.rates.netRxBps[iface] ?? 0)}
                                 subtitle={`total ${formatBytes(net.rxBytes)}`}
                                 sparkline={rxSeries}
                                 accent={colors.statusInfo}
                             />
                             <StatCard
                                 label="Upload"
-                                value={formatRate(latest.rates.netTxBps[iface] ?? 0)}
+                                value={formatRate(current.rates.netTxBps[iface] ?? 0)}
                                 subtitle={`total ${formatBytes(net.txBytes)}`}
                                 sparkline={txSeries}
                                 accent={colors.statusSuccess}
@@ -351,9 +363,8 @@ function NetworkTab({ history }: { history: MetricsSnapshot[] }) {
     );
 }
 
-function DiskTab({ history }: { history: MetricsSnapshot[] }) {
-    const latest = history[history.length - 1];
-    const sample = latest.sample!;
+function DiskTab({ current, history }: { current: MetricsSnapshot; history: MetricsHistoryPoint[] }) {
+    const sample = current.sample!;
 
     const allDevices = sample.disks.map(d => d.device);
     const devices = allDevices.filter(d => !isPartition(d, allDevices));
@@ -361,20 +372,20 @@ function DiskTab({ history }: { history: MetricsSnapshot[] }) {
     return (
         <Box sx={{ display: "flex", flexDirection: "column", gap: spacing.cardGap }}>
             {devices.map(device => {
-                const readSeries  = history.map(h => h.rates.diskReadBps[device]).filter((v): v is number => v != null);
-                const writeSeries = history.map(h => h.rates.diskWriteBps[device]).filter((v): v is number => v != null);
+                const readSeries  = history.map(h => h.diskReadBps[device]).filter((v): v is number => v != null);
+                const writeSeries = history.map(h => h.diskWriteBps[device]).filter((v): v is number => v != null);
                 return (
                     <Section key={device} title={device}>
                         <Row>
                             <StatCard
                                 label="Read"
-                                value={formatRate(latest.rates.diskReadBps[device] ?? 0)}
+                                value={formatRate(current.rates.diskReadBps[device] ?? 0)}
                                 sparkline={readSeries}
                                 accent={colors.statusInfo}
                             />
                             <StatCard
                                 label="Write"
-                                value={formatRate(latest.rates.diskWriteBps[device] ?? 0)}
+                                value={formatRate(current.rates.diskWriteBps[device] ?? 0)}
                                 sparkline={writeSeries}
                                 accent={colors.statusSuccess}
                             />

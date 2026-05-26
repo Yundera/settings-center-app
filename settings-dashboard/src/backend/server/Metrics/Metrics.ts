@@ -1,6 +1,35 @@
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 
-const REFRESH_INTERVAL_MS = 5 * 1000;
+// ============================================================
+// Sampling cadence
+// ============================================================
+//
+// The loop runs forever so metric history keeps accumulating, but it samples
+// slowly when nobody is watching and fast while the Resources panel is open.
+//
+// A previous version used a fixed 5 s `setInterval` that never waited for the
+// prior cycle to finish. Under host load an SSH cycle could take longer than
+// 5 s, so cycles overlapped — and with no command timeout, hung `ssh`/`bash`/
+// `ps` process trees accumulated on the host until CPU ran away. This loop is
+// a self-rescheduling `setTimeout` chain: the next cycle is armed only AFTER
+// the current one fully settles, so cycles can never overlap.
+
+const SLOW_INTERVAL_MS = 5 * 60 * 1000;   // baseline cadence when the dashboard is idle
+const FAST_INTERVAL_MS = 5 * 1000;        // cadence while the dashboard is actively polling
+
+// The dashboard counts as "active" if /api/admin/metrics was read within this
+// window. Kept comfortably above the frontend's 5 s poll so a single dropped
+// poll doesn't bounce the loop back to the slow cadence.
+const ACTIVE_WINDOW_MS = 20 * 1000;
+
+// Hard wall-clock budget for one host round-trip. executeHostCommand passes
+// this to the local executor, which SIGKILLs the ssh process tree if exceeded
+// — a cycle that cannot finish in time dies instead of lingering.
+const COLLECT_TIMEOUT_MS = 15 * 1000;
+
+// History ring buffer bounds — trimmed by both age and entry count.
+const HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;  // keep up to 12 h of points
+const HISTORY_MAX_ENTRIES = 720;                // hard cap on RAM / response size
 
 /**
  * Single bash payload that gathers every metric in one SSH round-trip.
@@ -95,6 +124,32 @@ export interface MetricsSnapshot {
     lastError: string | null;
 }
 
+/**
+ * Slim historical point kept in the ring buffer. Carries only what the graphs
+ * plot — deliberately NOT the full sample (process list, filesystems), so the
+ * buffer stays small in RAM and cheap to ship to the browser every poll.
+ */
+export interface MetricsHistoryPoint {
+    /** ms since unix epoch */
+    sampledAt: number;
+    cpuBusyFrac: number | null;
+    /** memory used fraction, 0..1 */
+    memUsedFrac: number;
+    load1: number;
+    netRxBps: Record<string, number>;
+    netTxBps: Record<string, number>;
+    diskReadBps: Record<string, number>;
+    diskWriteBps: Record<string, number>;
+}
+
+/** Shape returned by GET /api/admin/metrics. */
+export interface MetricsResponse {
+    /** Full latest snapshot — powers the detail cards, process table, filesystems. */
+    current: MetricsSnapshot;
+    /** Slim historical points for the graphs, oldest first. */
+    history: MetricsHistoryPoint[];
+}
+
 // ============================================================
 // State
 // ============================================================
@@ -110,7 +165,14 @@ const STATE_KEY = "__yundera_metrics_state__" as const;
 interface MetricsState {
     previous: RawSample | null;
     snapshot: MetricsSnapshot;
+    history: MetricsHistoryPoint[];
     refreshTimer: NodeJS.Timeout | null;
+    /** true while a refresh cycle is running — guards against double-arming */
+    inFlight: boolean;
+    /** ms epoch of the last /api/admin/metrics read */
+    lastReadAt: number;
+    /** true once startMetricsRefresh has armed the loop */
+    started: boolean;
 }
 
 function getState(): MetricsState {
@@ -125,9 +187,20 @@ function getState(): MetricsState {
                 lastRefreshedAt: null,
                 lastError: null,
             },
+            history: [],
             refreshTimer: null,
+            inFlight: false,
+            lastReadAt: 0,
+            started: false,
         };
         g[STATE_KEY] = s;
+    } else {
+        // Backfill fields on a state object left behind by an older module
+        // version (Next.js dev hot-reload) so callers never hit `undefined`.
+        s.history ??= [];
+        s.inFlight ??= false;
+        s.lastReadAt ??= 0;
+        s.started ??= false;
     }
     return s;
 }
@@ -138,14 +211,45 @@ const SECTOR_BYTES = 512;
 // Public API
 // ============================================================
 
-export function getMetricsSnapshot(): MetricsSnapshot {
-    return getState().snapshot;
+/** Full response for GET /api/admin/metrics — latest snapshot + history buffer. */
+export function getMetricsResponse(): MetricsResponse {
+    const s = getState();
+    return { current: s.snapshot, history: s.history };
 }
 
+/**
+ * Record that a client just read the metrics endpoint. Flips the sampling loop
+ * to the fast cadence and, on an idle→active transition, pulls the next
+ * refresh forward so the graph starts updating immediately instead of waiting
+ * out the 5-minute baseline timer.
+ */
+export function notifyMetricsRead(): void {
+    const state = getState();
+    const wasActive = isActive(state);
+    state.lastReadAt = Date.now();
+
+    // Only nudge on the idle→active edge, and only when no cycle is running
+    // (a running cycle's own reschedule will already see the fresh lastReadAt
+    // and pick the fast cadence).
+    if (!wasActive && !state.inFlight && state.refreshTimer) {
+        clearTimeout(state.refreshTimer);
+        state.refreshTimer = setTimeout(() => void runRefreshCycle(), 0);
+        state.refreshTimer.unref?.();
+    }
+}
+
+function isActive(state: MetricsState): boolean {
+    return Date.now() - state.lastReadAt < ACTIVE_WINDOW_MS;
+}
+
+/**
+ * Run one host round-trip and update the snapshot + history. Never throws —
+ * SSH failures are swallowed and the previous snapshot is kept.
+ */
 export async function refreshMetricsSnapshot(): Promise<void> {
     const state = getState();
     try {
-        const result = await executeHostCommand(COLLECT_SCRIPT);
+        const result = await executeHostCommand(COLLECT_SCRIPT, { timeout: COLLECT_TIMEOUT_MS });
         const current = parse(result.stdout || "", Date.now());
         const rates = state.previous ? computeRates(state.previous, current) : emptyRates();
         state.snapshot = {
@@ -155,6 +259,7 @@ export async function refreshMetricsSnapshot(): Promise<void> {
             lastError: null,
         };
         state.previous = current;
+        appendHistory(state, current, rates);
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn("Metrics: failed to refresh from host:", msg);
@@ -162,12 +267,54 @@ export async function refreshMetricsSnapshot(): Promise<void> {
     }
 }
 
+/** Append a slim point to the ring buffer and trim it by age and count. */
+function appendHistory(state: MetricsState, sample: RawSample, rates: MetricsSnapshot["rates"]): void {
+    const memUsedFrac = sample.mem.totalBytes > 0
+        ? (sample.mem.totalBytes - sample.mem.availableBytes) / sample.mem.totalBytes
+        : 0;
+    state.history.push({
+        sampledAt: sample.sampledAt,
+        cpuBusyFrac: rates.cpuBusyFrac,
+        memUsedFrac,
+        load1: sample.load1,
+        netRxBps: rates.netRxBps,
+        netTxBps: rates.netTxBps,
+        diskReadBps: rates.diskReadBps,
+        diskWriteBps: rates.diskWriteBps,
+    });
+    const cutoff = Date.now() - HISTORY_WINDOW_MS;
+    while (state.history.length > 0 && state.history[0].sampledAt < cutoff) {
+        state.history.shift();
+    }
+    if (state.history.length > HISTORY_MAX_ENTRIES) {
+        state.history.splice(0, state.history.length - HISTORY_MAX_ENTRIES);
+    }
+}
+
+/**
+ * One iteration of the sampling loop: refresh, then arm the next iteration.
+ * The next `setTimeout` is created only after the refresh settles, so two
+ * cycles can never run concurrently.
+ */
+async function runRefreshCycle(): Promise<void> {
+    const state = getState();
+    state.inFlight = true;
+    try {
+        await refreshMetricsSnapshot();
+    } finally {
+        state.inFlight = false;
+        const delay = isActive(state) ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS;
+        state.refreshTimer = setTimeout(() => void runRefreshCycle(), delay);
+        state.refreshTimer.unref?.();
+    }
+}
+
+/** Kick off the sampling loop. Idempotent. */
 export function startMetricsRefresh(): void {
     const state = getState();
-    if (state.refreshTimer) return;
-    void refreshMetricsSnapshot();
-    state.refreshTimer = setInterval(() => void refreshMetricsSnapshot(), REFRESH_INTERVAL_MS);
-    state.refreshTimer.unref?.();
+    if (state.started) return;
+    state.started = true;
+    void runRefreshCycle();
 }
 
 // ============================================================

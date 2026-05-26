@@ -136,7 +136,15 @@ export async function executeHostCommand(
         const {
             user = defaultHostUser,
             keyPath = defaultPrivateKeyPath,
-            timeout = 30000,
+            // `timeout` is now a real hard wall-clock budget (the local
+            // executor SIGKILLs the ssh tree if exceeded), not just an SSH
+            // ConnectTimeout. The default is generous because some one-shot
+            // callers run legitimately slow commands without passing a
+            // timeout (e.g. `du -sb /DATA` in migration preflight). Callers
+            // that need a tight bound — the metrics loop in particular —
+            // pass their own value. A dead connection still fails fast via
+            // ServerAlive regardless of this budget.
+            timeout = 10 * 60 * 1000,
             autoDetectHost = true
         } = options || {};
 
@@ -159,17 +167,36 @@ export async function executeHostCommand(
         const commandB64 = Buffer.from(command, 'utf8').toString('base64');
         const remoteRunner = `'echo ${commandB64} | base64 -d | bash'`;
 
+        // Connect phase gets a short bound so a dead host fails fast; the full
+        // `timeout` is the hard wall-clock budget enforced by the local
+        // executor (it SIGKILLs the ssh tree if exceeded).
+        const connectTimeout = Math.max(1, Math.min(10, Math.floor(timeout / 1000)));
+
         const sshCmd = [
             'ssh',
             '-i', keyPath,
             '-o', 'StrictHostKeyChecking=no',
-            '-o', `ConnectTimeout=${Math.floor(timeout / 1000)}`,
+            '-o', `ConnectTimeout=${connectTimeout}`,
             '-o', 'BatchMode=yes',
+            // Drop a connection whose host stopped responding within ~10 s
+            // instead of letting it hang (matters for the shared master below).
+            '-o', 'ServerAliveInterval=5',
+            '-o', 'ServerAliveCountMax=2',
+            // Connection multiplexing: the first call opens a master that
+            // persists 60 s; subsequent calls reuse it as cheap channels
+            // instead of paying a full TCP + key-exchange handshake every
+            // time. This is what makes the 5 s metrics cadence affordable —
+            // the expensive crypto handshake happens once per minute, not
+            // 12 times.
+            '-o', 'ControlMaster=auto',
+            '-o', 'ControlPath=/tmp/ssh-mux-%C',
+            '-o', 'ControlPersist=60s',
             `${user}@${host}`,
             remoteRunner,
         ].join(' ');
 
-        const result = await execute(sshCmd, false);
+        // Pass `timeout` as a hard exec budget — see LocalExecutor.execute.
+        const result = await execute(sshCmd, false, timeout);
         return result;
     } catch (error) {
         throw new Error(`Failed to execute host command "${command.slice(0, 200)}${command.length > 200 ? '…' : ''}" : ${ error.message || error}`);
