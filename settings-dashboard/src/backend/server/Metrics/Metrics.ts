@@ -228,6 +228,68 @@ export function getMetricsResponse(): MetricsResponse {
 }
 
 /**
+ * Shape returned by the public GET /api/perf endpoint. A trimmed slice of the
+ * full snapshot — the fields the orchestrator's `pcs perf` CLI needs, with
+ * everything that would amount to info-disclosure on a public surface (process
+ * names + uids, full filesystem source paths) stripped out.
+ */
+export interface PublicPerfResponse {
+    sampledAt: number | null;
+    lastRefreshedAt: string | null;
+    uptime: number | null;
+    cpu: {
+        busyFrac: number | null;
+        load1: number; load5: number; load15: number;
+        nproc: number;
+    };
+    mem: RawSample["mem"] | null;
+    /** Per-mount-target only — no `source` device paths. */
+    filesystems: { target: string; sizeBytes: number; usedBytes: number; availBytes: number }[];
+    diskReadBps: Record<string, number>;
+    diskWriteBps: Record<string, number>;
+    netRxBps: Record<string, number>;
+    netTxBps: Record<string, number>;
+    lastError: string | null;
+}
+
+/**
+ * Sanitised snapshot for the public /api/perf endpoint. Reads from the same
+ * RAM cache as /api/admin/metrics — no shell, no SSH on call — so it is as
+ * cheap and abuse-resistant as /api/health. Drops `topProcesses` and the
+ * filesystem `source` field; everything else is host-shape data the
+ * orchestrator already infers from network traffic.
+ */
+export function getPublicMetricsResponse(): PublicPerfResponse {
+    const s = getState();
+    const sample = s.snapshot.sample;
+    const rates = s.snapshot.rates;
+    return {
+        sampledAt: sample?.sampledAt ?? null,
+        lastRefreshedAt: s.snapshot.lastRefreshedAt,
+        uptime: sample?.uptime ?? null,
+        cpu: {
+            busyFrac: rates.cpuBusyFrac,
+            load1: sample?.load1 ?? 0,
+            load5: sample?.load5 ?? 0,
+            load15: sample?.load15 ?? 0,
+            nproc: sample?.nproc ?? 0,
+        },
+        mem: sample?.mem ?? null,
+        filesystems: (sample?.filesystems ?? []).map(fs => ({
+            target: fs.target,
+            sizeBytes: fs.sizeBytes,
+            usedBytes: fs.usedBytes,
+            availBytes: fs.availBytes,
+        })),
+        diskReadBps: rates.diskReadBps,
+        diskWriteBps: rates.diskWriteBps,
+        netRxBps: rates.netRxBps,
+        netTxBps: rates.netTxBps,
+        lastError: s.snapshot.lastError,
+    };
+}
+
+/**
  * Record that a client just read the metrics endpoint. Flips the sampling loop
  * to the fast cadence and, on an idle→active transition, pulls the next
  * refresh forward so the graph starts updating immediately instead of waiting
