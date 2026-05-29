@@ -4,9 +4,10 @@ import { getNetworkBench } from "@/backend/server/Bench/BenchCache";
 /**
  * Public network-bench endpoint.
  *
- * Same single-flight / lazy-trigger contract as /api/bench/disk — see that
- * file for the full description. Cached result, never refreshed by the
- * public path, manual refresh via the auth-gated
+ * Same single-flight / cooldown-gated lazy-trigger contract as
+ * /api/bench/disk — see that file for the full description. Cached result,
+ * public path re-triggers at most once per cooldown window; immediate
+ * cooldown-free refresh via the auth-gated
  * /api/admin/resources/network-test endpoint.
  */
 export default function handler(req: NextApiRequest, res: NextApiResponse) {

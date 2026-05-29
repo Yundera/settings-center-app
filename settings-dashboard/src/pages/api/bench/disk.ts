@@ -5,15 +5,16 @@ import { getDiskBench } from "@/backend/server/Bench/BenchCache";
  * Public disk-bench endpoint.
  *
  * Returns the last cached result from the BenchCache single-flight wrapper.
- * If there is no cached value yet AND no run is in flight, calling this
- * endpoint triggers one bench in the background and returns immediately with
- * `status: "pending"`. Subsequent calls during the run share the same in-
- * flight promise, so the endpoint cannot be used to spam the host with `dd`.
+ * If the cooldown since the last attempt has elapsed AND no run is in flight,
+ * calling this endpoint triggers one bench in the background and returns
+ * immediately with `status: "pending"`. Subsequent calls during the run share
+ * the same in-flight promise, and the cooldown caps how often the public path
+ * can start a run (win or fail), so the endpoint cannot be used to spam the
+ * host with `dd` — see BenchCache.ts.
  *
- * Once a result is cached, the public path never refreshes it — the only
- * refresh route is the auth-gated /api/admin/resources/disk-test endpoint.
- * The cached value's lifecycle is the admin container's process; a restart
- * re-arms the lazy trigger on the next call.
+ * For an immediate, cooldown-free refresh use the auth-gated
+ * /api/admin/resources/disk-test endpoint. The cached value's lifecycle is the
+ * admin container's process; a restart re-arms the lazy trigger on the next call.
  *
  * Response shape:
  *   { status: "pending" | "ok" | "error",

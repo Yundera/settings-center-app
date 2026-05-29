@@ -10,6 +10,11 @@ const BYPASS_PREFIXES = [
   '/api/auth/',          // login, logout, providers, oidc/*
   '/api/me',             // does its own session check
   '/api/health',         // public probe
+  '/api/perf',           // public RAM-cached metrics snapshot (orchestrator `pcs perf`)
+  '/api/bench/',         // public disk/network bench cache (orchestrator `pcs perf`);
+                         //   read-only snapshot + cooldown-gated lazy trigger,
+                         //   so an unauthenticated caller can start at most one
+                         //   bench per cooldown window (see BenchCache.ts)
   '/api/local/',         // loopback-only routes (orchestrator's Path C trigger,
                          //   source's migration-status poll) — gated by
                          //   `loopbackOnly` middleware on the handler itself;
