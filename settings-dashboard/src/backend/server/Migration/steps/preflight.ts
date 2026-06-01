@@ -2,7 +2,7 @@ import { basename, dirname } from 'path';
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
 import { MigrationRequest, PreflightResult } from '../MigrationTypes';
 import { shq, sshpassToTarget, waitForTargetSSH } from '../MigrationSSH';
-import { assertRootfulDocker, collectAppVolumes, sizeAppVolumes } from '../MigrationVolumes';
+import { assertRootfulDocker } from '../MigrationVolumes';
 
 /**
  * Preflight runs from the SOURCE host and verifies the TARGET is reachable
@@ -19,13 +19,16 @@ import { assertRootfulDocker, collectAppVolumes, sizeAppVolumes } from '../Migra
  * host. We install it on-demand as the very first check.
  */
 
-const SAFETY_MARGIN = 1.1; // require 10% more target free space than source size
+// Keep at least this much free on the target AFTER the transfer. A flat floor
+// (not a ×margin) on purpose: a proportional buffer would block large but
+// otherwise-fitting "loaded" PCS, and 20 GB is enough headroom to operate in
+// every case.
+const HEADROOM_BYTES = 20 * 1024 * 1024 * 1024;
 
 export async function runPreflight(req: MigrationRequest): Promise<PreflightResult> {
     const checks: PreflightResult['checks'] = [];
     let sourceSizeBytes: number | undefined;
     let targetFreeBytes: number | undefined;
-    let volumeBytes = 0;
 
     // 1. Ensure sshpass + rsync on the source host (we initiate from here)
     try {
@@ -134,28 +137,46 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
         return { ok: false, checks };
     }
 
-    // 4. Source /DATA size + named-volume size (local du)
+    // 4. Source data size — read the USED bytes of the filesystem backing
+    // /DATA straight from `df`. `df <path>` resolves to whatever filesystem
+    // holds /DATA (the dedicated LVM volume on Proxmox, the root fs on
+    // commodity VPS), so it's an O(1) metadata read in every layout — no tree
+    // walk, and it can't time out the way `du -sb /DATA` does. A real `du`
+    // lstat()s every inode, which on a PCS with millions of small files
+    // (Nextcloud, media) blows past the host-command budget — the "Command
+    // timed out after 600000ms" that aborts migrations in preflight.
+    //
+    // The figure is a deliberately conservative over-estimate: it also counts
+    // /var/lib/docker (docker images, overlay layers AND the named volumes we
+    // migrate; on commodity VPS the OS too). We do NOT add named-volume size
+    // separately — df already includes it. The docker image/overlay weight is
+    // subtracted back out in step 5 only if the raw figure doesn't fit.
     try {
-        const out = await executeHostCommand(`sudo -n du -sb /DATA 2>/dev/null | awk '{print $1}'`);
+        const out = await executeHostCommand(`df -B1 --output=used /DATA | tail -n1`);
         sourceSizeBytes = parseInt(out.stdout.trim(), 10);
         if (!Number.isFinite(sourceSizeBytes) || sourceSizeBytes <= 0) {
-            throw new Error(`could not parse du output: ${out.stdout.slice(0, 200)}`);
+            throw new Error(`could not measure /DATA size from df: ${out.stdout.slice(0, 200)}`);
         }
-        // Named volumes are migrated alongside /DATA — count their footprint
-        // so the target free-space check below sizes the whole transfer.
-        volumeBytes = await sizeAppVolumes(await collectAppVolumes());
         checks.push({
             name: 'source_data_size',
             ok: true,
-            message: `Source /DATA: ${formatBytes(sourceSizeBytes)}` +
-                (volumeBytes > 0 ? ` + ${formatBytes(volumeBytes)} in named volumes` : ''),
+            message: `Source data (fs backing /DATA): ${formatBytes(sourceSizeBytes)}`,
         });
     } catch (err) {
-        checks.push({ name: 'source_data_size', ok: false, message: `du /DATA on source failed: ${errMsg(err)}` });
+        checks.push({ name: 'source_data_size', ok: false, message: `/DATA size check on source failed: ${errMsg(err)}` });
         return { ok: false, checks };
     }
 
-    // 5. Target free space on /DATA (or its parent if /DATA doesn't exist yet)
+    // 5. Target free space — go/no-go ladder:
+    //   (a) raw df estimate + 20 GB headroom fits                 -> GO
+    //   (b) else subtract the docker images/overlay/build-cache that the
+    //       target re-pulls (never rsynced) and re-test with the headroom -> GO
+    //   (c) else block with the exact shortfall.
+    // No `du` anywhere: a measurement that can't complete must never be what
+    // blocks a migration. The check is advisory by design — the source is
+    // untouched until cutover and any real out-of-space failure during rsync
+    // auto-rolls-back (see Migration.ts), so we only aim to avoid wasting the
+    // rsync hours, not to guarantee space.
     try {
         // Fall back to / if /DATA doesn't exist on target yet (bare Ubuntu case).
         // No `$variables` here on purpose: HostExecutor.executeHostCommand
@@ -172,16 +193,38 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
         if (!Number.isFinite(targetFreeBytes) || targetFreeBytes <= 0) {
             throw new Error(`could not parse df output: ${out.stdout.slice(0, 200)}`);
         }
-        const required = Math.ceil((sourceSizeBytes! + volumeBytes) * SAFETY_MARGIN);
-        const ok = targetFreeBytes >= required;
-        checks.push({
-            name: 'target_free_space',
-            ok,
-            message: ok
-                ? `Target free: ${formatBytes(targetFreeBytes)} (required ~${formatBytes(required)})`
-                : `Target has ${formatBytes(targetFreeBytes)} free, need ~${formatBytes(required)} ((/DATA + volumes) × ${SAFETY_MARGIN})`,
-        });
-        if (!ok) return { ok: false, checks, sourceSizeBytes, targetFreeBytes };
+
+        // (a) Raw estimate.
+        if (targetFreeBytes >= sourceSizeBytes! + HEADROOM_BYTES) {
+            checks.push({
+                name: 'target_free_space',
+                ok: true,
+                message: `Target free: ${formatBytes(targetFreeBytes)} ` +
+                    `(need ${formatBytes(sourceSizeBytes!)} + ${formatBytes(HEADROOM_BYTES)} headroom)`,
+            });
+        } else {
+            // (b) Refine: drop the docker images/overlay/build-cache the target
+            // re-pulls rather than receives over rsync. Cheap daemon metadata
+            // (`docker system df`), no tree walk. Named volumes ARE migrated, so
+            // they stay counted.
+            const nonMigrated = await sourceDockerNonMigratedBytes();
+            const refined = Math.max(0, sourceSizeBytes! - nonMigrated);
+            const required = refined + HEADROOM_BYTES;
+            const ok = targetFreeBytes >= required;
+            checks.push({
+                name: 'target_free_space',
+                ok,
+                message: ok
+                    ? `Target free: ${formatBytes(targetFreeBytes)} ` +
+                      `(refined need ${formatBytes(refined)} + ${formatBytes(HEADROOM_BYTES)} headroom; ` +
+                      `excluded ${formatBytes(nonMigrated)} docker images/overlay)`
+                    : `Target has ${formatBytes(targetFreeBytes)} free, need ${formatBytes(required)} ` +
+                      `(data ${formatBytes(refined)} after excluding ${formatBytes(nonMigrated)} docker images/overlay ` +
+                      `+ ${formatBytes(HEADROOM_BYTES)} headroom) — short by ${formatBytes(required - targetFreeBytes)}`,
+            });
+            // (c) Still short -> block with the shortfall above.
+            if (!ok) return { ok: false, checks, sourceSizeBytes, targetFreeBytes };
+        }
     } catch (err) {
         checks.push({ name: 'target_free_space', ok: false, message: `df /DATA on target failed: ${errMsg(err)}` });
         return { ok: false, checks };
@@ -245,6 +288,49 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
 
 function errMsg(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * On-disk bytes that the `df` source estimate counts but that rsync does NOT
+ * transfer: docker images, container writable/overlay layers, and build cache.
+ * The target re-pulls images during the docker_pull step, so these never go
+ * over the wire. Named (local) volumes are deliberately excluded here — they
+ * ARE migrated and must stay in the size estimate.
+ *
+ * Reads `docker system df` — daemon metadata, fast, no tree walk. Best-effort:
+ * any parse miss contributes 0, which under-subtracts and so keeps the estimate
+ * conservative (we never claim more space is free than really is). Requires
+ * rootful docker, already asserted by the docker_mode check above.
+ */
+async function sourceDockerNonMigratedBytes(): Promise<number> {
+    const out = await executeHostCommand(
+        `sudo -n docker system df --format '{{.Type}}|{{.Size}}' 2>/dev/null || true`
+    );
+    let bytes = 0;
+    for (const line of out.stdout.split('\n')) {
+        const [type, size] = line.split('|');
+        if (!type || !size) continue;
+        const t = type.trim().toLowerCase();
+        // "Local Volumes" intentionally omitted — those are migrated.
+        if (t === 'images' || t === 'containers' || t === 'build cache') {
+            bytes += parseHumanSize(size);
+        }
+    }
+    return bytes;
+}
+
+/**
+ * Parse a `docker system df` size string (e.g. "1.234GB", "120MB", "0B") into
+ * bytes. Docker formats with base-1000 SI units, so we decode the same way;
+ * an unrecognized string yields 0 (the conservative direction — see caller).
+ */
+function parseHumanSize(s: string): number {
+    const m = s.trim().match(/^([\d.]+)\s*([kKmMgGtTpP]?)i?B$/);
+    if (!m) return 0;
+    const val = parseFloat(m[1]);
+    if (!Number.isFinite(val)) return 0;
+    const mult: Record<string, number> = { '': 1, k: 1e3, m: 1e6, g: 1e9, t: 1e12, p: 1e15 };
+    return val * (mult[m[2].toLowerCase()] ?? 1);
 }
 
 function formatBytes(n: number): string {
