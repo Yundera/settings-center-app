@@ -23,16 +23,21 @@ import {
     TableHead,
     TableRow,
     TextField,
+    ToggleButton,
+    ToggleButtonGroup,
     Typography,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import DownloadIcon from "@mui/icons-material/Download";
 import { useNotify } from "react-admin";
 import { useSearchParams } from "react-router-dom";
 import { apiRequest } from "@/core/authApi";
 import { button, card, colors, font, spacing, text, title } from "@/app/pages/softTheme";
+import { generateEd25519Key, isEd25519GenerationSupported, GeneratedKey } from "./sshKeygen";
 
 const VALID_KEY_TYPE_RE = /^(ssh-(rsa|dss|ed25519)|ecdsa-sha2-nistp(256|384|521)|sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\.com)$/;
 
@@ -78,6 +83,7 @@ interface AuthorizedKey {
     isAdminKey: boolean;
     isLiveDashboardKey: boolean;
     isSupportKey: boolean;
+    isUserKey: boolean;
 }
 
 interface LoginEvent {
@@ -131,6 +137,10 @@ interface RemoveTarget {
     username: string;
     fingerprint: string;
     comment: string;
+    // True when removing this key would leave zero `user-` keys across all
+    // accounts — i.e. no personal way back into the PCS. Covers both removing
+    // the last USER key and removing a support/unknown key when none exists.
+    leavesNoUserKey: boolean;
 }
 
 export const AccessPanel: React.FC = () => {
@@ -182,6 +192,16 @@ export const AccessPanel: React.FC = () => {
     const otherAccounts = (data?.accounts || []).filter(a => a.isSystem && a.authorizedKeys.length === 0 && !a.lastLoginTime);
     // Account the dashboard logs into; the admin key is delete-locked only here.
     const dashboardAccount = data?.dashboardAccount ?? 'admin';
+    // How many human "user-" keys exist across every account — the access of
+    // last resort. Drives the lockout warnings on key removal and on disabling
+    // support access.
+    const userKeyCount = useMemo(
+        () => (data?.accounts || []).reduce(
+            (n, a) => n + a.authorizedKeys.filter(k => k.isUserKey).length,
+            0,
+        ),
+        [data],
+    );
 
     return (
         <Box sx={{
@@ -233,7 +253,7 @@ export const AccessPanel: React.FC = () => {
                     />
                 )}
 
-                <SupportEnsureCard onChanged={fetchData} />
+                <SupportEnsureCard onChanged={fetchData} userKeyCount={userKeyCount} />
 
                 {/* Accounts and keys card */}
                 <Card sx={card.root}>
@@ -274,6 +294,7 @@ export const AccessPanel: React.FC = () => {
                                         username: account.username,
                                         fingerprint: key.fingerprint,
                                         comment: key.comment,
+                                        leavesNoUserKey: (userKeyCount - (key.isUserKey ? 1 : 0)) === 0,
                                     })}
                                 />
                             ))}
@@ -372,12 +393,15 @@ interface SupportEnsureStatus {
     comment: string;
 }
 
-const SupportEnsureCard: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
+const SupportEnsureCard: React.FC<{ onChanged: () => void; userKeyCount: number }> = ({ onChanged, userKeyCount }) => {
     const notify = useNotify();
     const [status, setStatus] = useState<SupportEnsureStatus | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [toggling, setToggling] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    // Set when the user tries to disable support access while no `user-` key
+    // exists — opens a lockout confirmation before we actually apply it.
+    const [confirmDisable, setConfirmDisable] = useState<boolean>(false);
 
     const fetchStatus = useCallback(async () => {
         setLoading(true);
@@ -396,14 +420,14 @@ const SupportEnsureCard: React.FC<{ onChanged: () => void }> = ({ onChanged }) =
         fetchStatus();
     }, [fetchStatus]);
 
-    const handleToggle = async (next: boolean) => {
+    const applyToggle = async (next: boolean) => {
         setToggling(true);
         try {
             await apiRequest("/api/admin/support-ensure", "POST", { ensure: next });
             await fetchStatus();
             onChanged();
             notify(
-                next ? 'Yundera support access enabled' : 'Yundera support access disabled',
+                next ? 'Support access enabled' : 'Support access disabled',
                 { type: 'success' },
             );
         } catch (err: any) {
@@ -413,16 +437,26 @@ const SupportEnsureCard: React.FC<{ onChanged: () => void }> = ({ onChanged }) =
         }
     };
 
+    const handleToggle = (next: boolean) => {
+        // Disabling support access while there's no user key of last resort can
+        // leave nobody able to reach the PCS — confirm before proceeding.
+        if (!next && userKeyCount === 0) {
+            setConfirmDisable(true);
+            return;
+        }
+        void applyToggle(next);
+    };
+
     return (
         <Card sx={card.root}>
             <Box sx={card.header}>
-                <Typography sx={title.small}>Yundera support access</Typography>
+                <Typography sx={title.small}>Support access</Typography>
             </Box>
             <CardContent sx={card.content}>
                 {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
                 <Typography sx={{ ...text.detail, mb: 2 }}>
-                    When enabled, Yundera support staff can SSH into <code>{status?.username || 'admin'}</code> using
-                    the orchestrator&apos;s support key. A periodic self-check re-asserts this so the key isn&apos;t
+                    When enabled, support staff can SSH into <code>{status?.username || 'admin'}</code> using
+                    the support key. A periodic self-check re-asserts this so the key isn&apos;t
                     silently lost on a manual edit or image refresh.
                 </Typography>
 
@@ -471,6 +505,32 @@ const SupportEnsureCard: React.FC<{ onChanged: () => void }> = ({ onChanged }) =
                     </Typography>
                 )}
             </CardContent>
+
+            <Dialog open={confirmDisable} onClose={() => setConfirmDisable(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Disable support access?</DialogTitle>
+                <DialogContent>
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                        There is no <strong>USER</strong> key on this PCS right now. The support key may be
+                        the only remaining way in — if you disable it, you could lock yourself out of this PCS
+                        entirely.
+                    </Alert>
+                    <DialogContentText>
+                        Make sure you have added at least one of your own SSH keys (a <code>user-</code> key)
+                        before disabling support access. Continue anyway?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmDisable(false)} disabled={toggling}>Cancel</Button>
+                    <Button
+                        onClick={() => { setConfirmDisable(false); void applyToggle(false); }}
+                        disabled={toggling}
+                        color="error"
+                        variant="contained"
+                    >
+                        Disable anyway
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Card>
     );
 };
@@ -577,8 +637,10 @@ const AccountBlock: React.FC<{
                                             <Chip label="THIS DASHBOARD" size="small" color="info" />
                                         ) : key.isSupportKey ? (
                                             <Chip label="SUPPORT" size="small" color="warning" />
+                                        ) : key.isUserKey ? (
+                                            <Chip label="USER" size="small" color="success" />
                                         ) : (
-                                            <Chip label="user" size="small" />
+                                            <Chip label="UNKNOWN" size="small" />
                                         )}
                                     </TableCell>
                                     <TableCell sx={tableBodyCell} align="right">
@@ -609,22 +671,94 @@ const AccountBlock: React.FC<{
     );
 };
 
+const monoInput = {
+    style: {
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontSize: 13,
+    },
+};
+
+type AddKeyMode = 'paste' | 'generate';
+
 const AddKeyDialog: React.FC<{
     username: string | null;
     onClose: () => void;
     onAdded: () => void;
 }> = ({ username, onClose, onAdded }) => {
+    const notify = useNotify();
+    const [mode, setMode] = useState<AddKeyMode>('paste');
     const [publicKey, setPublicKey] = useState<string>("");
     const [submitting, setSubmitting] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Generation state (generate mode only).
+    const [generating, setGenerating] = useState<boolean>(false);
+    const [generated, setGenerated] = useState<GeneratedKey | null>(null);
+    const [genError, setGenError] = useState<string | null>(null);
+    const [downloaded, setDownloaded] = useState<boolean>(false);
+
+    const genSupported = isEd25519GenerationSupported();
+
     useEffect(() => {
         if (username !== null) {
+            setMode('paste');
             setPublicKey("");
             setError(null);
             setSubmitting(false);
+            setGenerating(false);
+            setGenerated(null);
+            setGenError(null);
+            setDownloaded(false);
         }
     }, [username]);
+
+    const handleModeChange = (next: AddKeyMode | null) => {
+        if (!next || next === mode) return;
+        setMode(next);
+        setError(null);
+        // Carry the generated key into the paste field, clear it otherwise.
+        setPublicKey(next === 'generate' ? (generated?.publicKey ?? "") : "");
+    };
+
+    const handleGenerate = async () => {
+        if (!username) return;
+        setGenerating(true);
+        setGenError(null);
+        setDownloaded(false);
+        try {
+            const key = await generateEd25519Key(`user-${username}`);
+            setGenerated(key);
+            setPublicKey(key.publicKey);
+        } catch (err: any) {
+            setGenError(err?.message || "Key generation failed in this browser");
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    const handleCopyPublic = async () => {
+        if (!generated) return;
+        try {
+            await navigator.clipboard.writeText(generated.publicKey);
+            notify('Public key copied to clipboard', { type: 'info' });
+        } catch {
+            notify('Could not copy — select and copy manually', { type: 'warning' });
+        }
+    };
+
+    const handleDownloadPrivate = () => {
+        if (!generated) return;
+        const blob = new Blob([generated.privateKey], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `id_ed25519_${username}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setDownloaded(true);
+    };
 
     const handleSubmit = async () => {
         if (!username) return;
@@ -648,27 +782,112 @@ const AddKeyDialog: React.FC<{
         <Dialog open={username !== null} onClose={onClose} maxWidth="sm" fullWidth>
             <DialogTitle>Add SSH key for {username}</DialogTitle>
             <DialogContent>
-                <DialogContentText sx={{ mb: 2 }}>
-                    Paste a single OpenSSH public key (e.g. <code>ssh-ed25519 AAAA… comment</code>).
-                    It will be appended to <code>~/.ssh/authorized_keys</code> for this account.
-                </DialogContentText>
+                <ToggleButtonGroup
+                    value={mode}
+                    exclusive
+                    size="small"
+                    onChange={(_, v) => handleModeChange(v)}
+                    sx={{ mb: 2 }}
+                >
+                    <ToggleButton value="paste">Paste a key</ToggleButton>
+                    <ToggleButton value="generate" disabled={!genSupported}>Generate a new key</ToggleButton>
+                </ToggleButtonGroup>
+
                 {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-                <TextField
-                    autoFocus
-                    multiline
-                    minRows={4}
-                    fullWidth
-                    placeholder="ssh-ed25519 AAAA... user@host"
-                    value={publicKey}
-                    onChange={e => setPublicKey(e.target.value)}
-                    disabled={submitting}
-                    inputProps={{
-                        style: {
-                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                            fontSize: 13,
-                        },
-                    }}
-                />
+
+                {mode === 'paste' && (
+                    <>
+                        <DialogContentText sx={{ mb: 2 }}>
+                            Paste a single OpenSSH public key (e.g. <code>ssh-ed25519 AAAA… comment</code>).
+                            It will be appended to <code>~/.ssh/authorized_keys</code> for this account.
+                        </DialogContentText>
+                        <TextField
+                            autoFocus
+                            multiline
+                            minRows={4}
+                            fullWidth
+                            placeholder="ssh-ed25519 AAAA... user@host"
+                            value={publicKey}
+                            onChange={e => setPublicKey(e.target.value)}
+                            disabled={submitting}
+                            inputProps={monoInput}
+                        />
+                    </>
+                )}
+
+                {mode === 'generate' && (
+                    <>
+                        {!genSupported && (
+                            <Alert severity="error" sx={{ mb: 2 }}>
+                                This browser does not support in-browser Ed25519 key generation.
+                                Use a recent browser, or paste a key instead.
+                            </Alert>
+                        )}
+                        <DialogContentText sx={{ mb: 2 }}>
+                            Generate a brand-new Ed25519 keypair in your browser. The private key is created
+                            here and <strong>never sent to the server</strong> — only the public key is added
+                            to <code>~/.ssh/authorized_keys</code>. The comment is stamped <code>user-{username}</code> so
+                            it is tagged as a USER key.
+                        </DialogContentText>
+
+                        {!generated && (
+                            <Button
+                                onClick={handleGenerate}
+                                disabled={generating || !genSupported}
+                                variant="contained"
+                                startIcon={generating ? <CircularProgress size={14} /> : <AddIcon />}
+                            >
+                                Generate Ed25519 key
+                            </Button>
+                        )}
+                        {genError && <Alert severity="error" sx={{ mt: 2 }}>{genError}</Alert>}
+
+                        {generated && (
+                            <Stack spacing={2}>
+                                <Alert severity="warning">
+                                    <Typography sx={{ fontWeight: 700, mb: 0.5 }}>
+                                        Save the private key now — it is shown only once.
+                                    </Typography>
+                                    Download it and store it somewhere safe (a password manager or an encrypted
+                                    disk). It never leaves this browser and cannot be recovered later. Anyone with
+                                    this file can log into <code>{username}</code> on this PCS.
+                                </Alert>
+
+                                <Box>
+                                    <Typography sx={{ ...text.label, mb: 0.5 }}>Public key</Typography>
+                                    <TextField
+                                        multiline
+                                        minRows={2}
+                                        fullWidth
+                                        value={generated.publicKey}
+                                        InputProps={{ readOnly: true }}
+                                        inputProps={monoInput}
+                                    />
+                                    <Typography sx={{ ...text.detail, mt: 0.5, wordBreak: 'break-all' }}>
+                                        {generated.fingerprint}
+                                    </Typography>
+                                </Box>
+
+                                <Stack direction="row" spacing={1.5} flexWrap="wrap">
+                                    <Button
+                                        onClick={handleDownloadPrivate}
+                                        variant="contained"
+                                        color={downloaded ? 'success' : 'primary'}
+                                        startIcon={<DownloadIcon />}
+                                    >
+                                        {downloaded ? 'Private key downloaded' : 'Download private key'}
+                                    </Button>
+                                    <Button onClick={handleCopyPublic} startIcon={<ContentCopyIcon />}>
+                                        Copy public key
+                                    </Button>
+                                    <Button onClick={handleGenerate} disabled={generating}>
+                                        Regenerate
+                                    </Button>
+                                </Stack>
+                            </Stack>
+                        )}
+                    </>
+                )}
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose} disabled={submitting}>Cancel</Button>
@@ -727,6 +946,13 @@ const RemoveKeyDialog: React.FC<{
                     <code> ~/.ssh/authorized_keys</code>. Anyone holding the matching private key
                     will lose SSH access immediately.
                 </DialogContentText>
+                {target?.leavesNoUserKey && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                        Removing this key would leave <strong>no USER key</strong> on this PCS. You need at least
+                        one way to access the PCS — this may lock you out. Add a <code>user-</code> key first
+                        unless you are sure another route in (e.g. support access) is available.
+                    </Alert>
+                )}
                 <Box sx={{
                     p: 1.5,
                     border: `1px solid ${colors.borderMuted}`,
@@ -930,7 +1156,7 @@ const AuthorizeDeeplinkCard: React.FC<{
                                 <>
                                     <Typography sx={{ ...text.detail, fontWeight: 700, mb: 0.5, color: tone.color }}>
                                         {trust === 'trusted'
-                                            ? 'Trusted Yundera source — verified via TLS'
+                                            ? 'Trusted source — verified via TLS'
                                             : 'Verified to come from this domain via TLS'}
                                     </Typography>
                                     <Typography sx={{ ...text.bodyWhite, fontSize: font.title, fontWeight: 700 }}>

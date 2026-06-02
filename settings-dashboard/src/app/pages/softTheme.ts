@@ -327,6 +327,18 @@ export const softDarkTheme: any = {
                 root: { backgroundColor: colors.bgCard, border: 'none' },
             },
         },
+        // Dialogs render their surface on a MuiPaper, which would otherwise
+        // inherit the near-transparent bgCard tint above and show the page
+        // through the popup. Give dialog surfaces a solid, opaque background.
+        MuiDialog: {
+            styleOverrides: {
+                paper: {
+                    backgroundColor: colors.bgApp,
+                    backgroundImage: 'none',
+                    border: `1px solid ${colors.borderMuted}`,
+                },
+            },
+        },
         MuiCard: {
             styleOverrides: {
                 root: { backgroundColor: colors.bgCard, overflow: 'hidden' },
