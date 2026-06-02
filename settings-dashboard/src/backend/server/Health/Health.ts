@@ -26,24 +26,53 @@ export type HealthSnapshot = {
     version: string;
     selfCheck: SelfCheckStatus;
     lastRefreshedAt: string | null; // ISO 8601 of last successful refresh
+    // Error message from the most recent failed refresh, or null when the last
+    // refresh succeeded (or none has run yet). Surfaced so a refresh failure is
+    // distinguishable from "the box has genuinely never run a self-check" —
+    // both otherwise look identical (all-null selfCheck).
+    lastError: string | null;
 };
 
 const VERSION: string = (packageJson as { version?: string }).version ?? "unknown";
 
-let snapshot: HealthSnapshot = {
-    version: VERSION,
-    selfCheck: { ok: null, lastRunAt: null, passed: null, total: null },
-    lastRefreshedAt: null,
-};
+// Pinned to globalThis because Next.js compiles API routes through its own
+// bundler and gives them a separate module instance from the one loaded by tsx
+// for server.ts. A module-level `let snapshot` ends up duplicated: the
+// background refresh writes to the tsx copy, while /api/health reads from a
+// pristine route copy and therefore always returns the initial all-null value.
+// globalThis is the single process-wide object both copies share. (Metrics.ts
+// hit and fixed this exact trap — keep the two in sync.)
+const STATE_KEY = "__yundera_health_state__" as const;
 
-let refreshTimer: NodeJS.Timeout | null = null;
+interface HealthState {
+    snapshot: HealthSnapshot;
+    refreshTimer: NodeJS.Timeout | null;
+}
+
+function getState(): HealthState {
+    const g = globalThis as unknown as Record<string, HealthState | undefined>;
+    let s = g[STATE_KEY];
+    if (!s) {
+        s = {
+            snapshot: {
+                version: VERSION,
+                selfCheck: { ok: null, lastRunAt: null, passed: null, total: null },
+                lastRefreshedAt: null,
+                lastError: null,
+            },
+            refreshTimer: null,
+        };
+        g[STATE_KEY] = s;
+    }
+    return s;
+}
 
 /**
  * Public read of the cached snapshot. Pure RAM lookup — safe to expose on a
  * public endpoint.
  */
 export function getHealthSnapshot(): HealthSnapshot {
-    return snapshot;
+    return getState().snapshot;
 }
 
 // Per-ensure-script result lines emitted by execute_script_with_logging
@@ -123,25 +152,30 @@ function parseSelfCheckStatus(logTail: string): SelfCheckStatus {
 
 /**
  * Refresh the cached snapshot by reading the host log over SSH.
- * Failures are swallowed — we keep the previous snapshot rather than
- * blanking it on a transient SSH hiccup.
+ * On failure we keep the previous selfCheck rather than blanking it on a
+ * transient SSH hiccup, but record the error in `lastError` so the failure is
+ * visible to callers instead of silently swallowed.
  */
 export async function refreshHealthSnapshot(): Promise<void> {
+    const state = getState();
     try {
         const result = await executeHostCommand(
             `tail -n ${LOG_TAIL_LINES} ${LOG_FILE}`
         );
         const selfCheck = parseSelfCheckStatus(result.stdout || "");
-        snapshot = {
+        state.snapshot = {
             version: VERSION,
             selfCheck,
             lastRefreshedAt: new Date().toISOString(),
+            lastError: null,
         };
     } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         console.warn(
             "Health: failed to refresh self-check status from host log:",
-            error instanceof Error ? error.message : String(error)
+            message
         );
+        state.snapshot = { ...state.snapshot, lastError: message };
     }
 }
 
@@ -149,13 +183,14 @@ export async function refreshHealthSnapshot(): Promise<void> {
  * Kick off the first refresh and arm the periodic timer. Idempotent.
  */
 export function startHealthRefresh(): void {
-    if (refreshTimer) {
+    const state = getState();
+    if (state.refreshTimer) {
         return;
     }
     void refreshHealthSnapshot();
-    refreshTimer = setInterval(() => {
+    state.refreshTimer = setInterval(() => {
         void refreshHealthSnapshot();
     }, REFRESH_INTERVAL_MS);
     // Don't keep the event loop alive just for this timer.
-    refreshTimer.unref?.();
+    state.refreshTimer.unref?.();
 }
