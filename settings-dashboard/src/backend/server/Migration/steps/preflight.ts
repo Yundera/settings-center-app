@@ -30,6 +30,101 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
     let sourceSizeBytes: number | undefined;
     let targetFreeBytes: number | undefined;
 
+    // 0. Source health gate — block if the source's OWN last self-check ended
+    //    "with failures". This is the same authoritative self-check that runs
+    //    on the TARGET at cutover (targetSelfCheck), shifted left onto the
+    //    source so a degraded PCS is rejected BEFORE the data push and the
+    //    source-container stop — instead of failing late, after the expensive
+    //    transfer, having faithfully copied broken state (e.g. a blanked
+    //    USER_JWT) onto the target.
+    //
+    //    Deliberately READ-ONLY: it tails the persisted self-check log rather
+    //    than triggering a fresh run. Running self-check here would be unsafe —
+    //    its tail does `docker compose up -d` on the yundera system stack,
+    //    which would recreate the `admin` container driving THIS migration and
+    //    rotate USER_JWT (the very reasons stopSource excludes that stack and
+    //    disables the nightly cron). So we accept a possibly-stale verdict (up
+    //    to the nightly cadence) as the trade-off. Reading self-check's own
+    //    aggregate verdict also means this gate auto-tracks any env/process
+    //    checks self-check gains later — there is no parallel precondition list
+    //    to drift out of sync here.
+    //
+    //    Only an explicit "with failures" blocks. A missing/indeterminate log
+    //    (rotation, truncation, fresh boot) passes — we don't add a new way to
+    //    block migrations on a signal we can't read.
+    try {
+        const probe = `
+LOG="/DATA/AppData/casaos/apps/yundera/log/yundera.log"
+if ! sudo -n test -f "$LOG" 2>/dev/null; then
+  echo "STATUS=UNKNOWN"; echo "reason=no self-check log at $LOG"; exit 0
+fi
+TAIL="$(sudo -n tail -n 4000 "$LOG" 2>/dev/null)"
+if [ -z "$TAIL" ]; then
+  echo "STATUS=UNKNOWN"; echo "reason=self-check log empty or unreadable"; exit 0
+fi
+COMP="$(printf '%s\\n' "$TAIL" | grep -nE 'Self-check completed (successfully|with failures)' | tail -n1)"
+if [ -z "$COMP" ]; then
+  echo "STATUS=UNKNOWN"; echo "reason=no self-check completion line in last 4000 log lines"; exit 0
+fi
+COMP_IDX="\${COMP%%:*}"
+COMP_LINE="\${COMP#*:}"
+if printf '%s' "$COMP_LINE" | grep -q 'completed successfully'; then
+  echo "STATUS=OK"; printf '%s\\n' "$COMP_LINE"; exit 0
+fi
+START_IDX="$(printf '%s\\n' "$TAIL" | sed -n "1,\${COMP_IDX}p" | grep -nE 'Self-check starting' | tail -n1 | cut -d: -f1)"
+[ -z "$START_IDX" ] && START_IDX=1
+echo "STATUS=FAILED"; printf '%s\\n' "$COMP_LINE"
+printf '%s\\n' "$TAIL" | sed -n "\${START_IDX},\${COMP_IDX}p" | grep -E ': failed \\(exit code' | tail -n 20 || true
+`;
+        const out = await executeHostCommand(probe);
+        const lines = out.stdout.split('\n');
+        const status = (lines.find(l => l.startsWith('STATUS=')) ?? 'STATUS=UNKNOWN')
+            .slice('STATUS='.length).trim();
+        const reason = (lines.find(l => l.startsWith('reason=')) ?? '')
+            .slice('reason='.length).trim();
+        const body = lines
+            .filter(l => l.trim() && !l.startsWith('STATUS=') && !l.startsWith('reason='))
+            .map(l => l.trim());
+
+        if (status === 'FAILED') {
+            const verdict = body[0] ?? 'self-check completed with failures';
+            const failedScripts = body.slice(1);
+            checks.push({
+                name: 'source_self_check',
+                ok: false,
+                message:
+                    `Source's last self-check ended WITH FAILURES — fix the source before migrating ` +
+                    `(migration would otherwise copy the broken state to the target). ${verdict}` +
+                    (failedScripts.length ? `\nFailing scripts:\n${failedScripts.join('\n')}` : ''),
+            });
+            return { ok: false, checks };
+        }
+
+        if (status === 'OK') {
+            checks.push({
+                name: 'source_self_check',
+                ok: true,
+                message: `Source's last self-check passed — ${body[0] ?? 'completed successfully'}`,
+            });
+        } else {
+            // UNKNOWN — indeterminate signal, non-blocking (see note above).
+            checks.push({
+                name: 'source_self_check',
+                ok: true,
+                message: `Source self-check status indeterminate, proceeding${reason ? ` (${reason})` : ''}`,
+            });
+        }
+    } catch (err) {
+        // Reading the source log failed (unexpected — we run inside the source's
+        // own admin container). Non-blocking, consistent with the "only explicit
+        // failures block" rule; a genuinely broken source surfaces in later steps.
+        checks.push({
+            name: 'source_self_check',
+            ok: true,
+            message: `Could not read source self-check log, proceeding: ${errMsg(err)}`,
+        });
+    }
+
     // 1. Ensure sshpass + rsync on the source host (we initiate from here)
     try {
         await executeHostCommand(`DEBIAN_FRONTEND=noninteractive apt-get install -y sshpass rsync >/dev/null 2>&1 || sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y sshpass rsync >/dev/null 2>&1`);

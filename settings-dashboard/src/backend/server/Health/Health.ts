@@ -13,6 +13,13 @@ const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 export type SelfCheckStatus = {
     ok: boolean | null;          // null = no completion line found yet
     lastRunAt: string | null;    // ISO 8601, or null if unknown
+    // Per-script tally for the most recent run, derived from the
+    // `<script> : success/failed` lines execute_script_with_logging emits
+    // between `Self-check starting` and the completion line. Both null when
+    // the run window can't be reconstructed from the log tail (e.g. truncated
+    // tail, or no run observed yet).
+    passed: number | null;       // ensure-scripts that exited 0
+    total: number | null;        // ensure-scripts attempted
 };
 
 export type HealthSnapshot = {
@@ -25,7 +32,7 @@ const VERSION: string = (packageJson as { version?: string }).version ?? "unknow
 
 let snapshot: HealthSnapshot = {
     version: VERSION,
-    selfCheck: { ok: null, lastRunAt: null },
+    selfCheck: { ok: null, lastRunAt: null, passed: null, total: null },
     lastRefreshedAt: null,
 };
 
@@ -39,11 +46,55 @@ export function getHealthSnapshot(): HealthSnapshot {
     return snapshot;
 }
 
+// Per-ensure-script result lines emitted by execute_script_with_logging
+// (library/log.sh) — one per script, anchored on the [SUCCESS]/[ERROR] level
+// tag so a child script that happens to echo "success" in its own OUTPUT
+// lines can't be miscounted:
+//   [ts] [SUCCESS] === [datetime] ensure-foo.sh : success (2s) ===
+//   [ts] [ERROR]   === [datetime] ensure-bar.sh : failed (exit code: 1, 3s) ===
+const SCRIPT_OK_RE = /^\[[^\]]+\]\s+\[SUCCESS\]\s+===.*:\s+success\s+\(/;
+const SCRIPT_FAIL_RE = /^\[[^\]]+\]\s+\[ERROR\]\s+===.*:\s+failed\s+\(exit code:/;
+const SELF_CHECK_START_RE = /Self-check starting/;
+
+/**
+ * Count the per-script pass/fail tally for the run that ends at
+ * `completionIdx`. The run window is bounded below by the most recent
+ * `Self-check starting` line before the completion line; if that boundary
+ * isn't in the tail (truncated window) we can't trust the count and return
+ * nulls. `total === 0` (no script lines found) is likewise treated as
+ * unknown rather than a misleading 0/0.
+ */
+function countRunTally(
+    lines: string[],
+    completionIdx: number
+): { passed: number | null; total: number | null } {
+    let startIdx = -1;
+    for (let i = completionIdx - 1; i >= 0; i--) {
+        if (SELF_CHECK_START_RE.test(lines[i])) {
+            startIdx = i;
+            break;
+        }
+    }
+    if (startIdx < 0) return { passed: null, total: null };
+
+    let passed = 0;
+    let failed = 0;
+    for (let i = startIdx + 1; i < completionIdx; i++) {
+        if (SCRIPT_OK_RE.test(lines[i])) passed++;
+        else if (SCRIPT_FAIL_RE.test(lines[i])) failed++;
+    }
+    const total = passed + failed;
+    if (total === 0) return { passed: null, total: null };
+    return { passed, total };
+}
+
 /**
  * Parse a log tail and find the most recent self-check completion line.
  * Self-check.sh emits exactly one of these lines per run:
  *   [YYYY-MM-DD HH:MM:SS] [LEVEL] === Self-check completed successfully ===
  *   [YYYY-MM-DD HH:MM:SS] [LEVEL] === Self-check completed with failures ===
+ * The per-script tally (passed/total) is reconstructed from the result lines
+ * inside that run's window — see countRunTally.
  */
 function parseSelfCheckStatus(logTail: string): SelfCheckStatus {
     const lines = logTail.split("\n");
@@ -55,16 +106,19 @@ function parseSelfCheckStatus(logTail: string): SelfCheckStatus {
         );
         if (match) {
             const [, date, time, outcome] = match;
+            const { passed, total } = countRunTally(lines, i);
             // The host writes timestamps in local time (no zone in the log).
             // We can only return what we have — emit the bare local timestamp
             // so callers don't get a falsely-precise UTC value.
             return {
                 ok: outcome === "successfully",
                 lastRunAt: `${date}T${time}`,
+                passed,
+                total,
             };
         }
     }
-    return { ok: null, lastRunAt: null };
+    return { ok: null, lastRunAt: null, passed: null, total: null };
 }
 
 /**
