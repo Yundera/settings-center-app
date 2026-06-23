@@ -5,26 +5,69 @@ import LinkIcon from "@mui/icons-material/Link";
 import React from "react";
 import {button, colors, font, spacing} from '@/app/pages/softTheme';
 
-// Authelia hosts the credential-management UI on its own origin so cookies and
-// audit logs stay scoped correctly. We deep-link into it from a button rather
-// than iframing — Authelia explicitly sets X-Frame-Options to deny embedding.
+// An identity provider this PCS can authenticate against, plus a link to the
+// dashboard where the user manages that identity (credentials, profile, etc.).
 //
-// Derive the auth host from the current admin hostname rather than APP_CONFIG.
-// The admin and authelia containers are routed at parallel `admin-${DOMAIN}` /
-// `auth-${DOMAIN}` labels (and matching nip.io / sslip.io variants), so swapping
-// the prefix is correct for every deployment shape and avoids depending on the
-// /api/core/config/core payload (which can be empty when the image is built
-// without a baked-in core.env.json).
-const buildAutheliaUrl = (): string => {
-    if (typeof window === "undefined") return "#";
+// Under the Dex broker model the SSO provider itself has no end-user account UI
+// — self-service lives wherever the credential actually does. So this panel
+// links out to each provider's own dashboard rather than to "the IdP".
+interface IdentityProvider {
+    name: string;
+    label: string;
+    description: string;
+    dashboardUrl: string;
+}
+
+// Derive a sibling service host from the current admin hostname by swapping the
+// `admin-` prefix. The admin / casaos / auth containers are routed at parallel
+// `admin-${DOMAIN}` / `casaos-${DOMAIN}` labels (and nip.io / sslip.io
+// variants), so prefix-swap is correct for every deployment shape without
+// depending on the (possibly-empty) APP_CONFIG payload.
+const siblingHostUrl = (prefix: string): string | null => {
+    if (typeof window === "undefined") return null;
     const host = window.location.host;
-    if (!host.startsWith("admin-")) return "#";
-    const authHost = `auth-${host.slice("admin-".length)}`;
-    return `https://${authHost}/`;
+    if (!host.startsWith("admin-")) return null;
+    return `https://${prefix}-${host.slice("admin-".length)}/`;
+};
+
+const identityProviders = (): IdentityProvider[] => {
+    const providers: IdentityProvider[] = [];
+
+    // CasaOS — the credential store for the PCS user identity. Account
+    // management (password, profile) happens in the CasaOS dashboard.
+    const casaUrl = siblingHostUrl("casaos");
+    if (casaUrl) {
+        providers.push({
+            name: "casaos",
+            label: "CasaOS",
+            description:
+                "Your PCS account lives in CasaOS. Change your password and manage your profile from the CasaOS dashboard.",
+            dashboardUrl: casaUrl,
+        });
+    }
+
+    // Yundera — the future cloud identity ("Login with Yundera"). Rendered only
+    // once its dashboard URL is configured. To enable: expose
+    // APP_CONFIG.YUNDERA_DASHBOARD_URL (add it to Config + FRONTEND_PUBLIC_ENV
+    // when the cloud IdP ships).
+    const yunderaUrl =
+        typeof window !== "undefined"
+            ? (window as unknown as {APP_CONFIG?: Record<string, string>}).APP_CONFIG?.YUNDERA_DASHBOARD_URL
+            : undefined;
+    if (yunderaUrl) {
+        providers.push({
+            name: "yundera",
+            label: "Yundera",
+            description: "Manage your Yundera cloud identity and sign-in settings.",
+            dashboardUrl: yunderaUrl,
+        });
+    }
+
+    return providers;
 };
 
 export const AccountPanel = () => {
-    const autheliaUrl = buildAutheliaUrl();
+    const providers = identityProviders();
 
     return (
         <Box sx={{
@@ -60,26 +103,66 @@ export const AccountPanel = () => {
                     marginBottom: '25px',
                 }}
             >
-                Change your password, manage two-factor authentication, and review
-                active sessions on the Authelia identity provider.
+                Manage your account on the identity provider that issued it. Each
+                provider keeps its own credentials and sign-in settings in its
+                dashboard.
             </Typography>
 
-            <Button
-                variant="contained"
-                href={autheliaUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                startIcon={<LinkIcon />}
-                sx={{
-                    ...button.primary,
-                    '&:hover': {
-                        ...button.primary['&:hover'],
-                        transform: 'translateY(-1px)',
-                    },
-                }}
-            >
-                Manage your account
-            </Button>
+            <Box sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                width: '100%',
+                maxWidth: '600px',
+            }}>
+                {providers.length === 0 ? (
+                    <Typography
+                        variant="body2"
+                        sx={{textAlign: 'center', color: colors.textWhite, fontSize: font.caption}}
+                    >
+                        No identity provider dashboard is available for this deployment.
+                    </Typography>
+                ) : (
+                    providers.map((p) => (
+                        <Box
+                            key={p.name}
+                            sx={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '10px',
+                                padding: '20px',
+                                borderRadius: '12px',
+                                border: `1px solid ${colors.textWhite}22`,
+                                background: `${colors.textWhite}0a`,
+                            }}
+                        >
+                            <Typography sx={{fontSize: font.label, fontWeight: 700, color: colors.textWhite}}>
+                                {p.label}
+                            </Typography>
+                            <Typography sx={{fontSize: font.caption, color: colors.textWhite, lineHeight: 1.5}}>
+                                {p.description}
+                            </Typography>
+                            <Button
+                                variant="contained"
+                                href={p.dashboardUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                startIcon={<LinkIcon />}
+                                sx={{
+                                    ...button.primary,
+                                    alignSelf: 'flex-start',
+                                    '&:hover': {
+                                        ...button.primary['&:hover'],
+                                        transform: 'translateY(-1px)',
+                                    },
+                                }}
+                            >
+                                Open {p.label} dashboard
+                            </Button>
+                        </Box>
+                    ))
+                )}
+            </Box>
         </Box>
     );
 };

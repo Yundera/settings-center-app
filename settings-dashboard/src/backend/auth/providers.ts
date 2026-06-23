@@ -1,6 +1,6 @@
 import {getConfig} from '@/configuration/getConfigBackend';
 
-export type ProviderName = 'casaos' | 'authelia' | 'yundera';
+export type ProviderName = 'casaos' | 'sso' | 'yundera';
 
 export interface ProviderEntry {
   name: ProviderName;
@@ -24,10 +24,14 @@ export function enabledProviders(): ProviderEntry[] {
     });
   }
 
+  // The registrar-driven SSO provider. The OIDC provider it targets is whatever
+  // the auth-registrar points at (Authelia today, Dex after the migration
+  // cutover via REGISTRAR_BACKEND=dex) — so this single button covers both,
+  // hence the backend-neutral "Single Sign-On" label.
   if (getConfig('OIDC_REGISTRAR_URL')) {
     list.push({
-      name: 'authelia',
-      label: 'Sign in with Authelia',
+      name: 'sso',
+      label: 'Single Sign-On',
       kind: 'oidc',
       startUrl: '/api/auth/oidc/start',
     });

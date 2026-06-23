@@ -62,7 +62,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const client = await getOIDCClient(stateClaim.redirectUri);
     const discovery = await getDiscovery(client.issuer_url);
 
-    // Authelia clients are configured with token_endpoint_auth_method=client_secret_basic.
+    // Registrar-issued clients use token_endpoint_auth_method=client_secret_basic
+    // (true for both Authelia and Dex, which the auth-registrar provisions).
     const basicAuth = Buffer
       .from(`${encodeURIComponent(client.client_id)}:${encodeURIComponent(client.client_secret)}`)
       .toString('base64');
@@ -108,15 +109,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email: email || '',
       avatar: '',
       role: deriveRole(groups),
-      provider: 'authelia',
+      provider: 'sso',
     });
-    appendSetCookie(res, `last_provider=authelia; Path=/; Max-Age=${60 * 60 * 24 * 90}; SameSite=Lax`);
+    appendSetCookie(res, `last_provider=sso; Path=/; Max-Age=${60 * 60 * 24 * 90}; SameSite=Lax`);
 
     const returnTo = stateClaim.returnTo || '/';
     res.redirect(302, returnTo);
   } catch (err: any) {
     const detail = err?.response?.data || err?.message || String(err);
-    console.error('Authelia OIDC callback error:', detail);
+    console.error('SSO OIDC callback error:', detail);
     return htmlError(res, typeof detail === 'string' ? detail : JSON.stringify(detail), 500);
   }
 }

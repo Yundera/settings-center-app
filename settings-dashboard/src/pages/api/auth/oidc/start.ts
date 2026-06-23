@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.redirect(302, url.toString());
   } catch (err) {
-    console.error('Authelia OIDC start error:', err);
+    console.error('SSO OIDC start error:', err);
     res.status(500).json({message: 'OIDC login failed'});
   }
 }
