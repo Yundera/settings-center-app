@@ -12,7 +12,7 @@ export interface SessionUser {
   email: string;
   avatar: string;
   role: string;
-  provider: 'casaos' | 'sso' | 'yundera';
+  provider: 'sso' | 'yundera';
 }
 
 function isHttps(req: {headers: Record<string, any>}): boolean {

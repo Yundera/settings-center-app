@@ -9,7 +9,6 @@ type Config = {
     MOCK: string;
     OIDC_REGISTRAR_URL: string;
     YUNDERA_OIDC_ISSUER: string;  // when set, Yundera shows up in the provider chooser.
-    AUTHORITY_ENDPOINT: string;   // CasaOS UserService base (e.g. https://8080-casaos-${DOMAIN}/v1/users). Falls back to http://casaos:8080/v1/users.
 
     DOMAIN: string;
     PROVIDER_STR: string;

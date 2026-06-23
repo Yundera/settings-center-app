@@ -1,18 +1,14 @@
-import {cookies, headers} from 'next/headers';
+import {cookies} from 'next/headers';
 import {redirect} from 'next/navigation';
 import {jwtVerify} from 'jose';
 import {SESSION_KEY} from '@/backend/auth/sessionKey';
 import {SESSION_COOKIE} from '@/backend/auth/session';
 import {enabledProviders, ProviderEntry} from '@/backend/auth/providers';
-import {newCsrfToken, CSRF_COOKIE, csrfCookieAttrs} from '@/backend/auth/csrf';
-import {CasaOSLoginForm} from './CasaOSLoginForm';
 
-// Server-rendered chooser. Reads providers from backend config, renders one
-// button per OIDC provider and an inline form per password provider. CSRF
-// uses the double-submit pattern: the cookie is dropped client-side by a
-// tiny inline script (cookies().set is not available in Server Components),
-// the matching value is embedded in the form, and the login handler
-// constant-time-compares the two.
+// Server-rendered chooser. Reads providers from backend config and renders one
+// button per OIDC provider. Every provider is an OIDC redirect — admin sign-in
+// funnels through the SSO (Dex) broker, which federates to CasaOS via the
+// casaos-oidc-bridge.
 
 export const dynamic = 'force-dynamic';
 
@@ -44,11 +40,6 @@ export default async function LoginPage({
 
   const providers = enabledProviders();
   const lastProvider = (await cookies()).get('last_provider')?.value;
-  const csrf = newCsrfToken();
-  const isHttps = ((await headers()).get('x-forwarded-proto') || '').split(',')[0].trim() === 'https';
-
-  const oidcProviders = providers.filter(p => p.kind === 'oidc');
-  const passwordProviders = providers.filter(p => p.kind === 'password');
 
   return (
     <main style={pageStyle}>
@@ -64,24 +55,11 @@ export default async function LoginPage({
         </p>
 
         <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
-          {oidcProviders.map(p => (
+          {providers.map(p => (
             <ProviderButton key={p.name} provider={p} returnTo={returnTo} highlight={p.name === lastProvider} />
-          ))}
-
-          {oidcProviders.length > 0 && passwordProviders.length > 0 && (
-            <div style={dividerStyle}>or</div>
-          )}
-
-          {passwordProviders.map(p => (
-            <div key={p.name}>
-              <div style={passwordHeadingStyle}>{p.label}</div>
-              <CasaOSLoginForm csrf={csrf} returnTo={returnTo} />
-            </div>
           ))}
         </div>
       </div>
-
-      <CsrfCookieSetter token={csrf} secure={isHttps} />
     </main>
   );
 }
@@ -95,13 +73,6 @@ function ProviderButton({provider, returnTo, highlight}: {provider: ProviderEntr
       </button>
     </form>
   );
-}
-
-function CsrfCookieSetter({token, secure}: {token: string; secure: boolean}) {
-  const attrs = csrfCookieAttrs(secure);
-  const cookieValue = `${CSRF_COOKIE}=${token}; ${attrs}`;
-  const script = `document.cookie=${JSON.stringify(cookieValue)};`;
-  return <script dangerouslySetInnerHTML={{__html: script}} />;
 }
 
 // ──────── styles (inline so the chooser ships without MUI hydration) ────────
@@ -157,19 +128,4 @@ const buttonPrimary: React.CSSProperties = {
 const buttonHighlighted: React.CSSProperties = {
   ...buttonPrimary,
   background: 'linear-gradient(90deg, #27aae1, #ee2a7b)',
-};
-
-const dividerStyle: React.CSSProperties = {
-  textAlign: 'center',
-  color: '#769ab5',
-  fontSize: 12,
-  textTransform: 'uppercase',
-  letterSpacing: 1,
-  margin: '8px 0',
-};
-
-const passwordHeadingStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: '#a6cced',
-  marginBottom: 8,
 };

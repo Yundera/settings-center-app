@@ -1,17 +1,17 @@
 import {getConfig} from '@/configuration/getConfigBackend';
 
-export type ProviderName = 'casaos' | 'sso' | 'yundera';
+export type ProviderName = 'sso' | 'yundera';
 
 export interface ProviderEntry {
   name: ProviderName;
   label: string;
-  kind: 'password' | 'oidc';
-  // For OIDC providers, the URL the chooser button hits to start the redirect.
-  startUrl?: string;
+  // The URL the chooser button hits to start the OIDC redirect.
+  startUrl: string;
 }
 
-// A provider is "enabled" if its config knob is present. Order here is the
-// order the chooser renders buttons in — OIDC first, password last.
+// A provider is "enabled" if its config knob is present. Every provider is an
+// OIDC redirect — under the Dex broker model the SSO provider funnels all
+// admin sign-ins (Dex in turn federates to CasaOS via the casaos-oidc-bridge).
 export function enabledProviders(): ProviderEntry[] {
   const list: ProviderEntry[] = [];
 
@@ -19,32 +19,20 @@ export function enabledProviders(): ProviderEntry[] {
     list.push({
       name: 'yundera',
       label: 'Sign in with Yundera',
-      kind: 'oidc',
       startUrl: '/api/auth/oidc/yundera/start',
     });
   }
 
   // The registrar-driven SSO provider. The OIDC provider it targets is whatever
-  // the auth-registrar points at (Authelia today, Dex after the migration
-  // cutover via REGISTRAR_BACKEND=dex) — so this single button covers both,
-  // hence the backend-neutral "Single Sign-On" label.
+  // the auth-registrar points at (Dex via REGISTRAR_BACKEND=dex) — hence the
+  // backend-neutral "Single Sign-On" label.
   if (getConfig('OIDC_REGISTRAR_URL')) {
     list.push({
       name: 'sso',
       label: 'Single Sign-On',
-      kind: 'oidc',
       startUrl: '/api/auth/oidc/start',
     });
   }
-
-  // CasaOS is always-on: the AUTHORITY_ENDPOINT env is informational; if it's
-  // missing we still fall back to the internal hostname `casaos:8080` which
-  // is guaranteed to exist on every PCS by the compose template.
-  list.push({
-    name: 'casaos',
-    label: 'Sign in with CasaOS',
-    kind: 'password',
-  });
 
   return list;
 }
