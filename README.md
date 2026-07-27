@@ -6,15 +6,14 @@
 
 ## Architecture
 
-The project is composed of two sub-projects, managed as GitHub submodules:
+The project holds a single application:
 
 1. **settings-dashboard**  
    Path: `./settings-dashboard/`  
    Documentation: [settings-dashboard readme](./settings-dashboard/readme.md)
 
-2. **dashboard-core**  
-   Path: `./dashboard-core/`  
-   Documentation: [dashboard-core readme](./dashboard-core/readme.md)
+The shared react-admin scaffolding it used to import from the `dashboard-core`
+submodule now lives in `./settings-dashboard/src/core/`.
 
 ## Getting Started
 
@@ -108,8 +107,7 @@ npx dockflow publish
 ├── settings-dashboard/          # Main dashboard application
 │   ├── config/
 │   │   ├── core.env.json
-│   └── readme.md
-├── dashboard-core/              # Core functionality
+│   ├── src/core/                # React-admin shell (loader, panels, i18n, layout)
 │   └── readme.md
 └── README.md*
 ```

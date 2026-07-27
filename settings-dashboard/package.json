@@ -19,7 +19,6 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "axios": "^1.16.1",
-    "dashboard-core": "workspace:*",
     "dotenv": "^16.4.5",
     "js-crypto-hkdf": "^1.0.7",
     "jose": "^5.9.6",

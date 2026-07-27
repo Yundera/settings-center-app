@@ -13,7 +13,8 @@ import {softDarkTheme, softLightTheme} from "@/app/pages/softTheme";
 import {Dashboard} from "@/app/pages/Dashboard";
 import {AppWrapper} from "@/app/pages/AppWrapper";
 import {AuthProvider} from "ra-core";
-import {definePanel, PanelInterface} from "dashboard-core";
+import {definePanel} from "@/core/definePanel";
+import type {PanelInterface} from "@/core/PanelInterface";
 
 import VpnKeyIcon from "@mui/icons-material/VpnKey";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";

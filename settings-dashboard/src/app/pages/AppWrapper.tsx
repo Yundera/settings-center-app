@@ -15,14 +15,12 @@ import {
   useStore
 } from 'react-admin';
 import {AuthProvider, CustomRoutes} from "ra-core";
-import {
-  appConfigContext,
-  i18nProvider,
-  PanelInterface,
-  Logo,
-  Theme,
-  AppBarToolbar
-} from "dashboard-core";
+import {appConfigContext} from "@/core/configuration/appConfigContext";
+import {i18nProvider} from "@/core/component/I18nProvider";
+import type {PanelInterface} from "@/core/PanelInterface";
+import {Logo} from "@/core/layout/Logo";
+import type {Theme} from "@/core/types";
+import {AppBarToolbar} from "@/core/layout/AppBarToolbar";
 import {Layout as RaLayout, AppBar as RaAppBar} from 'react-admin';
 import {Box, Tooltip, useMediaQuery, Typography} from "@mui/material";
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';

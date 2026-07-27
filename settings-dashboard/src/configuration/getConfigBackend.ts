@@ -1,4 +1,4 @@
-import {BaseConfig, getConfig as getConfigBackend} from "dashboard-core/backend/config/LocalBackendConfig";
+import {BaseConfig, getConfig as getConfigBackend} from "@/core/backend/LocalBackendConfig";
 
 type Config = {
     BASE_PATH: string;

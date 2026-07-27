@@ -1,5 +1,4 @@
 import {AuthProvider} from "ra-core";
-import {AuthProviderAPIAccess} from "dashboard-core/interface/AuthProviderAPIAccess";
 
 // The server-side gate in server.ts redirects unauthenticated page loads to
 // /login before the SPA ever mounts, so checkAuth here is just a sanity
@@ -33,7 +32,7 @@ async function fetchMe(): Promise<MeUser | null> {
   }
 }
 
-export const localAuthProvider: AuthProvider & AuthProviderAPIAccess = {
+export const localAuthProvider: AuthProvider = {
   async listPermissions() {
     return {};
   },
@@ -70,10 +69,5 @@ export const localAuthProvider: AuthProvider & AuthProviderAPIAccess = {
       role: me.role,
       authToken: '', // legacy field; no longer used (cookies do the work).
     };
-  },
-  async getIdToken(): Promise<string> {
-    // Kept for interface compatibility — callers now rely on the session
-    // cookie attached automatically to same-origin requests.
-    return '';
   },
 };

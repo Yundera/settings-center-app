@@ -28,7 +28,6 @@ services:
       - ../../settings-dashboard/public:/app/settings-dashboard/public:ro
       - ../../settings-dashboard/next.config.mjs:/app/settings-dashboard/next.config.mjs:ro
       - ../../settings-dashboard/tsconfig.json:/app/settings-dashboard/tsconfig.json:ro
-      - ../../dashboard-core/src:/app/dashboard-core/src
     # `pnpm start` runs `tsx server.ts` with NODE_ENV unset → Next.js dev mode
     # (fast refresh) listening on port 4342. Override the production CMD that
     # the image ships with.
