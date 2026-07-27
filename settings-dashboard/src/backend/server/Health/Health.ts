@@ -1,4 +1,5 @@
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
+import { latestCompletedSelfCheckRun } from "./SelfCheckLog";
 import packageJson from "../../../../package.json";
 
 const LOG_FILE = "/DATA/AppData/casaos/apps/yundera/log/yundera.log";
@@ -75,79 +76,30 @@ export function getHealthSnapshot(): HealthSnapshot {
     return getState().snapshot;
 }
 
-// Per-ensure-script result lines emitted by execute_script_with_logging
-// (library/log.sh) — one per script, anchored on the [SUCCESS]/[ERROR] level
-// tag so a child script that happens to echo "success" in its own OUTPUT
-// lines can't be miscounted:
-//   [ts] [SUCCESS] === [datetime] ensure-foo.sh : success (2s) ===
-//   [ts] [ERROR]   === [datetime] ensure-bar.sh : failed (exit code: 1, 3s) ===
-const SCRIPT_OK_RE = /^\[[^\]]+\]\s+\[SUCCESS\]\s+===.*:\s+success\s+\(/;
-const SCRIPT_FAIL_RE = /^\[[^\]]+\]\s+\[ERROR\]\s+===.*:\s+failed\s+\(exit code:/;
-const SELF_CHECK_START_RE = /Self-check starting/;
-
 /**
- * Count the per-script pass/fail tally for the run that ends at
- * `completionIdx`. The run window is bounded below by the most recent
- * `Self-check starting` line before the completion line; if that boundary
- * isn't in the tail (truncated window) we can't trust the count and return
- * nulls. `total === 0` (no script lines found) is likewise treated as
- * unknown rather than a misleading 0/0.
- */
-function countRunTally(
-    lines: string[],
-    completionIdx: number
-): { passed: number | null; total: number | null } {
-    let startIdx = -1;
-    for (let i = completionIdx - 1; i >= 0; i--) {
-        if (SELF_CHECK_START_RE.test(lines[i])) {
-            startIdx = i;
-            break;
-        }
-    }
-    if (startIdx < 0) return { passed: null, total: null };
-
-    let passed = 0;
-    let failed = 0;
-    for (let i = startIdx + 1; i < completionIdx; i++) {
-        if (SCRIPT_OK_RE.test(lines[i])) passed++;
-        else if (SCRIPT_FAIL_RE.test(lines[i])) failed++;
-    }
-    const total = passed + failed;
-    if (total === 0) return { passed: null, total: null };
-    return { passed, total };
-}
-
-/**
- * Parse a log tail and find the most recent self-check completion line.
- * Self-check.sh emits exactly one of these lines per run:
- *   [YYYY-MM-DD HH:MM:SS] [LEVEL] === Self-check completed successfully ===
- *   [YYYY-MM-DD HH:MM:SS] [LEVEL] === Self-check completed with failures ===
- * The per-script tally (passed/total) is reconstructed from the result lines
- * inside that run's window — see countRunTally.
+ * Reduce the most recent *completed* run in the tail to the flat shape the
+ * public endpoint has always returned. A run still in flight is skipped —
+ * /api/health reports the last verdict, not a partial one.
+ *
+ * Structural parsing lives in SelfCheckLog.ts, shared with the admin summary
+ * endpoint so the two views cannot disagree. Both `passed`/`total` stay null
+ * when the run window can't be trusted (start line outside the tail) or when
+ * no result lines were found, rather than reporting a misleading 0/0.
  */
 function parseSelfCheckStatus(logTail: string): SelfCheckStatus {
-    const lines = logTail.split("\n");
-    // Walk from the end so we find the most recent completion line first.
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
-        const match = line.match(
-            /^\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\]\s+\[[A-Z]+\]\s+.*Self-check completed (successfully|with failures)/
-        );
-        if (match) {
-            const [, date, time, outcome] = match;
-            const { passed, total } = countRunTally(lines, i);
-            // The host writes timestamps in local time (no zone in the log).
-            // We can only return what we have — emit the bare local timestamp
-            // so callers don't get a falsely-precise UTC value.
-            return {
-                ok: outcome === "successfully",
-                lastRunAt: `${date}T${time}`,
-                passed,
-                total,
-            };
-        }
-    }
-    return { ok: null, lastRunAt: null, passed: null, total: null };
+    const run = latestCompletedSelfCheckRun(logTail);
+    if (!run) return { ok: null, lastRunAt: null, passed: null, total: null };
+
+    const countable = !run.truncated && run.total > 0;
+    // The host writes timestamps in local time (no zone in the log). We can
+    // only return what we have — emit the bare local timestamp so callers
+    // don't get a falsely-precise UTC value.
+    return {
+        ok: run.status === "success",
+        lastRunAt: run.endedAt,
+        passed: countable ? run.passed : null,
+        total: countable ? run.total : null,
+    };
 }
 
 /**

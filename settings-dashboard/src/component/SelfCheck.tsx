@@ -13,9 +13,15 @@ import {
 import { apiRequest } from "@/core/authApi";
 import { useNotify } from "react-admin";
 import { colors, font, spacing, card, title, button, text } from '@/app/pages/softTheme';
+import { SelfCheckRunSummary } from "@/component/SelfCheckRunSummary";
+import type { SelfCheckRun } from "@/backend/server/Health/SelfCheckLog";
 
 const LOG_TAIL_LINES = 300;
-const LOG_REFRESH_MS = 5000;
+// Poll fast while something is actually happening (a run in flight, or the raw
+// log open and being watched); back off otherwise — the nightly run only
+// changes the summary once a day.
+const ACTIVE_REFRESH_MS = 5000;
+const IDLE_REFRESH_MS = 30000;
 
 interface CronInfo {
     value: string;
@@ -28,15 +34,25 @@ interface CronInfo {
  *
  * The host script (self-check.sh) is the source of truth: it runs nightly
  * via cron and at @reboot, and writes structured output to yundera.log.
- * This component just shows the log tail and exposes:
+ * This component shows the parsed summary of the last run (see
+ * backend/server/Health/SelfCheckLog.ts) and exposes:
  *   - "Run now" (kicks off self-check.sh detached)
  *   - cron schedule input (writes SELF_CHECK_CRON in .pcs.env, then re-runs
  *     ensure-nightly-self-check.sh to apply)
+ *
+ * The raw log tail is still available behind a toggle, and is only fetched
+ * while it's open — the summary endpoint returns a compact JSON run instead
+ * of shipping the whole tail to the browser every 5s.
  */
 export const SelfCheck: React.FC = () => {
+    const [run, setRun] = useState<SelfCheckRun | null>(null);
+    const [summaryError, setSummaryError] = useState<string | null>(null);
+    const [summaryLoading, setSummaryLoading] = useState<boolean>(true);
+
     const [log, setLog] = useState<string>('');
     const [logError, setLogError] = useState<string | null>(null);
-    const [logLoading, setLogLoading] = useState<boolean>(true);
+    const [logLoading, setLogLoading] = useState<boolean>(false);
+    const [showRawLog, setShowRawLog] = useState<boolean>(false);
     const [running, setRunning] = useState<boolean>(false);
 
     const [cron, setCron] = useState<CronInfo | null>(null);
@@ -47,7 +63,23 @@ export const SelfCheck: React.FC = () => {
     const notify = useNotify();
     const logRef = useRef<HTMLPreElement | null>(null);
 
+    const fetchSummary = useCallback(async () => {
+        try {
+            const res = await apiRequest<{ run: SelfCheckRun | null }>(
+                "/api/admin/self-check-summary",
+                "GET"
+            );
+            setRun(res.run ?? null);
+            setSummaryError(null);
+        } catch (err: any) {
+            setSummaryError(err.message || 'Failed to read self-check status');
+        } finally {
+            setSummaryLoading(false);
+        }
+    }, []);
+
     const fetchLog = useCallback(async () => {
+        setLogLoading(true);
         try {
             const res = await apiRequest<{ log: string }>(
                 `/api/admin/self-check-log?lines=${LOG_TAIL_LINES}`,
@@ -78,8 +110,12 @@ export const SelfCheck: React.FC = () => {
         try {
             await apiRequest("/api/admin/self-check-run", "POST");
             notify('Self-check started');
-            // Give the host a moment to start writing, then refresh the log.
-            setTimeout(fetchLog, 1500);
+            // Give the host a moment to start writing, then pick up the
+            // in-progress run — the 5s poll takes over from there.
+            setTimeout(() => {
+                void fetchSummary();
+                if (showRawLog) void fetchLog();
+            }, 1500);
         } catch (err: any) {
             notify(err.message || 'Failed to start self-check', { type: 'error' });
         } finally {
@@ -106,11 +142,24 @@ export const SelfCheck: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchLog();
         fetchCron();
-        const interval = setInterval(fetchLog, LOG_REFRESH_MS);
+    }, [fetchCron]);
+
+    // Poll the parsed summary; poll the raw tail only while the raw panel is
+    // open, so a collapsed panel costs nothing on the host.
+    const runInProgress = run?.status === 'running';
+    useEffect(() => {
+        const tick = () => {
+            void fetchSummary();
+            if (showRawLog) void fetchLog();
+        };
+        tick();
+        const interval = setInterval(
+            tick,
+            runInProgress || showRawLog ? ACTIVE_REFRESH_MS : IDLE_REFRESH_MS
+        );
         return () => clearInterval(interval);
-    }, [fetchLog, fetchCron]);
+    }, [fetchSummary, fetchLog, showRawLog, runInProgress]);
 
     // Keep the log scrolled to the bottom on update.
     useEffect(() => {
@@ -169,33 +218,52 @@ export const SelfCheck: React.FC = () => {
                         always installed.
                     </Typography>
 
-                    {/* Log tail */}
+                    {/* Parsed summary of the last run */}
                     <Box>
                         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-                            <Typography sx={text.label}>Log tail</Typography>
-                            {logLoading && <CircularProgress size={16} />}
+                            <Typography sx={text.label}>Last self-check</Typography>
+                            {summaryLoading && <CircularProgress size={16} />}
                         </Stack>
-                        {logError && <Alert severity="error" sx={{ mb: 1 }}>{logError}</Alert>}
-                        <Box
-                            component="pre"
-                            ref={logRef}
-                            sx={{
-                                m: 0,
-                                p: 2,
-                                maxHeight: 400,
-                                overflow: 'auto',
-                                backgroundColor: colors.bgApp,
-                                color: colors.textWhite,
-                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                                fontSize: font.caption,
-                                lineHeight: 1.5,
-                                borderRadius: 1,
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-word',
-                            }}
-                        >
-                            {log || (logLoading ? '' : '(log is empty)')}
-                        </Box>
+                        {summaryError && <Alert severity="error" sx={{ mb: 1 }}>{summaryError}</Alert>}
+                        {!summaryLoading && !summaryError && <SelfCheckRunSummary run={run} />}
+                    </Box>
+
+                    {/* Raw log tail — the summary above is derived from it */}
+                    <Box>
+                        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1 }}>
+                            <Typography
+                                onClick={() => setShowRawLog(!showRawLog)}
+                                sx={{ ...text.label, cursor: 'pointer', color: colors.primary }}
+                            >
+                                {showRawLog ? 'Hide raw log' : 'Show raw log'}
+                            </Typography>
+                            {showRawLog && logLoading && <CircularProgress size={16} />}
+                        </Stack>
+                        {showRawLog && (
+                            <>
+                                {logError && <Alert severity="error" sx={{ mb: 1 }}>{logError}</Alert>}
+                                <Box
+                                    component="pre"
+                                    ref={logRef}
+                                    sx={{
+                                        m: 0,
+                                        p: 2,
+                                        maxHeight: 400,
+                                        overflow: 'auto',
+                                        backgroundColor: colors.bgApp,
+                                        color: colors.textWhite,
+                                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                                        fontSize: font.caption,
+                                        lineHeight: 1.5,
+                                        borderRadius: 1,
+                                        whiteSpace: 'pre-wrap',
+                                        wordBreak: 'break-word',
+                                    }}
+                                >
+                                    {log || (logLoading ? '' : '(log is empty)')}
+                                </Box>
+                            </>
+                        )}
                     </Box>
                 </Stack>
             </CardContent>
