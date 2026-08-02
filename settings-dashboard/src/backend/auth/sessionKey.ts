@@ -5,9 +5,14 @@ import {getConfig} from '@/configuration/getConfigBackend';
 
 // HMAC key for signing the admin session cookie. The previous design
 // generated a JWT_SECRET at process start, which invalidated every user's
-// session on container restart. We persist the key to the same /app/data
-// bind that already holds the app's other writable state so restarts and
-// deploys don't sign anyone out.
+// session on container restart. We persist the key to the /app/data bind so
+// restarts and deploys don't sign anyone out.
+//
+// This file is the ONLY thing the container keeps in /app/data; everything else
+// the app touches lives on the host and is reached over SSH. On a PCS the bind
+// source is /DATA/AppData/yundera/admin — deliberately NOT the stack directory,
+// which template-root rsyncs with --delete and would wipe this key on every
+// update (template-root migrations/2026-08-02-13-move-admin-session-key.sh).
 //
 // Lookup order:
 //   1. SESSION_KEY env/config — exact key bytes (base64), useful in dev.

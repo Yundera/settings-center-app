@@ -8,7 +8,6 @@ type Config = {
     HOST_ADDRESS: string; //optional, used for host commands
     MOCK: string;
     OIDC_REGISTRAR_URL: string;
-    YUNDERA_OIDC_ISSUER: string;  // when set, Yundera shows up in the provider chooser.
 
     DOMAIN: string;
     PROVIDER_STR: string;
