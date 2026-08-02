@@ -43,9 +43,27 @@ docker compose cp dev-caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-r
 | `Dockerfile` | yes | Ubuntu base for `ubuntu-host-pcs` (sshd, openssl, docker CLI) |
 | `Dockerfile.admin-dev` | yes | Node base for the `admin` service with full deps for Next.js fast refresh |
 | `Caddyfile` | yes | Dev variant of the prod template Caddyfile (uses `tls internal` instead of mounted certs) |
-| `template-root/` | yes (submodule) | Bind-mounted into `ubuntu-host-pcs` to simulate the prod PCS template |
 | `.env.example` | yes | Template — copy to `.env` and fill in |
 | `.env` | **no** (gitignored) | Local secrets: UID, JWT, password, provider sig |
+
+### Where the template tree comes from
+
+`ubuntu-host-pcs` **downloads** template-root at first boot — `curl` the zip from
+`TEMPLATE_BOOTSTRAP_URL`, `unzip`, then `rsync` honouring `root/.ignore`, which is
+exactly what `scripts/pcs-init.sh` does on a real PCS. This used to be a
+`dev/run/template-root` git submodule bind-mounted at `/tmp/setup`; that froze a
+template-root commit into this repo and had to be bumped by hand.
+
+The fetch is skipped when the tree is already on the `data` volume, so it costs one
+download on a fresh volume and nothing on restarts. To pick up a newer template, or
+to switch branches via `TEMPLATE_BOOTSTRAP_URL`, run `docker compose down -v` first.
+
+This step is load-bearing, not cosmetic: `ensure-auth-secrets.sh` from that tree is
+what writes Authelia's secrets, JWKS, `configuration.yml` and `users_database.yml`
+into `auth_data`, and `auth-registrar` reads `register-oidc-client.sh` from it at
+runtime. If the fetch fails the bootstrap marker is never written, the healthcheck
+never passes, and `authelia` / `auth-registrar` never start — i.e. **no login**.
+Check `docker compose logs ubuntu-host-pcs` for `[dev] template fetch FAILED`.
 
 The single `.env` is consumed twice: Compose substitutes `${DOMAIN}` etc. into labels at render time (auto-loaded from this directory), and the `admin` container loads it via `env_file:`. For `ubuntu-host-pcs`, the same file is mounted at `/tmp/.env` and copied into the data volume under all three names the inner template-root scripts expect (`.pcs.env`, `.pcs.secret.env`, `.ynd.user.env`) — they each grep the keys they care about, so receiving a superset is fine.
 

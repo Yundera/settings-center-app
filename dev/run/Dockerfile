@@ -9,6 +9,10 @@ FROM ubuntu:latest
 # - docker-compose-v2: provides the `docker compose` subcommand used by
 #   ensure-user-compose-pulled.sh. Ubuntu 24.04's docker.io package no longer
 #   bundles the compose plugin, so install it explicitly.
+# - curl/unzip/rsync: the template-root bootstrap in docker-compose.yml fetches
+#   and unpacks the template zip the same way a real PCS does in pcs-init.sh
+#   (curl -> unzip -> rsync --exclude-from=.ignore). This replaces the former
+#   dev/run/template-root submodule bind-mount.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         openssh-server \
         openssl \
@@ -17,6 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         docker-compose-v2 \
         ca-certificates \
         curl \
+        unzip \
+        rsync \
     && rm -rf /var/lib/apt/lists/*
 
 # configure ssh as expected in a PCS

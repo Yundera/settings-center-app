@@ -91,8 +91,9 @@ COPY --from=builder /app/settings-dashboard/config ./settings-dashboard/config
 # dev/run/template-root/root/scripts into /app/template-scripts; nothing in the
 # app ever read that path, and it froze a template-root submodule pin into every
 # admin build. The scripts the app runs are the ones on the PCS itself, reached
-# over SSH under COMPOSE_FOLDER_PATH. dev/run/template-root stays — the dev
-# harness bind-mounts it into the emulated host (dev/run/docker-compose.yml).
+# over SSH under COMPOSE_FOLDER_PATH. The dev/run/template-root submodule is
+# gone too — the dev harness now downloads the template tree at container boot
+# the way a real PCS does (see dev/run/docker-compose.yml).
 
 # Set environment
 ENV NODE_ENV=production

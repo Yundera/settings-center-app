@@ -77,7 +77,6 @@ services:
       # ensure-auth-secrets.sh writes secrets, JWKS, configuration.yml, and
       # users_database.yml here.
       - auth_data:/DATA/AppData/yundera/auth/
-      - ./template-root/root/:/tmp/setup/:ro
       # Single .env mounted under all three names the inner template-root
       # scripts expect (.pcs.env / .pcs.secret.env / .ynd.user.env). They
       # `set -a; source <file>` each one independently, so receiving the same
@@ -85,10 +84,33 @@ services:
       - ./.env:/tmp/.env:ro
 
     # this command simulate what the pcs orchestrator does to prepare the vm
+    #
+    # The template tree is FETCHED, not bind-mounted. This mirrors the real
+    # bootstrap (scripts/pcs-init.sh: curl the zip -> unzip -> rsync honouring
+    # root/.ignore) and replaces the old dev/run/template-root submodule, which
+    # froze a template-root pin into this repo and had to be kept in sync by
+    # hand. Source is TEMPLATE_BOOTSTRAP_URL (see .env.example).
+    #
+    # Fetch is skipped when the tree is already present, so it costs one
+    # download per `docker compose up -d --build` on a fresh volume and nothing
+    # on restarts. `docker compose down -v` forces a re-fetch — that is the
+    # supported way to pick up a newer template.
     command: >
       bash -c "
-            mkdir -p /DATA/AppData/casaos/apps/yundera/
-            cp -v -r /tmp/setup/* /DATA/AppData/casaos/apps/yundera/ &&
+            mkdir -p /DATA/AppData/casaos/apps/yundera/ &&
+            if [ ! -f /DATA/AppData/casaos/apps/yundera/scripts/self-check.sh ]; then
+              echo '[dev] fetching template-root from ${TEMPLATE_BOOTSTRAP_URL}' &&
+              rm -rf /tmp/template-root /tmp/template-root.zip &&
+              mkdir -p /tmp/template-root &&
+              curl -fsSL --retry 3 --retry-delay 5 '${TEMPLATE_BOOTSTRAP_URL}' -o /tmp/template-root.zip &&
+              unzip -q /tmp/template-root.zip -d /tmp/template-root &&
+              TMPL_SRC=$$(find /tmp/template-root -mindepth 1 -maxdepth 1 -type d | head -1) &&
+              test -f $$TMPL_SRC/root/.ignore &&
+              rsync -a --exclude-from=$$TMPL_SRC/root/.ignore $$TMPL_SRC/root/ /DATA/AppData/casaos/apps/yundera/ ||
+              { echo '[dev] template fetch FAILED - auth bootstrap cannot run'; exit 1; };
+            else
+              echo '[dev] template already present, skipping fetch';
+            fi &&
             cp -v /tmp/.env /DATA/AppData/casaos/apps/yundera/.pcs.env &&
             cp -v /tmp/.env /DATA/AppData/casaos/apps/yundera/.pcs.secret.env &&
             cp -v /tmp/.env /DATA/AppData/casaos/apps/yundera/.ynd.user.env &&
