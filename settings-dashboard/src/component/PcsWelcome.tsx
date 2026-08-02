@@ -3,14 +3,29 @@ import {Typography, Box, Button} from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import {button, colors, font, spacing} from '@/app/pages/softTheme';
 
+/**
+ * URL of the PCS's own root domain, derived from the hostname this dashboard
+ * is being served on.
+ *
+ * The admin app and the PCS root are routed at parallel labels — `admin-${DOMAIN}`
+ * and `${DOMAIN}` — for the gateway, nip.io and sslip.io variants alike, so
+ * stripping the prefix is correct for every deployment shape. AccountPanel uses
+ * the same trick to find its sibling services.
+ *
+ * This replaces a read of `window.APP_CONFIG.DOMAIN`, which never resolved:
+ * FRONTEND_PUBLIC_ENV publishes only BASE_PATH, so the button below has never
+ * rendered in production. Deriving from the host also keeps DOMAIN off the
+ * unauthenticated /api/brand payload.
+ */
 const buildDefaultAppUrl = (): string | null => {
     if (typeof window === "undefined") return null;
-    const domain = (window as any).APP_CONFIG?.DOMAIN;
-    if (!domain) return null;
-    return `https://${domain}/`;
+    const host = window.location.host;
+    const prefix = "admin-";
+    if (!host.startsWith(prefix)) return null;
+    return `https://${host.slice(prefix.length)}/`;
 };
 
-export const YunderaDashboard: React.FC = () => {
+export const PcsWelcome: React.FC = () => {
     const defaultAppUrl = buildDefaultAppUrl();
 
     return (
@@ -47,10 +62,8 @@ export const YunderaDashboard: React.FC = () => {
                     marginBottom: '25px',
                 }}
             >
-                Manage your domain updates, monitor server health, check PCS status,
-                and update core information. We will add more settings over time as we
-                continue improving the product. As a startup building a privacy first tool,
-                we appreciate your patience.
+                Manage your domain, monitor server health, check PCS status, and update
+                core configuration. More settings will be added over time.
             </Typography>
 
             {defaultAppUrl && (

@@ -23,6 +23,14 @@ also carry `PROVIDER_STR`, `DEFAULT_PWD` and `UID`, which would push PCS secrets
 into the page for any logged-in session; the panels that display those values
 fetch them through the authenticated `/api/admin/get-environment` instead.
 
+Branding does **not** travel this way. Brand name, logo and the provider dashboard
+link are served pre-resolved by `GET /api/brand` from `brand.json` — see
+[`brand.json.md`](./brand.json.md). That route deliberately bypasses
+`FRONTEND_PUBLIC_ENV`: it has to be readable *unauthenticated* (the `/login` page
+needs the logo before a session exists), and the payload is nested rather than the
+flat string map this list can express. The same no-secrets rule applies there, with
+less protection — there is no session gate in front of it.
+
 No `JWT_SECRET`: the admin session cookie and the OIDC state cookie are signed
 with a key the app persists itself at `/app/data/admin-session-key`
 (`src/backend/auth/sessionKey.ts`), so restarts don't sign anyone out. Override

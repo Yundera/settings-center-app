@@ -20,6 +20,7 @@ import { scheduleSourceDown } from './steps/sourceDown';
 import { startStatusPusher, StatusPusher } from './MigrationStatusPush';
 import { MigrationKeyPair } from './MigrationSSH';
 import { syncAppVolumes, registerVolumesOnTarget, AppVolume } from './MigrationVolumes';
+import { splitDomain } from '@/backend/net/splitDomain';
 
 const DEFAULT_STATUS: MigrationStatus = {
     phase: 'idle',
@@ -113,19 +114,6 @@ function humanBytes(n: number): string {
     let i = 0;
     while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
     return `${v.toFixed(i <= 1 ? 0 : 1)}${units[i]}`;
-}
-
-/**
- * Split "wisera.inojob.com" → {userDomain: "wisera", serverDomain: "inojob.com"}.
- * The mesh-router-backend resolves on the user-domain piece alone (everything
- * before the first dot); everything after the first dot is the server zone
- * the backend lives under. Returns empty strings if the input doesn't have
- * the expected shape — caller should treat as "skip the check".
- */
-function splitDomain(fqdn: string): {userDomain: string; serverDomain: string} {
-    const idx = fqdn.indexOf('.');
-    if (idx <= 0 || idx === fqdn.length - 1) return {userDomain: '', serverDomain: ''};
-    return {userDomain: fqdn.slice(0, idx), serverDomain: fqdn.slice(idx + 1)};
 }
 
 /**

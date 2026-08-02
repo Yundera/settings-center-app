@@ -1,5 +1,5 @@
 import React from 'react';
-import {YunderaDashboard} from "@/component/YunderaDahsboard";
+import {PcsWelcome} from "@/component/PcsWelcome";
 import {Box} from '@mui/material';
 import {spacing} from '@/app/pages/softTheme';
 
@@ -10,7 +10,7 @@ export const Dashboard: React.FC = () => {
             flexDirection: 'column',
             paddingBottom: spacing.pageY,
         }}>
-            <YunderaDashboard />
+            <PcsWelcome />
         </Box>
     );
 };

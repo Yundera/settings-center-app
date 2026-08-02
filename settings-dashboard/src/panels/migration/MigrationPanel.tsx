@@ -30,6 +30,7 @@ import {
 import { useNotify } from 'react-admin';
 import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '@/core/authApi';
+import { useBrand } from '@/core/configuration/brandContext';
 import {
     colors,
     font,
@@ -582,7 +583,9 @@ const dangerButton = {
     },
 };
 
-const MigrationIntroCard: React.FC = () => (
+const MigrationIntroCard: React.FC = () => {
+    const {brand} = useBrand();
+    return (
     <Card sx={card.root}>
         <Box sx={card.header}>
             <Typography sx={title.small}>What is migration?</Typography>
@@ -590,7 +593,7 @@ const MigrationIntroCard: React.FC = () => (
         <CardContent sx={card.content}>
             <Stack spacing={1.5}>
                 <Typography sx={text.bodyWhite}>
-                    Migration moves a Yundera PCS — its domain, apps, and data — onto another machine.
+                    Migration moves a {brand.name} PCS — its domain, apps, and data — onto another machine.
                     The <strong>source</strong> (the PCS being moved) does all the work; the{' '}
                     <strong>destination</strong> only needs SSH and a sudoer account named{' '}
                     <Box component="code" sx={inlineCode}>migration</Box>. A bare Ubuntu host is
@@ -631,7 +634,8 @@ const MigrationIntroCard: React.FC = () => (
             </Stack>
         </CardContent>
     </Card>
-);
+    );
+};
 
 type AccountState = 'absent' | 'enabled' | 'unknown';
 

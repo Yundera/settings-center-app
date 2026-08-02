@@ -32,7 +32,7 @@ import HttpsIcon from "@mui/icons-material/Https";
 import {AccessPanel} from "@/panels/access/AccessPanel";
 import {AccountPanel} from "@/panels/account/AccountPanel";
 import {AppsPanel} from "@/panels/apps/AppsPanel";
-import {BillingPanel} from "@/panels/billing/BillingPanel";
+import {ProviderPanel} from "@/panels/provider/ProviderPanel";
 import {CertificatesPanel} from "@/panels/certificates/CertificatesPanel";
 import {DomainPanel} from "@/panels/domain/DomainPanel";
 import {HealthPanel} from "@/panels/health/HealthPanel";
@@ -41,6 +41,7 @@ import {ResourcesPanel} from "@/panels/resources/ResourcesPanel";
 import {SupportPanel} from "@/panels/support/SupportPanel";
 import {SystemInformationPanel} from "@/panels/system-information/SystemInformationPanel";
 import {TerminalPanel} from "@/panels/terminal/TerminalPanel";
+import {useBrand} from "@/core/configuration/brandContext";
 
 const MyApp = ({authProvider, dataProvider, permissions}: {
   authProvider: AuthProvider,
@@ -48,6 +49,17 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
   permissions: Record<string, boolean>
 }) => {
 
+  const brand = useBrand();
+
+  // Brand-gated panels are omitted from this array rather than filtered later:
+  // `panels` is the single source the routes, the <Resource> map, the i18n
+  // labels and the sidebar all derive from, so dropping an entry here removes
+  // it from every one of them at once.
+  //
+  //   provider — null when there is no operator AND the domain zone is not one
+  //              we know a dashboard for. Nothing to link to, so no panel.
+  //   support  — an operator-only surface. Without one, every call in
+  //              SupportKey.ts throws; hiding beats rendering a dead toggle.
   const availablePanels: PanelInterface[] = [
     definePanel({name: 'system-information', component: SystemInformationPanel, icon: InfoOutlinedIcon, label: 'System Information'}),
     definePanel({name: 'account',            component: AccountPanel,           icon: AccountCircleIcon,  label: 'Account'}),
@@ -59,8 +71,12 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
     definePanel({name: 'apps',               component: AppsPanel,              icon: AppsIcon,           label: 'Apps'}),
     definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources'}),
     definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration'}),
-    definePanel({name: 'billing',            component: BillingPanel,           icon: ReceiptLongIcon,    label: 'Billing'}),
-    definePanel({name: 'support',            component: SupportPanel,           icon: SupportAgentIcon,   label: 'Support'}),
+    ...(brand.provider
+      ? [definePanel({name: 'provider', component: ProviderPanel, icon: ReceiptLongIcon, label: brand.provider.panelLabel})]
+      : []),
+    ...(brand.support.enabled
+      ? [definePanel({name: 'support', component: SupportPanel, icon: SupportAgentIcon, label: 'Support'})]
+      : []),
   ];
 
   const panels = availablePanels.filter(panel =>

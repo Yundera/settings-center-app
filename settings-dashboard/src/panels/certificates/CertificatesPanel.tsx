@@ -27,6 +27,7 @@ import {
     CertSnapshot,
     CertStatus,
 } from '@/backend/server/Certificates/CertificatesTypes';
+import {useBrand} from '@/core/configuration/brandContext';
 
 // --------------------------------------------------------------------------
 // Helpers
@@ -191,6 +192,7 @@ const CertRowView: React.FC<{ row: CertRow }> = ({ row }) => {
 // --------------------------------------------------------------------------
 
 export const CertificatesPanel: React.FC = () => {
+    const {brand} = useBrand();
     const [data, setData] = useState<CertSnapshot | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -241,7 +243,7 @@ export const CertificatesPanel: React.FC = () => {
                 Every <Box component="code" sx={inlineCode}>.sslip.io</Box> domain this PCS
                 serves, with the certificate Caddy currently presents on it. A local TLS
                 handshake on port 443 reveals whether the live certificate was issued by
-                Let&apos;s Encrypt or by Yundera&apos;s internal fallback CA.
+                Let&apos;s Encrypt or by {brand.name}&apos;s internal fallback CA.
             </Typography>
 
             {error && (
@@ -333,7 +335,7 @@ export const CertificatesPanel: React.FC = () => {
                     Only <Box component="code" sx={inlineCode}>.sslip.io</Box> domains use
                     Let&apos;s Encrypt. Gateway routes (your PCS domain) and
                     {' '}<Box component="code" sx={inlineCode}>.nip.io</Box> routes
-                    intentionally use Yundera&apos;s internal CA, so they are not listed
+                    intentionally use {brand.name}&apos;s internal CA, so they are not listed
                     here. An <strong>Internal CA</strong> or <strong>No response</strong>
                     {' '}result on a sslip.io domain means Caddy could not obtain a
                     Let&apos;s Encrypt certificate and fell back to a self-signed one — the

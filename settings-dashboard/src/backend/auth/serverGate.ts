@@ -11,6 +11,10 @@ const BYPASS_PREFIXES = [
   '/api/me',             // does its own session check
   '/api/health',         // public probe
   '/api/perf',           // public RAM-cached metrics snapshot (orchestrator `pcs perf`)
+  '/api/brand',          // public brand config (name, logo, provider link).
+                         //   Must be reachable without a session: the /login
+                         //   chooser renders the logo and title before one
+                         //   exists. Carries no secrets — see resolveBrand.ts.
   '/api/bench/',         // public disk/network bench cache (orchestrator `pcs perf`);
                          //   read-only snapshot + cooldown-gated lazy trigger,
                          //   so an unauthenticated caller can start at most one

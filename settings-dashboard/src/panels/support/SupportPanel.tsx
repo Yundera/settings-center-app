@@ -17,6 +17,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import SendIcon from "@mui/icons-material/Send";
 import { apiRequest } from "@/core/authApi";
 import { colors, font } from "@/app/pages/softTheme";
+import { useBrand } from "@/core/configuration/brandContext";
 
 interface SupportAccessStatus {
     ensure: boolean;
@@ -43,6 +44,12 @@ const SectionHeading: React.FC<{ children: React.ReactNode; right?: React.ReactN
 );
 
 export const SupportPanel: React.FC = () => {
+    // App.tsx only registers this panel when an operator exists, so
+    // operatorName is non-null here; the fallback keeps the copy readable if
+    // the panel is ever reached by a direct route hit.
+    const {brand, support} = useBrand();
+    const operatorName = support.operatorName ?? brand.name;
+
     const [status, setStatus] = useState<SupportAccessStatus | null>(null);
     const [statusLoading, setStatusLoading] = useState<boolean>(true);
     const [statusError, setStatusError] = useState<string | null>(null);
@@ -186,7 +193,7 @@ export const SupportPanel: React.FC = () => {
                     </Button>
                 }
             >
-                Yundera support SSH access
+                {operatorName} support SSH access
             </SectionHeading>
 
             {statusError && <Alert severity="error" sx={{ mb: 2 }}>{statusError}</Alert>}
@@ -209,7 +216,7 @@ export const SupportPanel: React.FC = () => {
             )}
 
             <Typography sx={{ color: colors.textMuted, fontSize: font.detail, mb: 2 }}>
-                When enabled, Yundera support staff can SSH into <code>{status?.username || 'admin'}</code> on
+                When enabled, {operatorName} support staff can SSH into <code>{status?.username || 'admin'}</code> on
                 this PCS using the orchestrator&apos;s support key. The setting is durable: a periodic
                 self-check re-asserts it, so an accidental key removal won&apos;t lock support out.
                 You can revoke at any time — the key is removed immediately and the safety net
@@ -267,8 +274,8 @@ export const SupportPanel: React.FC = () => {
             <SectionHeading>Contact support</SectionHeading>
 
             <Typography sx={{ color: colors.textMuted, fontSize: font.detail, mb: 2 }}>
-                Send a message to the Yundera support team. Optionally attach the last
-                5000 lines of <code>yundera.log</code> and grant SSH access for the duration
+                Send a message to the {operatorName} support team. Optionally attach the last
+                5000 lines of <code>{brand.logFileName}</code> and grant SSH access for the duration
                 of the investigation.
             </Typography>
 
@@ -310,7 +317,7 @@ export const SupportPanel: React.FC = () => {
                         }
                         label={
                             <Typography sx={{ color: colors.textWhite, fontSize: font.detail }}>
-                                Attach yundera.log (last 5000 lines, gzipped)
+                                Attach {brand.logFileName} (last 5000 lines, gzipped)
                             </Typography>
                         }
                     />
@@ -326,7 +333,7 @@ export const SupportPanel: React.FC = () => {
                             <Typography sx={{ color: colors.textWhite, fontSize: font.detail }}>
                                 {status?.accessEnabled
                                     ? "Support access is already enabled"
-                                    : "Grant Yundera support SSH access (you can revoke any time)"}
+                                    : `Grant ${operatorName} support SSH access (you can revoke any time)`}
                             </Typography>
                         }
                     />

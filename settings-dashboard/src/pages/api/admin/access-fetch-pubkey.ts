@@ -1,13 +1,19 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { authMiddleware } from "@/backend/auth/middleware";
+import { trustedPubkeyHostSuffixes } from "@/brand/resolveBrand";
 import dns from 'dns';
 import net from 'net';
 
-// Hostnames (and any subdomain of these) we treat as Yundera-official. The
+// Hostnames (and any subdomain of these) we treat as operator-official. The
 // UI surfaces this as a normal-tone "trusted source" instead of the
 // orange "TLS-verified but unverified party" tone used for arbitrary
-// HTTPS hosts. Future: load from config / let users curate the list.
-const TRUSTED_SUFFIXES = ['yundera.com'];
+// HTTPS hosts.
+//
+// Sourced from the operator block in brand.json, and EMPTY when the PCS has
+// no operator: with nobody to vouch for a host, nothing is official. It is
+// deliberately not user-curatable — a user who could add entries could mark
+// any host as vouched-for by the operator, which is exactly the assurance
+// the badge exists to make.
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 64 * 1024;
@@ -26,7 +32,7 @@ export interface FetchPubkeyResponse {
 
 function isTrustedHostname(hostname: string): boolean {
     const h = hostname.toLowerCase();
-    return TRUSTED_SUFFIXES.some(s => h === s || h.endsWith('.' + s));
+    return trustedPubkeyHostSuffixes().some(s => h === s || h.endsWith('.' + s));
 }
 
 // Reject IPs that point inside the PCS / its private network. The endpoint

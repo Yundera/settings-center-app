@@ -18,6 +18,7 @@ import LinkIcon from "@mui/icons-material/Link";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {useNotify} from "react-admin";
 import {apiRequest} from "@/core/authApi";
+import {useBrand} from "@/core/configuration/brandContext";
 import {button, card, colors, font, radius, spacing, text, title} from '@/app/pages/softTheme';
 
 interface DomainConfig {
@@ -81,6 +82,7 @@ const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({label, va
 );
 
 export const DomainPanel: React.FC = () => {
+    const brand = useBrand();
     const [config, setConfig] = useState<DomainConfig>({
         DOMAIN: '',
         PROVIDER_STR: '',
@@ -261,24 +263,30 @@ export const DomainPanel: React.FC = () => {
                                     value={config.PUBLIC_IP}
                                 />
 
-                                <Box sx={{marginTop: '25px', display: 'flex', justifyContent: 'center'}}>
-                                    <Button
-                                        variant="contained"
-                                        href="https://nsl.sh"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        startIcon={<LinkIcon/>}
-                                        sx={{
-                                            ...button.primary,
-                                            '&:hover': {
-                                                ...button.primary['&:hover'],
-                                                transform: 'translateY(-1px)',
-                                            },
-                                        }}
-                                    >
-                                        Visit nsl.sh
-                                    </Button>
-                                </Box>
+                                {/* Whoever actually manages this PCS. The operator wins over the
+                                    domain zone: a Yundera customer on an nsl.sh domain is managed
+                                    by Yundera, so sending them to nsl.sh (as this button used to,
+                                    unconditionally) was wrong. Hidden when neither is known. */}
+                                {brand.provider && (
+                                    <Box sx={{marginTop: '25px', display: 'flex', justifyContent: 'center'}}>
+                                        <Button
+                                            variant="contained"
+                                            href={brand.provider.dashboardUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            startIcon={<LinkIcon/>}
+                                            sx={{
+                                                ...button.primary,
+                                                '&:hover': {
+                                                    ...button.primary['&:hover'],
+                                                    transform: 'translateY(-1px)',
+                                                },
+                                            }}
+                                        >
+                                            Visit {brand.provider.dashboardLabel}
+                                        </Button>
+                                    </Box>
+                                )}
                             </>
                         )}
                     </CardContent>

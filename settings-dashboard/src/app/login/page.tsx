@@ -4,6 +4,7 @@ import {jwtVerify} from 'jose';
 import {SESSION_KEY} from '@/backend/auth/sessionKey';
 import {SESSION_COOKIE} from '@/backend/auth/session';
 import {enabledProviders, ProviderEntry} from '@/backend/auth/providers';
+import {resolveBrand} from '@/brand/resolveBrand';
 
 // Server-rendered chooser. Reads providers from backend config and renders one
 // button per OIDC provider. Every provider is an OIDC redirect — admin sign-in
@@ -40,6 +41,10 @@ export default async function LoginPage({
 
   const providers = enabledProviders();
   const lastProvider = (await cookies()).get('last_provider')?.value;
+  // Resolved server-side rather than fetched: this page is already an RSC
+  // calling backend code directly, so the brand is baked into the HTML — no
+  // client fetch, no logo flash. resolveBrand() never throws.
+  const {brand} = resolveBrand();
 
   return (
     <main style={pageStyle}>
@@ -49,7 +54,12 @@ export default async function LoginPage({
           its own layout reset via MUI's CssBaseline. */}
       <style>{`html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0a273f; }`}</style>
       <div style={cardStyle}>
-        <h1 style={titleStyle}>Sign in to Settings</h1>
+        {/* eslint-disable-next-line @next/next/no-img-element -- next/image
+            needs a loader and client runtime; this page ships without either.
+            The /logo prefix is what serverGate.ts lets through unauthenticated,
+            which is why LOGO_PATTERN constrains the filename. */}
+        <img src={brand.logo} alt={brand.name} style={logoStyle} />
+        <h1 style={titleStyle}>Sign in to {brand.appTitle}</h1>
         <p style={subtitleStyle}>
           Choose how you want to sign in. Your choice will be remembered for next time.
         </p>
@@ -76,6 +86,12 @@ function ProviderButton({provider, returnTo, highlight}: {provider: ProviderEntr
 }
 
 // ──────── styles (inline so the chooser ships without MUI hydration) ────────
+
+const logoStyle: React.CSSProperties = {
+  display: 'block',
+  height: 56,
+  margin: '0 auto 20px',
+};
 
 const pageStyle: React.CSSProperties = {
   minHeight: '100vh',

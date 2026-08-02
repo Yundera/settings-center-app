@@ -4,6 +4,8 @@ import {Button} from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import React from "react";
 import {button, colors, font, spacing} from '@/app/pages/softTheme';
+import {useBrand} from '@/core/configuration/brandContext';
+import type {BrandPayload} from '@/brand/BrandTypes';
 
 // An identity provider this PCS can authenticate against, plus a link to the
 // dashboard where the user manages that identity (credentials, profile, etc.).
@@ -30,7 +32,7 @@ const siblingHostUrl = (prefix: string): string | null => {
     return `https://${prefix}-${host.slice("admin-".length)}/`;
 };
 
-const identityProviders = (): IdentityProvider[] => {
+const identityProviders = (brand: BrandPayload): IdentityProvider[] => {
     const providers: IdentityProvider[] = [];
 
     // CasaOS — the credential store for the PCS user identity. Account
@@ -46,20 +48,19 @@ const identityProviders = (): IdentityProvider[] => {
         });
     }
 
-    // Yundera — the future cloud identity ("Login with Yundera"). Rendered only
-    // once its dashboard URL is configured. To enable: expose
-    // APP_CONFIG.YUNDERA_DASHBOARD_URL (add it to Config + FRONTEND_PUBLIC_ENV
-    // when the cloud IdP ships).
-    const yunderaUrl =
-        typeof window !== "undefined"
-            ? (window as unknown as {APP_CONFIG?: Record<string, string>}).APP_CONFIG?.YUNDERA_DASHBOARD_URL
-            : undefined;
-    if (yunderaUrl) {
+    // The operator's own cloud identity, when it has a self-service surface.
+    // Driven by the optional `operator.accountUrl` in brand.json, which the
+    // default deliberately omits — wiring this to the operator's billing
+    // dashboard would materialise a card that has never rendered.
+    //
+    // Replaces a read of APP_CONFIG.YUNDERA_DASHBOARD_URL that could never
+    // fire: the key was never published through FRONTEND_PUBLIC_ENV.
+    if (brand.operatorAccount) {
         providers.push({
-            name: "yundera",
-            label: "Yundera",
-            description: "Manage your Yundera cloud identity and sign-in settings.",
-            dashboardUrl: yunderaUrl,
+            name: "operator",
+            label: brand.operatorAccount.name,
+            description: `Manage your ${brand.operatorAccount.name} cloud identity and sign-in settings.`,
+            dashboardUrl: brand.operatorAccount.url,
         });
     }
 
@@ -67,7 +68,8 @@ const identityProviders = (): IdentityProvider[] => {
 };
 
 export const AccountPanel = () => {
-    const providers = identityProviders();
+    const brand = useBrand();
+    const providers = identityProviders(brand);
 
     return (
         <Box sx={{

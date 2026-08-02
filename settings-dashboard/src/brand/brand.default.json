@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "brand": {
+    "name": "Yundera",
+    "appTitle": "Settings",
+    "logo": "/logo-nasselle-V1.svg",
+    "logFileName": "yundera.log"
+  },
+  "operator": {
+    "name": "Yundera",
+    "dashboardUrl": "https://app.yundera.com/dashboard",
+    "dashboardLabel": "Yundera Dashboard",
+    "panelLabel": "Billing",
+    "support": { "enabled": true },
+    "trustedPubkeyHostSuffixes": ["yundera.com"]
+  },
+  "domainProviders": {
+    "nsl.sh": {
+      "label": "nsl.sh",
+      "dashboardLabel": "nsl.sh",
+      "panelLabel": "Provider",
+      "dashboardUrl": "https://nsl.sh"
+    },
+    "inojob.com": {
+      "label": "inojob.com",
+      "dashboardLabel": "inojob.com",
+      "panelLabel": "Provider",
+      "dashboardUrl": "https://inojob.com"
+    }
+  }
+}
