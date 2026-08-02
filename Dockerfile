@@ -87,8 +87,12 @@ COPY --from=builder /app/settings-dashboard/server.ts ./settings-dashboard/serve
 COPY --from=builder /app/settings-dashboard/tsconfig.json ./settings-dashboard/tsconfig.json
 COPY --from=builder /app/settings-dashboard/config ./settings-dashboard/config
 
-# Copy template files
-COPY --from=builder /app/dev/run/template-root/root/scripts /app/template-scripts
+# NOTE: no template-root copy here. The image used to bake
+# dev/run/template-root/root/scripts into /app/template-scripts; nothing in the
+# app ever read that path, and it froze a template-root submodule pin into every
+# admin build. The scripts the app runs are the ones on the PCS itself, reached
+# over SSH under COMPOSE_FOLDER_PATH. dev/run/template-root stays — the dev
+# harness bind-mounts it into the emulated host (dev/run/docker-compose.yml).
 
 # Set environment
 ENV NODE_ENV=production

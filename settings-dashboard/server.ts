@@ -3,12 +3,16 @@ import { parse } from 'url'
 import next from 'next'
 import {start} from "@/backend/server";
 import {initializeAllContexts} from "@/backend/server/initializeAllContexts";
-import { initializeEnvironment } from "@/configuration/loadEnvironment";
 import { handleTerminalUpgrade } from "@/backend/server/Terminal/TerminalHandler";
 import { applyAuthGate } from "@/backend/auth/serverGate";
 
-// Load environment variables from .env files before anything else
-initializeEnvironment();
+// Environment comes from the container env only. There used to be an
+// initializeEnvironment() here that dotenv-loaded
+// /DATA/AppData/casaos/apps/yundera/{.pcs.env,.pcs.secret.env,.ynd.user.env} —
+// host paths that do not exist inside this container (the stack dir is bind-
+// mounted at /app/data), so every call was a silent no-op. Both the prod
+// template and the dev harness inject the assembled .env via compose
+// `env_file:` instead; that is the supported path.
 
 const dev = process.env.NODE_ENV !== 'production'
 // Allow overriding the dev bind address — by default Next.js dev mode only
