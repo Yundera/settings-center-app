@@ -1,7 +1,7 @@
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import React from "react";
-import {EnvConfiguration} from "@/component/EnvConfiguration";
+import {PublicIp} from "@/component/PublicIp";
 import {RebootSystem} from "@/component/RebootSystem";
 import {colors, font, spacing} from '@/app/pages/softTheme';
 
@@ -35,7 +35,7 @@ export const SystemInformationPanel = () => {
                 maxWidth: '800px',
                 width: '100%',
             }}>
-                <EnvConfiguration />
+                <PublicIp />
                 <RebootSystem />
             </Box>
         </Box>

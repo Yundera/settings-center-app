@@ -38,7 +38,7 @@ up inside the container at `/app/data/brand.json` with no compose change.
     "name":           "Yundera",
     "dashboardUrl":   "https://app.yundera.com/dashboard",
     "dashboardLabel": "Yundera Dashboard",
-    "panelLabel":     "Billing",         // sidebar label for the provider panel
+    "panelLabel":     "Operator",        // sidebar label for the Operator panel
     "support":        { "enabled": true },
     "trustedPubkeyHostSuffixes": ["yundera.com"],
     "accountUrl":     "https://…"        // OPTIONAL; adds an Account-panel card
@@ -46,7 +46,7 @@ up inside the container at `/app/data/brand.json` with no compose change.
   "domainProviders": {                   // keyed by the server-domain half of DOMAIN
     "nsl.sh": {
       "label": "nsl.sh", "dashboardLabel": "nsl.sh",
-      "panelLabel": "Provider", "dashboardUrl": "https://nsl.sh"
+      "panelLabel": "Operator", "dashboardUrl": "https://nsl.sh"
     }
   }
 }
@@ -77,7 +77,16 @@ A brand needing a different mark needs it added to `public/` and a new image bui
 pointing `brand.json` at a file that isn't there yields a broken image, not a
 fallback.
 
-## The two axes: operator vs domain provider
+## The Operator panel
+
+One optional sidebar page whose entire content is "who runs this box, and where their
+dashboard is". It is **deliberately agnostic about what that dashboard does** —
+subscriptions, invoices, VM controls or none of the above are the operator's business.
+The app used to call this page "Billing" and assert that subscriptions were managed
+there; that assumption is gone, so an operator that never bills anyone renders the same
+panel. Name it via `panelLabel`.
+
+### The two axes: operator vs domain provider
 
 These are **independent**, and conflating them is the mistake this config exists to
 prevent.
@@ -87,21 +96,25 @@ prevent.
   carries Yundera's operator block: a self-hosted box that forgot its `brand.json`
   would otherwise render a Support panel whose every call throws.
 - **Domain provider** — which zone the domain sits in (`nsl.sh`, `inojob.com`),
-  derived from `DOMAIN`.
+  derived from `DOMAIN`. Feeds the same panel when there is no operator.
 
-**The operator always wins the dashboard link.** A Yundera customer whose domain is
-`yunderalabs.nsl.sh` is managed and billed by Yundera, so they are sent to Yundera's
+**The configured operator always wins the dashboard link.** A Yundera customer whose
+domain is `yunderalabs.nsl.sh` is operated by Yundera, so they are sent to Yundera's
 dashboard — not nsl.sh's.
 
 ```
-provider = operator ?? domainProviders[serverDomain] ?? null   // null ⇒ hide the panel
+operator = operator ?? domainProviders[serverDomain] ?? null   // null ⇒ hide the panel
 ```
+
+`BrandPayload.hasOperator` stays a separate boolean: it is true only for a *configured*
+operator, never for the domain-zone fallback, so a link and a vouched-for operator are
+never confused.
 
 ### What `operator: null` turns off
 
 1. **Support panel disappears** from the sidebar entirely — it is an operator-only
    surface, and without one every call in `SupportKey.ts` throws.
-2. **Provider panel** falls back to the domain provider, or disappears too if the
+2. **Operator panel** falls back to the domain provider, or disappears too if the
    zone is unrecognised.
 3. **`trustedPubkeyHostSuffixes` is empty** — fetched SSH keys all render in the
    neutral "TLS-verified" tone rather than "Trusted source". With nobody to vouch

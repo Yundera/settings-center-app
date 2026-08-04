@@ -267,11 +267,11 @@ export const DomainPanel: React.FC = () => {
                                     domain zone: a Yundera customer on an nsl.sh domain is managed
                                     by Yundera, so sending them to nsl.sh (as this button used to,
                                     unconditionally) was wrong. Hidden when neither is known. */}
-                                {brand.provider && (
+                                {brand.operator && (
                                     <Box sx={{marginTop: '25px', display: 'flex', justifyContent: 'center'}}>
                                         <Button
                                             variant="contained"
-                                            href={brand.provider.dashboardUrl}
+                                            href={brand.operator.dashboardUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             startIcon={<LinkIcon/>}
@@ -283,7 +283,7 @@ export const DomainPanel: React.FC = () => {
                                                 },
                                             }}
                                         >
-                                            Visit {brand.provider.dashboardLabel}
+                                            Visit {brand.operator.dashboardLabel}
                                         </Button>
                                     </Box>
                                 )}

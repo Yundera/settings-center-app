@@ -50,8 +50,8 @@ const identityProviders = (brand: BrandPayload): IdentityProvider[] => {
 
     // The operator's own cloud identity, when it has a self-service surface.
     // Driven by the optional `operator.accountUrl` in brand.json, which the
-    // default deliberately omits — wiring this to the operator's billing
-    // dashboard would materialise a card that has never rendered.
+    // default deliberately omits — wiring this to the operator's dashboard
+    // would materialise a card that has never rendered.
     //
     // Replaces a read of APP_CONFIG.YUNDERA_DASHBOARD_URL that could never
     // fire: the key was never published through FRONTEND_PUBLIC_ENV.

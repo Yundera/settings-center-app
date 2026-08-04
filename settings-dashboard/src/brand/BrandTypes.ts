@@ -16,11 +16,15 @@
 export interface OperatorConfig {
     /** Display name, e.g. "Yundera". Used in support copy and CA descriptions. */
     name: string;
-    /** Where the user manages their subscription / PCS. */
+    /** The operator's own dashboard for this PCS. */
     dashboardUrl: string;
     /** Link text, e.g. "Yundera Dashboard". */
     dashboardLabel: string;
-    /** Sidebar label for the provider panel, e.g. "Billing". */
+    /**
+     * Sidebar label for the operator panel, e.g. "Operator". Configurable so
+     * an operator can call it whatever its dashboard actually is; the app
+     * makes no assumption about what that dashboard offers.
+     */
     panelLabel: string;
     support: { enabled: boolean };
     /**
@@ -68,8 +72,10 @@ export interface BrandFile {
     domainProviders: Record<string, DomainProvider>;
 }
 
-/** The resolved provider link the UI actually renders. */
-export interface ResolvedProvider {
+/** The resolved operator link the Operator panel actually renders. */
+export interface ResolvedOperator {
+    /** Who runs this box — the operator's name, or the domain zone's label. */
+    name: string;
     panelLabel: string;
     dashboardLabel: string;
     dashboardUrl: string;
@@ -78,10 +84,15 @@ export interface ResolvedProvider {
 /** What `/api/brand` serves. Contains no secrets and no raw config. */
 export interface BrandPayload {
     brand: BrandIdentity;
+    /**
+     * True only when a CONFIGURED operator is active. Distinct from `operator`
+     * below, which also resolves from the domain-zone fallback: an unoperated
+     * box on a known zone still gets a link, but nothing is vouched for.
+     */
     hasOperator: boolean;
     support: { enabled: boolean; operatorName: string | null };
-    /** null ⇒ hide the provider panel entirely. */
-    provider: ResolvedProvider | null;
+    /** null ⇒ hide the Operator panel entirely. */
+    operator: ResolvedOperator | null;
     /** null ⇒ no operator account card in the Account panel. */
     operatorAccount: { name: string; url: string } | null;
 }

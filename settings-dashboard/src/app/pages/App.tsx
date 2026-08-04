@@ -19,7 +19,7 @@ import type {PanelInterface} from "@/core/PanelInterface";
 import VpnKeyIcon from "@mui/icons-material/VpnKey";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import AppsIcon from "@mui/icons-material/Apps";
-import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import CloudIcon from "@mui/icons-material/Cloud";
 import LanguageIcon from "@mui/icons-material/Language";
 import DeveloperBoardIcon from "@mui/icons-material/DeveloperBoard";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
@@ -32,7 +32,7 @@ import HttpsIcon from "@mui/icons-material/Https";
 import {AccessPanel} from "@/panels/access/AccessPanel";
 import {AccountPanel} from "@/panels/account/AccountPanel";
 import {AppsPanel} from "@/panels/apps/AppsPanel";
-import {ProviderPanel} from "@/panels/provider/ProviderPanel";
+import {OperatorPanel} from "@/panels/operator/OperatorPanel";
 import {CertificatesPanel} from "@/panels/certificates/CertificatesPanel";
 import {DomainPanel} from "@/panels/domain/DomainPanel";
 import {HealthPanel} from "@/panels/health/HealthPanel";
@@ -56,7 +56,7 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
   // labels and the sidebar all derive from, so dropping an entry here removes
   // it from every one of them at once.
   //
-  //   provider — null when there is no operator AND the domain zone is not one
+  //   operator — null when there is no operator AND the domain zone is not one
   //              we know a dashboard for. Nothing to link to, so no panel.
   //   support  — an operator-only surface. Without one, every call in
   //              SupportKey.ts throws; hiding beats rendering a dead toggle.
@@ -71,8 +71,8 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
     definePanel({name: 'apps',               component: AppsPanel,              icon: AppsIcon,           label: 'Apps'}),
     definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources'}),
     definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration'}),
-    ...(brand.provider
-      ? [definePanel({name: 'provider', component: ProviderPanel, icon: ReceiptLongIcon, label: brand.provider.panelLabel})]
+    ...(brand.operator
+      ? [definePanel({name: 'operator', component: OperatorPanel, icon: CloudIcon, label: brand.operator.panelLabel})]
       : []),
     ...(brand.support.enabled
       ? [definePanel({name: 'support', component: SupportPanel, icon: SupportAgentIcon, label: 'Support'})]

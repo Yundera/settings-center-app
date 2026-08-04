@@ -15,10 +15,7 @@ async function handler(
         const envConfig = {
             DOMAIN: getConfig("DOMAIN") || '',
             PROVIDER_STR: getConfig("PROVIDER_STR") || '',
-            UID: getConfig("UID") || '',
-            DEFAULT_PWD: getConfig("DEFAULT_PWD") || '',
             PUBLIC_IP: getConfig("PUBLIC_IP") || '',
-            DEFAULT_USER: getConfig("DEFAULT_USER") || '',
             DEFAULT_SERVICE_HOST: getConfig("DEFAULT_SERVICE_HOST") || '',
             DEFAULT_SERVICE_PORT: getConfig("DEFAULT_SERVICE_PORT") || '',
         };

@@ -12,9 +12,7 @@ type Config = {
     DOMAIN: string;
     PROVIDER_STR: string;
     UID: string;
-    DEFAULT_PWD: string;
     PUBLIC_IP: string;
-    DEFAULT_USER: string;
     DEFAULT_SERVICE_HOST: string;
     DEFAULT_SERVICE_PORT: string;
 

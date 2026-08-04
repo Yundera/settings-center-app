@@ -10,7 +10,7 @@
     "name": "Yundera",
     "dashboardUrl": "https://app.yundera.com/dashboard",
     "dashboardLabel": "Yundera Dashboard",
-    "panelLabel": "Billing",
+    "panelLabel": "Operator",
     "support": { "enabled": true },
     "trustedPubkeyHostSuffixes": ["yundera.com"]
   },
@@ -18,13 +18,13 @@
     "nsl.sh": {
       "label": "nsl.sh",
       "dashboardLabel": "nsl.sh",
-      "panelLabel": "Provider",
+      "panelLabel": "Operator",
       "dashboardUrl": "https://nsl.sh"
     },
     "inojob.com": {
       "label": "inojob.com",
       "dashboardLabel": "inojob.com",
-      "panelLabel": "Provider",
+      "panelLabel": "Operator",
       "dashboardUrl": "https://inojob.com"
     }
   }

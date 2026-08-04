@@ -40,14 +40,14 @@ export function mergeBrandFile(base: BrandFile, override: Partial<BrandFile>): B
 /**
  * Flatten a BrandFile into what the UI consumes.
  *
- * The provider precedence is the core domain rule of this whole feature:
+ * The operator precedence is the core domain rule of this whole feature:
  *
  *     operator ?? domainProviders[serverDomain] ?? null
  *
- * The OPERATOR ALWAYS WINS, even when the domain belongs to someone else. A
- * Yundera customer on an `nsl.sh` domain (yunderalabs.nsl.sh is the live
- * example) must be sent to Yundera's dashboard, not nsl.sh's — Yundera is who
- * manages that domain on their behalf, and who bills them.
+ * The CONFIGURED OPERATOR ALWAYS WINS, even when the domain belongs to someone
+ * else. A Yundera customer on an `nsl.sh` domain (yunderalabs.nsl.sh is the
+ * live example) must be sent to Yundera's dashboard, not nsl.sh's — Yundera is
+ * who runs that box and manages the domain on their behalf.
  *
  * `hasOperator` is decided by the CALLER, not here, because it depends on env
  * (`YUNDERA_API`) that this module deliberately cannot see.
@@ -60,14 +60,16 @@ export function toBrandPayload(
     const domainProvider: DomainProvider | null =
         file.domainProviders?.[opts.serverDomain] ?? null;
 
-    const provider = operator
+    const resolvedOperator = operator
         ? {
+            name: operator.name,
             panelLabel: operator.panelLabel,
             dashboardLabel: operator.dashboardLabel,
             dashboardUrl: operator.dashboardUrl,
         }
         : domainProvider
             ? {
+                name: domainProvider.label,
                 panelLabel: domainProvider.panelLabel,
                 dashboardLabel: domainProvider.dashboardLabel,
                 dashboardUrl: domainProvider.dashboardUrl,
@@ -81,7 +83,7 @@ export function toBrandPayload(
             enabled: !!operator && operator.support.enabled,
             operatorName: operator ? operator.name : null,
         },
-        provider,
+        operator: resolvedOperator,
         operatorAccount: operator?.accountUrl
             ? {name: operator.name, url: operator.accountUrl}
             : null,

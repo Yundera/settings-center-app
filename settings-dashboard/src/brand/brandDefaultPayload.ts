@@ -15,7 +15,7 @@ import type {BrandFile, BrandPayload} from './BrandTypes';
  * transform belong here.
  *
  * serverDomain is '' because the client has no DOMAIN; the default carries an
- * operator, so the provider link resolves from that and the domain-provider
+ * operator, so the Operator link resolves from that and the domain-zone
  * fallback is not needed for the seed.
  */
 const DEFAULT_BRAND = DEFAULT_BRAND_JSON as BrandFile;
