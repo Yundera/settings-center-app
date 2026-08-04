@@ -32,7 +32,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         // Per-key atomic edits via env-file-manager.sh. The previous full-file
         // round-trip silently truncated .pcs.env on read failure (file mode
         // 0600 owned by pcs after env-file-manager's mv-from-mktemp side-effect),
-        // dropping every other key (YUNDERA_API, PUBLIC_IP*, etc.).
+        // dropping every other key (OPERATOR_API, PUBLIC_IP*, etc.).
         const envMgr = path.join(composeFolder, 'scripts/tools/env-file-manager.sh');
 
         // host/port are already constrained to the regexes above, so no shell

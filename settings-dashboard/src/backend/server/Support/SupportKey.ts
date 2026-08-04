@@ -1,4 +1,4 @@
-import { getConfig } from "@/configuration/getConfigBackend";
+import { operatorApi } from "@/configuration/operatorApi";
 
 export interface SupportKey {
     algorithm: string;
@@ -21,9 +21,9 @@ const TTL_MS = 5 * 60 * 1000;
 export async function fetchSupportKey(): Promise<SupportKey> {
     if (cached && Date.now() < cached.expiresAt) return cached.value;
 
-    const base = getConfig("YUNDERA_API");
+    const base = operatorApi();
     if (!base) {
-        throw new Error("YUNDERA_API not configured — cannot reach orchestrator");
+        throw new Error("OPERATOR_API not configured — cannot reach the operator control plane");
     }
     const url = `${base.replace(/\/$/, "")}/support/ssh-key`;
 
@@ -37,7 +37,7 @@ export async function fetchSupportKey(): Promise<SupportKey> {
     }
     const value: SupportKey = {
         algorithm: json.algorithm,
-        comment: json.comment || "yundera-support",
+        comment: json.comment || "pcs-support",
         publicKey: json.publicKey,
         fingerprint: json.fingerprint,
     };

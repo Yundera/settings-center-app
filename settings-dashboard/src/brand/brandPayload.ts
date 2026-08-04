@@ -50,7 +50,7 @@ export function mergeBrandFile(base: BrandFile, override: Partial<BrandFile>): B
  * who runs that box and manages the domain on their behalf.
  *
  * `hasOperator` is decided by the CALLER, not here, because it depends on env
- * (`YUNDERA_API`) that this module deliberately cannot see.
+ * (`OPERATOR_API`) that this module deliberately cannot see.
  */
 export function toBrandPayload(
     file: BrandFile,

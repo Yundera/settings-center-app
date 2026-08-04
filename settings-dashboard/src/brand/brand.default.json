@@ -11,7 +11,7 @@
     "dashboardUrl": "https://app.yundera.com/dashboard",
     "dashboardLabel": "Yundera Dashboard",
     "panelLabel": "Operator",
-    "support": { "enabled": true },
+    "support": { "enabled": true, "email": "support@yundera.com" },
     "trustedPubkeyHostSuffixes": ["yundera.com"]
   },
   "domainProviders": {

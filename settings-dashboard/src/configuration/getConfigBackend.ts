@@ -10,13 +10,17 @@ type Config = {
     OIDC_REGISTRAR_URL: string;
 
     DOMAIN: string;
-    PROVIDER_STR: string;
     UID: string;
     PUBLIC_IP: string;
     DEFAULT_SERVICE_HOST: string;
     DEFAULT_SERVICE_PORT: string;
 
-    YUNDERA_API: string;      // Bare orchestrator base URL (no /user); callers append explicit subpaths
+    // Bare operator control-plane base URL (no /user); callers append explicit
+    // subpaths. Always read via operatorApi() in ./operatorApi.ts, never
+    // directly — YUNDERA_API is the pre-rename name and is still what a host
+    // that has not yet run the rename migration provides.
+    OPERATOR_API: string;
+    YUNDERA_API: string;      // deprecated alias of OPERATOR_API
     SMTP_HOST: string;        // Local PCS smtp service hostname (default: smtp)
     SMTP_PORT: string;        // Local PCS smtp service port (default: 587)
     SUPPORT_EMAIL: string;    // Override support recipient (default: support@yundera.com)

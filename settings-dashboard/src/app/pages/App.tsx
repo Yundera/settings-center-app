@@ -18,7 +18,6 @@ import type {PanelInterface} from "@/core/PanelInterface";
 
 import VpnKeyIcon from "@mui/icons-material/VpnKey";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import AppsIcon from "@mui/icons-material/Apps";
 import CloudIcon from "@mui/icons-material/Cloud";
 import LanguageIcon from "@mui/icons-material/Language";
 import DeveloperBoardIcon from "@mui/icons-material/DeveloperBoard";
@@ -31,7 +30,6 @@ import HttpsIcon from "@mui/icons-material/Https";
 
 import {AccessPanel} from "@/panels/access/AccessPanel";
 import {AccountPanel} from "@/panels/account/AccountPanel";
-import {AppsPanel} from "@/panels/apps/AppsPanel";
 import {OperatorPanel} from "@/panels/operator/OperatorPanel";
 import {CertificatesPanel} from "@/panels/certificates/CertificatesPanel";
 import {DomainPanel} from "@/panels/domain/DomainPanel";
@@ -68,7 +66,6 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
     definePanel({name: 'access',             component: AccessPanel,            icon: VpnKeyIcon,         label: 'Access'}),
     definePanel({name: 'terminal',           component: TerminalPanel,          icon: TerminalIcon,       label: 'Terminal'}),
     definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health'}),
-    definePanel({name: 'apps',               component: AppsPanel,              icon: AppsIcon,           label: 'Apps'}),
     definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources'}),
     definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration'}),
     ...(brand.operator

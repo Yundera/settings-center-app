@@ -12,7 +12,7 @@ import {resolveBrand} from '@/brand/resolveBrand';
  * no SSH, and no work on demand. The only I/O is a stat() of brand.json,
  * memoised for 10s inside loadBrandFile(). There is no user input to reflect.
  *
- * The payload is PRE-RESOLVED (see resolveBrand.ts): DOMAIN and YUNDERA_API
+ * The payload is PRE-RESOLVED (see resolveBrand.ts): DOMAIN and OPERATOR_API
  * are consumed server-side and reduced to a link plus a boolean. Nothing from
  * .pcs.secret.env may ever be added to it.
  */

@@ -2,6 +2,7 @@ import {loadBrandFile} from './loadBrandFile';
 import {toBrandPayload} from './brandPayload';
 import type {BrandPayload} from './BrandTypes';
 import {getConfig} from '@/configuration/getConfigBackend';
+import {operatorApi} from '@/configuration/operatorApi';
 import {splitDomain} from '@/backend/net/splitDomain';
 
 /**
@@ -15,8 +16,8 @@ import {splitDomain} from '@/backend/net/splitDomain';
  * FRONTEND_PUBLIC_ENV because they pushed PCS secrets into the page — the same
  * rule applies here, with less protection, because there is no session gate.
  *
- * DOMAIN and YUNDERA_API are read here but never emitted: they are reduced to
- * a resolved link and a boolean before they cross the wire.
+ * DOMAIN and the operator API URL are read here but never emitted: they are
+ * reduced to a resolved link and a boolean before they cross the wire.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -26,16 +27,17 @@ import {splitDomain} from '@/backend/net/splitDomain';
  * Two signals ANDed, and the AND is load-bearing. The baked default carries
  * Yundera's operator block, so a self-hosted box that never dropped its own
  * brand.json would inherit it and render a Support panel whose every call
- * throws in SupportKey.ts ("YUNDERA_API not configured"). Requiring the env
+ * throws in SupportKey.ts ("OPERATOR_API not configured"). Requiring the env
  * var too makes the failure mode "no support panel" instead of "broken
  * support panel".
  *
- * Note this makes YUNDERA_API load-bearing for UI visibility, where before it
+ * Note this makes OPERATOR_API load-bearing for UI visibility, where before it
  * only gated SupportKey.ts. Managed boxes set it explicitly in .pcs.env, so
- * this is safe — but it must stay explicit.
+ * this is safe — but it must stay explicit. operatorApi() also accepts the
+ * pre-rename YUNDERA_API, so the panel does not vanish mid-upgrade.
  */
 function hasOperator(): boolean {
-    return loadBrandFile().operator !== null && !!getConfig('YUNDERA_API');
+    return loadBrandFile().operator !== null && !!operatorApi();
 }
 
 /** Never throws; degrades to the baked default. Safe from an RSC. */

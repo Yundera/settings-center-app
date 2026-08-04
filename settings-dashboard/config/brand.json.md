@@ -39,7 +39,9 @@ up inside the container at `/app/data/brand.json` with no compose change.
     "dashboardUrl":   "https://app.yundera.com/dashboard",
     "dashboardLabel": "Yundera Dashboard",
     "panelLabel":     "Operator",        // sidebar label for the Operator panel
-    "support":        { "enabled": true },
+    "support":        { "enabled": true,
+                        "email": "support@yundera.com" },  // where reports are mailed;
+                                                           // SERVER-SIDE ONLY, never in /api/brand
     "trustedPubkeyHostSuffixes": ["yundera.com"],
     "accountUrl":     "https://…"        // OPTIONAL; adds an Account-panel card
   },
@@ -92,7 +94,7 @@ These are **independent**, and conflating them is the mistake this config exists
 prevent.
 
 - **Operator** — who runs the box. Requires `operator` non-null in `brand.json`
-  **AND** `YUNDERA_API` set in the environment. Both, because the baked default
+  **AND** `OPERATOR_API` set in the environment. Both, because the baked default
   carries Yundera's operator block: a self-hosted box that forgot its `brand.json`
   would otherwise render a Support panel whose every call throws.
 - **Domain provider** — which zone the domain sits in (`nsl.sh`, `inojob.com`),
@@ -143,7 +145,7 @@ inherited from the default.
 `GET /api/brand` serves a **pre-resolved** payload; it is in `BYPASS_PREFIXES`
 (`serverGate.ts`) because the login page needs the logo before a session exists.
 
-> **Security invariant.** That route is unauthenticated. `DOMAIN` and `YUNDERA_API`
+> **Security invariant.** That route is unauthenticated. `DOMAIN` and `OPERATOR_API`
 > are consumed server-side and reduced to a link plus a boolean before anything
 > crosses the wire. **Nothing from `.pcs.secret.env` may ever be added to
 > `BrandPayload`.** See `core.env.json.md` on why `PROVIDER_STR` / `DEFAULT_PWD` /
@@ -163,8 +165,9 @@ Edits to `brand.json` are picked up within ~10s (mtime-checked cache in
 
 ## Caveat: `logFileName` is display-only
 
-It changes the label in the Support panel, not where the backend reads. The real
-path is still hardcoded in `support-send-report.ts` and friends pending the
+It changes the label in the Support panel — and, since support unbranding, the
+name of the gzipped attachment the report carries — but not where the backend
+reads. The real path is still hardcoded in `support-send-report.ts` pending the
 `PCS_LOG_FILE` / `COMPOSE_FOLDER_PATH` work (Phase 4 of the mesh template's
 `alignment-with-template-root.md`). Unreachable today — the Support panel is hidden
 without an operator — but the two must land together.

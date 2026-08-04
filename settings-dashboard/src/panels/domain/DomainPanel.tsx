@@ -23,7 +23,6 @@ import {button, card, colors, font, radius, spacing, text, title} from '@/app/pa
 
 interface DomainConfig {
     DOMAIN: string;
-    PROVIDER_STR: string;
     PUBLIC_IP: string;
     DEFAULT_SERVICE_HOST: string;
     DEFAULT_SERVICE_PORT: string;
@@ -85,7 +84,6 @@ export const DomainPanel: React.FC = () => {
     const brand = useBrand();
     const [config, setConfig] = useState<DomainConfig>({
         DOMAIN: '',
-        PROVIDER_STR: '',
         PUBLIC_IP: '',
         DEFAULT_SERVICE_HOST: '',
         DEFAULT_SERVICE_PORT: '',
@@ -244,10 +242,6 @@ export const DomainPanel: React.FC = () => {
                                 <InfoRow
                                     label="Default Application"
                                     value={defaultApp}
-                                />
-                                <InfoRow
-                                    label="Provider"
-                                    value={config.PROVIDER_STR}
                                 />
                                 <InfoRow
                                     label="sslip.io Domain"

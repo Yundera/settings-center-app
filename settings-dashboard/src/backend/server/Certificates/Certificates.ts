@@ -2,7 +2,7 @@ import { executeHostCommand } from '@/backend/cmd/HostExecutor';
 import { getConfig } from '@/configuration/getConfigBackend';
 import { CertRow, CertSnapshot, CertStatus } from './CertificatesTypes';
 
-// POSIX single-quoted shell escape — same pattern as Apps.ts/MigrationSSH shq.
+// POSIX single-quoted shell escape — same pattern as MigrationSSH shq.
 function shq(s: string): string {
     return `'${s.replace(/'/g, `'\\''`)}'`;
 }

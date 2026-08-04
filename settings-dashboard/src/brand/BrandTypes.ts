@@ -26,7 +26,19 @@ export interface OperatorConfig {
      * makes no assumption about what that dashboard offers.
      */
     panelLabel: string;
-    support: { enabled: boolean };
+    support: {
+        enabled: boolean;
+        /**
+         * Where the Support panel mails reports. SERVER-SIDE ONLY — read from
+         * the BrandFile in support-send-report.ts, never copied into
+         * BrandPayload: /api/brand is unauthenticated, and a support inbox is
+         * not something to publish to anyone who can reach the login page.
+         * Optional so an operator block stays valid without it; the SUPPORT_EMAIL
+         * env var overrides it, and with neither set the report is refused
+         * rather than sent somewhere the operator did not choose.
+         */
+        email?: string;
+    };
     /**
      * Host suffixes whose SSH public keys the UI marks as coming from a
      * trusted source rather than merely a TLS-verified stranger. Only

@@ -5,6 +5,7 @@ import { authMiddleware } from "@/backend/auth/middleware";
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 import { getConfig } from "@/configuration/getConfigBackend";
 import { enableSupportAccess } from "@/backend/server/Support/SupportAccess";
+import { loadBrandFile } from "@/brand/loadBrandFile";
 
 const LOG_FILE = "/DATA/AppData/casaos/apps/yundera/log/yundera.log";
 const MAX_LOG_LINES = 5000;
@@ -41,7 +42,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         return res.status(400).json({ error: `Message required (1–${MAX_MESSAGE_LEN} chars)` });
     }
 
-    const supportEmail = getConfig('SUPPORT_EMAIL') || 'support@yundera.com';
+    // Recipient: SUPPORT_EMAIL wins (per-PCS override), else whoever the brand
+    // file names as the operator's support inbox. No hardcoded fallback — this
+    // used to default to support@yundera.com, which quietly mailed a third party
+    // on any stack that wasn't Yundera's.
+    const brand = loadBrandFile();
+    const supportEmail = getConfig('SUPPORT_EMAIL') || brand.operator?.support.email || '';
+    if (!supportEmail) {
+        return res.status(500).json({
+            error: 'No support address configured — set SUPPORT_EMAIL, or operator.support.email in brand.json',
+        });
+    }
     const smtpHost = getConfig('SMTP_HOST') || 'smtp';
     const smtpPort = parseInt(getConfig('SMTP_PORT') || '587', 10);
     const domain = getConfig('DOMAIN') || 'unknown-pcs';
@@ -68,12 +79,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             const log = await readLogTail(MAX_LOG_LINES);
             if (log) {
                 const gz = gzipSync(Buffer.from(log, 'utf8'));
+                // Named after the brand's log file, matching what the Support
+                // panel told the user it would attach.
+                const logName = `${brand.brand.logFileName}.gz`;
                 attachments.push({
-                    filename: 'yundera.log.gz',
+                    filename: logName,
                     content: gz,
                     contentType: 'application/gzip',
                 });
-                logSummary = `Log attached: yundera.log.gz (last ${MAX_LOG_LINES} lines, ${gz.length} bytes gzipped).`;
+                logSummary = `Log attached: ${logName} (last ${MAX_LOG_LINES} lines, ${gz.length} bytes gzipped).`;
             } else {
                 logSummary = 'Log attached: no (log file empty or unreadable).';
             }

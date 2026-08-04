@@ -11,10 +11,11 @@ async function handler(
     }
 
     try {
-        // Read environment variables from process.env
+        // Read environment variables from process.env. Only keys the compose file
+        // hands the container (an enumerated list — no whole-file .env inject), so
+        // nothing from .pcs.secret.env can appear here.
         const envConfig = {
             DOMAIN: getConfig("DOMAIN") || '',
-            PROVIDER_STR: getConfig("PROVIDER_STR") || '',
             PUBLIC_IP: getConfig("PUBLIC_IP") || '',
             DEFAULT_SERVICE_HOST: getConfig("DEFAULT_SERVICE_HOST") || '',
             DEFAULT_SERVICE_PORT: getConfig("DEFAULT_SERVICE_PORT") || '',

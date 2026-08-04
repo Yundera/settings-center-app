@@ -266,7 +266,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     try {
         const liveFingerprint = await getContainerKeyFingerprint();
-        // The orchestrator's support key may be unreachable (YUNDERA_API unset,
+        // The orchestrator's support key may be unreachable (OPERATOR_API unset,
         // orchestrator down) — non-fatal, we just can't tag it in that case.
         const supportFingerprint = await fetchSupportKey()
             .then(k => k.fingerprint)
