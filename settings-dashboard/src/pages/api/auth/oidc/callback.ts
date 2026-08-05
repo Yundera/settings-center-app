@@ -14,10 +14,42 @@ interface TokenResponse {
   expires_in: number;
 }
 
+/**
+ * Groups in the Dex ID token that confer administrator rights on this PCS.
+ *
+ * Deliberately vendor-neutral: this app ships in the FOSS mesh template as well
+ * as the managed one, so it must not know the name of any particular identity
+ * provider. Any IdP wired into this PCS's Dex asserts administrator status the
+ * same way — by putting the user in `admins`.
+ *
+ * Two producers today:
+ *   - Authelia, the local credential store (ensure-authelia.sh seeds the
+ *     operator account into `admins`; the Account panel assigns it).
+ *   - An operator IdP, where one exists. On managed boxes that is Yundera
+ *     Login, whose IdP enforces a central, fail-closed owner policy — only the
+ *     uid bound as owner_uid at client registration can complete an authorize
+ *     against this PCS's client — so it asserts `admins` for the verified owner.
+ *
+ * Keyed on the group rather than the connector because Dex does not emit
+ * `federated_claims` in its ID token (verified against dex v2.43.1 — the claim
+ * set is iss/sub/aud/exp/iat/at_hash/c_hash/email/email_verified/groups/name/
+ * preferred_username). The connector id is recoverable only by decoding Dex's
+ * protobuf-encoded `sub`, which would couple us to Dex internals.
+ */
+const ADMIN_GROUPS = ['admin', 'admins'];
+
+/**
+ * Collapse the OIDC `groups` claim to this dashboard's binary role.
+ *
+ * Deliberately binary. The previous implementation fell through to
+ * `String(groups[0])`, so a plain user in group `users` got `role: "users"` —
+ * harmless while every check was `=== 'admin'`, but a raw group name leaking
+ * into an authorization field is a hazard now that adminMiddleware gates every
+ * /api/admin route on it.
+ */
 function deriveRole(groups: unknown): string {
-  if (Array.isArray(groups)) {
-    if (groups.includes('admin') || groups.includes('admins')) return 'admin';
-    if (groups.length > 0) return String(groups[0]);
+  if (Array.isArray(groups) && groups.some(g => ADMIN_GROUPS.includes(String(g)))) {
+    return 'admin';
   }
   return 'user';
 }
