@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { authMiddleware } from "@/backend/auth/middleware";
+import { adminMiddleware } from "@/backend/auth/middleware";
 import { executeHostCommand, getContainerKeyFingerprint, defaultHostUser } from "@/backend/cmd/HostExecutor";
 import { fetchSupportKey } from "@/backend/server/Support/SupportKey";
 
@@ -313,4 +313,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import nodemailer from 'nodemailer';
 import { gzipSync } from 'zlib';
-import { authMiddleware } from "@/backend/auth/middleware";
+import { adminMiddleware } from "@/backend/auth/middleware";
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 import { getConfig } from "@/configuration/getConfigBackend";
 import { enableSupportAccess } from "@/backend/server/Support/SupportAccess";
@@ -140,4 +140,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

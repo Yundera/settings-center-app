@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { authMiddleware } from "@/backend/auth/middleware";
+import { adminMiddleware } from "@/backend/auth/middleware";
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 
 const VALID_KEY_TYPE = /^(ssh-(rsa|dss|ed25519)|ecdsa-sha2-nistp(256|384|521)|sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\.com)$/;
@@ -85,4 +85,4 @@ chown -R '${username}:${username}' "$SSH_DIR" 2>/dev/null || true
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

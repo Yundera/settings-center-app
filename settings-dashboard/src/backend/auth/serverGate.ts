@@ -3,9 +3,14 @@ import {jwtVerify} from 'jose';
 import {SESSION_KEY} from './sessionKey';
 import {SESSION_COOKIE} from './session';
 
-// Paths that bypass the page-level gate. API routes that need auth use
-// authMiddleware themselves; everything in this list is intentionally
-// reachable without a session cookie (login flow, static assets, health).
+// Paths that bypass the page-level gate. API routes that need auth wrap
+// themselves (authMiddleware, or adminMiddleware for everything under
+// /api/admin/); everything in this list is intentionally reachable without a
+// session cookie (login flow, static assets, health).
+//
+// This gate checks authentication only, never role — that is deliberate. A
+// non-admin local account must still be able to load the SPA, where App.tsx
+// leaves it the Account panel and adminMiddleware 403s the rest.
 const BYPASS_PREFIXES = [
   '/api/auth/',          // login, logout, providers, oidc/*
   '/api/me',             // does its own session check

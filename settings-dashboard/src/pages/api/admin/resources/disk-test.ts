@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { authMiddleware } from "@/backend/auth/middleware";
+import { adminMiddleware } from "@/backend/auth/middleware";
 import { runDiskBench, type DiskTestResult } from "@/backend/server/Bench/runners";
 
 export type { DiskTestResult };
@@ -21,4 +21,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

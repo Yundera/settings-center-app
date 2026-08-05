@@ -1,5 +1,5 @@
 import {NextApiRequest, NextApiResponse} from 'next'
-import {authMiddleware} from "@/backend/auth/middleware";
+import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 import {latestSelfCheckRun, ScriptResult, SelfCheckRun} from "@/backend/server/Health/SelfCheckLog";
 
@@ -64,4 +64,4 @@ async function handler(
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

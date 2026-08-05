@@ -1,5 +1,5 @@
 import {NextApiRequest, NextApiResponse} from 'next'
-import {authMiddleware} from "@/backend/auth/middleware";
+import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 
 const SELF_CHECK_SCRIPT = "/DATA/AppData/casaos/apps/yundera/scripts/self-check.sh";
@@ -37,4 +37,4 @@ async function handler(
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

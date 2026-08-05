@@ -1,5 +1,5 @@
 import {NextApiRequest, NextApiResponse} from 'next'
-import {authMiddleware} from "@/backend/auth/middleware";
+import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 
 const LOG_FILE = "/DATA/AppData/casaos/apps/yundera/log/yundera.log";
@@ -33,4 +33,4 @@ async function handler(
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

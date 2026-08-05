@@ -1,5 +1,5 @@
 import {NextApiRequest, NextApiResponse} from 'next'
-import {authMiddleware} from "@/backend/auth/middleware";
+import {adminMiddleware} from "@/backend/auth/middleware";
 import {getLastUpdateStatus} from "@/backend/server/DockerUpdate/DockerUpdate";
 
 async function handler(
@@ -25,4 +25,4 @@ async function handler(
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

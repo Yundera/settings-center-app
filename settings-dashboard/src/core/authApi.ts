@@ -31,12 +31,26 @@ export async function apiRequest<T>(url: string, method: string = "GET", body?: 
     throw new Error(err?.message || 'Network error');
   }
 
-  if (response.status === 401 || response.status === 403) {
+  // 401 only. A 403 means the session is valid but lacks the role the route
+  // requires (adminMiddleware) — re-authenticating cannot fix that, and
+  // bouncing would loop: /login → SSO → back → 403 → /login. Surface it as an
+  // error instead and let the panel say why.
+  if (response.status === 401) {
     bounceToLogin();
   }
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    // Routes report failures as {error: "..."}; that text is the useful part
+    // (e.g. "refusing to delete the last member of 'admins'"). Fall back to the
+    // status line when the body is absent or isn't JSON.
+    let detail = '';
+    try {
+      const body = await response.json();
+      detail = body?.error || body?.message || '';
+    } catch {
+      // Non-JSON body — nothing to add beyond the status.
+    }
+    throw new Error(detail || `API Error: ${response.status} ${response.statusText}`);
   }
 
   return response.json();

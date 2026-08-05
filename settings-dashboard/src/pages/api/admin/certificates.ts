@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { authMiddleware } from '@/backend/auth/middleware';
+import { adminMiddleware } from '@/backend/auth/middleware';
 import { getCertificatesSnapshot } from '@/backend/server/Certificates/Certificates';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -17,4 +17,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

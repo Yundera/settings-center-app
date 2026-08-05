@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { authMiddleware } from "@/backend/auth/middleware";
+import { adminMiddleware } from "@/backend/auth/middleware";
 import { getMetricsResponse, notifyMetricsRead } from "@/backend/server/Metrics/Metrics";
 
 /**
@@ -22,4 +22,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(200).json(getMetricsResponse());
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

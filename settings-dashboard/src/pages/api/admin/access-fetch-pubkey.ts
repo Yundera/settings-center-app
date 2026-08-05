@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { authMiddleware } from "@/backend/auth/middleware";
+import { adminMiddleware } from "@/backend/auth/middleware";
 import { trustedPubkeyHostSuffixes } from "@/brand/resolveBrand";
 import dns from 'dns';
 import net from 'net';
@@ -227,4 +227,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     res.status(200).json(result);
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

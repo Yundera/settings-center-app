@@ -1,102 +1,149 @@
-# Development Environment
+# Dev stack
 
-Docker-based dev stack for the Settings Center App in a simulated Personal Cloud Server (PCS), behind the same OIDC stack the prod template ships.
+Runs the Settings Center App inside a simulated Personal Cloud Server, behind
+the same auth topology the prod template ships — so the login path you exercise
+here is the login path that runs on a real PCS.
 
-All services route through a local Caddy on `*.dev.localhost` (which all modern browsers resolve to `127.0.0.1` per RFC 6761), so no `/etc/hosts` edits are needed and the `<container>-${DOMAIN}` URL shape that mesh-router-auth's redirect-URI validation expects is preserved.
+```
+browser ──► admin-dev.localhost         this app (Next.js dev mode, fast refresh)
+               │ OIDC authorization_code
+               ▼
+           auth-dev.localhost           Dex — the broker every PCS app delegates to
+               │ "Local Account" connector
+               ▼
+        local-auth-dev.localhost        Authelia — the local credential store
+                                        (users_database.yml lives here)
+```
 
-## Services
+Every modern browser resolves `*.localhost` to `127.0.0.1` (RFC 6761), so there
+are no `/etc/hosts` edits. Services are published as **siblings** of `DOMAIN` —
+`admin-dev.localhost`, not `admin.dev.localhost` — because that `<service>-<domain>`
+shape is what auth-registrar validates redirect URIs against.
 
-| Service | Role |
-|---|---|
-| `admin` | Settings Center App under test. Container name is `admin` so mesh-router-auth's PTR-derived clientId matches the prod template. |
-| `ubuntu-host-pcs` | Simulated PCS host. Runs template-root self-checks and bootstraps Authelia secrets/JWKS into the shared `auth_data` volume. |
-| `authelia` | OIDC IdP (Authelia 4.39), configured by `ensure-auth-secrets.sh`. |
-| `dev-auth-registrar` | `mesh-auth` sidecar that hands out OIDC client credentials via `POST /register`. |
-| `dev-caddy` | `caddy-docker-proxy` routing `admin-${DOMAIN}` and `auth-${DOMAIN}` from container labels with `tls internal` certs. |
-
-## Quick Start
+## Quick start
 
 ```bash
-cp .env.example .env
-# edit .env — fill in UID, USER_JWT, DEFAULT_PWD, PROVIDER_STR, EMAIL
+cp .env.example .env      # defaults boot as-is
 docker compose up -d --build
 ```
 
-Open `https://admin-dev.localhost/`. First request triggers an OIDC redirect through Authelia. Default Authelia admin user is `admin` / `$DEFAULT_PWD` from `.env`.
+Then open **https://admin-dev.localhost/** and log in as `admin` with the
+`DEFAULT_PWD` from `.env` (default: `admin`).
 
-### One-time: trust Caddy's local CA
+First boot takes a few minutes: two images build, four are pulled, and the
+provisioning scripts run.
 
-`tls internal` mints certs from a per-Caddy local CA. Until you trust it, every browser tab will warn (and `curl` needs `-k`).
+### Trusting the dev CA (optional)
+
+`bootstrap.sh` mints a local CA and a server certificate for the three
+hostnames. Until you trust it, browsers warn and `curl` needs `-k`.
 
 ```bash
-docker compose cp dev-caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt
-# Linux: sudo cp caddy-root.crt /usr/local/share/ca-certificates/dev-caddy.crt && sudo update-ca-certificates
-# macOS: sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain caddy-root.crt
+docker compose cp pcs-host:/certs/ca.pem ./dev-ca.pem
+# Linux: sudo cp dev-ca.pem /usr/local/share/ca-certificates/yundera-dev.crt && sudo update-ca-certificates
+# macOS: sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain dev-ca.pem
+# Windows: certutil -addstore -user Root dev-ca.pem
 # Or just click through — the browser remembers per-domain.
 ```
+
+The containers already trust it: `admin` via `NODE_EXTRA_CA_CERTS`, `dex` via
+`SSL_CERT_FILE`.
+
+## Services
+
+| Service | Container | Role |
+|---|---|---|
+| `pcs-host` | `pcs-host` | Simulated PCS VM. Holds the template tree, runs the provisioning scripts, and is the SSH target for every privileged dashboard operation. |
+| `admin` | `admin` | The app under test. Name must be `admin` — auth-registrar derives the OIDC client id from a PTR lookup. |
+| `dex` | `dex` | OIDC broker at `auth-${DOMAIN}`. What the dashboard actually authenticates against. |
+| `authelia` | `authelia` | Local credential store at `local-auth-${DOMAIN}`. Serves its own login + password-reset UI. |
+| `auth-registrar` | `dev-auth-registrar` | Issues OIDC clients to apps over Dex's gRPC API, on the isolated `dex-internal` network. |
+| `caddy` | `dev-caddy` | `caddy-docker-proxy`; routes all three hostnames from container labels. |
+
+## Where the template tree comes from
+
+`pcs-host` **bind-mounts `../../../template-root/root`** and rsyncs it into
+place, honouring `root/.ignore`. Edit a script in `packages/template-root` and
+`docker compose restart pcs-host` picks it up — no commit, no push, no zip.
+
+This replaced a `curl` of a GitHub zip, which meant the dev stack could never
+show you an unpushed template change. `UPDATE_URL=local` in `.env` then stops
+`ensure-template-sync.sh` from re-downloading over your working copy on a later
+tick.
+
+This step is load-bearing. `ensure-authelia.sh` from that tree writes Authelia's
+secrets, JWKS, `configuration.yml` and `users_database.yml`; `ensure-dex.sh`
+renders Dex's config and theme. If the sync fails, the `/tmp/bootstrap-ready`
+marker is never written, the healthcheck never passes, and nothing else starts.
+
+## What bootstrap.sh does
+
+It deliberately does **not** run the full self-check loop — that would try to
+apt-upgrade, resize partitions and configure swap inside a container, fail in
+interesting ways, and tell you nothing about the app. Instead, in order:
+
+1. rsync the template tree from the local checkout
+2. write `.pcs.env` / `.pcs.secret.env` / `.ynd.user.env` from `.env`
+3. mint the dev CA + server cert into the `certs` volume
+4. `ensure-admin-user.sh` — the sudoer the dashboard SSHes in as
+5. `ensure-authelia.sh` — secrets, JWKS, config, seeded `admin` account
+6. `ensure-dex.sh` — config + login theme
+7. copy the CA into Dex's data dir, mark ready, start sshd
+
+Steps 5 and 6 are ordered: `ensure-authelia.sh` mints `AUTHELIA_DEX_SECRET`,
+which `ensure-dex.sh` interpolates into the Local Account connector.
 
 ## Files
 
 | File | Tracked | Purpose |
 |---|---|---|
 | `docker-compose.yml` | yes | Stack definition |
-| `Dockerfile` | yes | Ubuntu base for `ubuntu-host-pcs` (sshd, openssl, docker CLI) |
-| `Dockerfile.admin-dev` | yes | Node base for the `admin` service with full deps for Next.js fast refresh |
-| `Caddyfile` | yes | Dev variant of the prod template Caddyfile (uses `tls internal` instead of mounted certs) |
-| `.env.example` | yes | Template — copy to `.env` and fill in |
-| `.env` | **no** (gitignored) | Local secrets: UID, JWT, password, provider sig |
+| `bootstrap.sh` | yes | PCS provisioning; bind-mounted, so edits need only a restart |
+| `Dockerfile` | yes | Ubuntu base for `pcs-host` (sshd, openssl, docker CLI, yq) |
+| `Dockerfile.admin-dev` | yes | Node base for `admin` with full deps for fast refresh |
+| `Caddyfile` | yes | Dev variant of the prod Caddyfile |
+| `.env.example` | yes | Copy to `.env` |
+| `.env` | **no** (gitignored) | Local config |
 
-### Where the template tree comes from
-
-`ubuntu-host-pcs` **downloads** template-root at first boot — `curl` the zip from
-`TEMPLATE_BOOTSTRAP_URL`, `unzip`, then `rsync` honouring `root/.ignore`, which is
-exactly what `scripts/pcs-init.sh` does on a real PCS. This used to be a
-`dev/run/template-root` git submodule bind-mounted at `/tmp/setup`; that froze a
-template-root commit into this repo and had to be bumped by hand.
-
-The fetch is skipped when the tree is already on the `data` volume, so it costs one
-download on a fresh volume and nothing on restarts. To pick up a newer template, or
-to switch branches via `TEMPLATE_BOOTSTRAP_URL`, run `docker compose down -v` first.
-
-This step is load-bearing, not cosmetic: `ensure-auth-secrets.sh` from that tree is
-what writes Authelia's secrets, JWKS, `configuration.yml` and `users_database.yml`
-into `auth_data`, and `auth-registrar` reads `register-oidc-client.sh` from it at
-runtime. If the fetch fails the bootstrap marker is never written, the healthcheck
-never passes, and `authelia` / `auth-registrar` never start — i.e. **no login**.
-Check `docker compose logs ubuntu-host-pcs` for `[dev] template fetch FAILED`.
-
-The single `.env` is consumed twice: Compose substitutes `${DOMAIN}` etc. into labels at render time (auto-loaded from this directory), and the `admin` container loads it via `env_file:`. For `ubuntu-host-pcs`, the same file is mounted at `/tmp/.env` and copied into the data volume under all three names the inner template-root scripts expect (`.pcs.env`, `.pcs.secret.env`, `.ynd.user.env`) — they each grep the keys they care about, so receiving a superset is fine.
-
-## Common Operations
+## Common operations
 
 ```bash
-# Tail logs
-docker compose logs -f admin
+docker compose logs -f admin              # app logs
+docker compose logs pcs-host              # provisioning output
+docker exec -it pcs-host bash             # shell into the simulated PCS
 
-# Shell into the simulated PCS
-docker exec -it ubuntu-host-pcs bash
+# Local accounts, straight from the host script the dashboard drives
+docker exec pcs-host /DATA/AppData/casaos/apps/yundera/scripts/tools/authelia-user-manager.sh list
 
-# Re-run a self-check manually
-docker exec ubuntu-host-pcs bash /DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-template-sync.sh
+# Inspect the user store
+docker exec pcs-host cat /DATA/AppData/yundera/auth/users_database.yml
 
-# Inspect the staged env files inside the PCS
-docker exec ubuntu-host-pcs cat /DATA/AppData/casaos/apps/yundera/.ynd.user.env
+# Pick up an edited template-root script
+docker compose restart pcs-host
 
-# Fresh start — wipe volumes and rebuild
-docker compose down -v
-docker compose up -d --build
+# Fresh slate
+docker compose down -v && docker compose up -d --build
 ```
 
 ## Troubleshooting
 
-**Container won't start** — check ports 80/443 are free (dev-caddy publishes them) and Docker is running. If state looks bad: `docker compose down -v`.
+**Nothing starts / healthcheck never passes.** `docker compose logs pcs-host`.
+The bootstrap is fail-fast on a missing template mount or unset `DOMAIN`.
 
-**SSH-from-admin to host fails** — both containers must be up: `docker ps`. Check sshd: `docker exec ubuntu-host-pcs service ssh status`. Both share the `ssh_keys` volume.
+**Login loops, or `getDiscovery` ECONNREFUSED.** `dev-caddy` carries network
+aliases for all three hostnames. Without them, server-side calls from `admin`
+and `dex` fall through to public DNS — `*.localhost` resolves to `127.0.0.1`,
+which is the calling container's own netns.
 
-**OIDC redirect loops or `getDiscovery` ECONNREFUSED** — verify `dev-caddy` has the `admin-${DOMAIN}` and `auth-${DOMAIN}` aliases on `app-network` (it does, via the `aliases:` block in `docker-compose.yml`). Without those, the admin container's server-side OIDC calls fall back to public DNS, which returns `127.0.0.1` and hits its own netns.
+**Dex logs a TLS / x509 error against `local-auth-…`.** Dex reads
+`SSL_CERT_FILE=/data/ca-bundle.crt`, which `bootstrap.sh` copies from `/certs`.
+Confirm it exists: `docker exec dex ls -l /data/ca-bundle.crt`. This is why the
+stack mints its own CA up front rather than using Caddy's `tls internal`, whose
+CA is only created lazily — after Dex has already tried its connector.
 
-**Authelia won't start / config missing** — `ensure-auth-secrets.sh` runs on `ubuntu-host-pcs` startup and writes secrets+JWKS+`configuration.yml`+`users_database.yml` into the shared `auth_data` volume. Authelia's `depends_on: ubuntu-host-pcs (healthy)` gates on the `/tmp/auth-bootstrap-ready` marker, so if Authelia is failing, check the bootstrap script ran:
-```bash
-docker compose logs ubuntu-host-pcs | grep -i auth
-docker exec ubuntu-host-pcs ls -la /DATA/AppData/yundera/auth/
-```
+**Ports 80/443 already in use.** `dev-caddy` publishes both.
+
+**Admin sees only the Account panel.** That is the non-admin view — it means the
+`groups` claim is not arriving, so `role` fell back to `user`. Check the
+`admins` group is on your account (`authelia-user-manager.sh list`) and that
+`dex.config.yaml.tmpl` still sets `insecureEnableGroups: true`.

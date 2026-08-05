@@ -1,5 +1,5 @@
 import {NextApiRequest, NextApiResponse} from 'next'
-import {authMiddleware} from "@/backend/auth/middleware";
+import {adminMiddleware} from "@/backend/auth/middleware";
 import {getConfig} from "@/configuration/getConfigBackend";
 
 async function handler(
@@ -34,4 +34,4 @@ async function handler(
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

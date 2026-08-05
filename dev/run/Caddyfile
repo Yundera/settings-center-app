@@ -1,10 +1,20 @@
 # Dev variant of template-root/root/Caddyfile.
-# Differences from prod:
-#   - `tls internal` instead of `tls /certs/cert.pem /certs/key.pem`
-#     (no gateway/LE cert mounted in dev — Caddy mints from its local CA;
-#      browser will warn until you trust /data/caddy/pki/authorities/local/root.crt
-#      or accept the warning per-domain)
-#   - sslip.io / nip.io / DEFAULT_SERVICE root blocks dropped — irrelevant locally
+#
+# The `(gateway_tls)` snippet now serves the certificate at /certs, exactly as
+# prod does, rather than `tls internal`. On a real PCS that cert comes from the
+# mesh-router gateway; here bootstrap.sh mints it from a local CA before any
+# dependent container starts.
+#
+# That is not just fidelity. Caddy's internal CA is created lazily on first
+# issuance — i.e. after Dex has already started and attempted its Authelia
+# back-channel — so `tls internal` left Dex unable to verify the chain on a cold
+# boot, and no service ordering could fix it.
+#
+# To lose the browser warning, trust the dev CA once:
+#   docker compose cp pcs-host:/certs/ca.pem ./dev-ca.pem
+#
+# Dropped from prod: the sslip.io / nip.io / DEFAULT_SERVICE root blocks and the
+# Cloudflare-worker Host restoration, none of which have meaning locally.
 {
     log {
         output stdout
@@ -14,7 +24,5 @@
 }
 
 (gateway_tls) {
-    @has_original_host header X-Original-Host *
-    request_header @has_original_host Host {http.request.header.X-Original-Host}
-    tls internal
+    tls /certs/cert.pem /certs/key.pem
 }

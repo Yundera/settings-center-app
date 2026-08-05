@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { authMiddleware } from "@/backend/auth/middleware";
+import { adminMiddleware } from "@/backend/auth/middleware";
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 
 const USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
@@ -89,4 +89,4 @@ echo "REMOVED:$REMOVED"
     }
 }
 
-export default authMiddleware(handler);
+export default adminMiddleware(handler);

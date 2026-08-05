@@ -33,15 +33,27 @@ async function fetchMe(): Promise<MeUser | null> {
 }
 
 export const localAuthProvider: AuthProvider = {
+  // Drives the panel filter in App.tsx (`permissions[panel.permissions]`).
+  // `role` comes from the OIDC `groups` claim via deriveRole() in
+  // pages/api/auth/oidc/callback.ts — members of `admins` in Authelia's
+  // users_database.yml get 'admin', everyone else 'user'.
+  //
+  // This is presentation only. The enforcing gate is adminMiddleware on every
+  // /api/admin route; hiding a panel here just avoids showing a non-admin
+  // controls that would 403 on use.
   async listPermissions() {
-    return {};
+    const me = await fetchMe();
+    return {admin: me?.role === 'admin'};
   },
   async login() {
     return bounceToLogin();
   },
   async checkError(error) {
     const status = error?.status;
-    if (status === 401 || status === 403) {
+    // 401 only — a 403 is an authorization failure (adminMiddleware), not an
+    // expired session, so bouncing to the chooser would loop instead of
+    // resolving it. See the matching note in core/authApi.ts.
+    if (status === 401) {
       return bounceToLogin();
     }
   },

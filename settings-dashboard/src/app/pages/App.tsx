@@ -58,21 +58,27 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
   //              we know a dashboard for. Nothing to link to, so no panel.
   //   support  — an operator-only surface. Without one, every call in
   //              SupportKey.ts throws; hiding beats rendering a dead toggle.
+  //
+  // `permissions: 'admin'` on everything except `account`: a PCS can hold more
+  // than one local account now, and only members of Authelia's `admins` group
+  // administer the box. A plain user is left with Account alone, which is where
+  // they manage their own credential. This is cosmetic — adminMiddleware on the
+  // matching /api/admin routes is what actually enforces it.
   const availablePanels: PanelInterface[] = [
-    definePanel({name: 'system-information', component: SystemInformationPanel, icon: InfoOutlinedIcon, label: 'System Information'}),
+    definePanel({name: 'system-information', component: SystemInformationPanel, icon: InfoOutlinedIcon, label: 'System Information', permissions: 'admin'}),
     definePanel({name: 'account',            component: AccountPanel,           icon: AccountCircleIcon,  label: 'Account'}),
-    definePanel({name: 'domain',             component: DomainPanel,            icon: LanguageIcon,       label: 'Domain'}),
-    definePanel({name: 'certificates',       component: CertificatesPanel,      icon: HttpsIcon,          label: 'Certificates'}),
-    definePanel({name: 'access',             component: AccessPanel,            icon: VpnKeyIcon,         label: 'Access'}),
-    definePanel({name: 'terminal',           component: TerminalPanel,          icon: TerminalIcon,       label: 'Terminal'}),
-    definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health'}),
-    definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources'}),
-    definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration'}),
+    definePanel({name: 'domain',             component: DomainPanel,            icon: LanguageIcon,       label: 'Domain',             permissions: 'admin'}),
+    definePanel({name: 'certificates',       component: CertificatesPanel,      icon: HttpsIcon,          label: 'Certificates',       permissions: 'admin'}),
+    definePanel({name: 'access',             component: AccessPanel,            icon: VpnKeyIcon,         label: 'Access',             permissions: 'admin'}),
+    definePanel({name: 'terminal',           component: TerminalPanel,          icon: TerminalIcon,       label: 'Terminal',           permissions: 'admin'}),
+    definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health',             permissions: 'admin'}),
+    definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources',          permissions: 'admin'}),
+    definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration',          permissions: 'admin'}),
     ...(brand.operator
-      ? [definePanel({name: 'operator', component: OperatorPanel, icon: CloudIcon, label: brand.operator.panelLabel})]
+      ? [definePanel({name: 'operator', component: OperatorPanel, icon: CloudIcon, label: brand.operator.panelLabel, permissions: 'admin'})]
       : []),
     ...(brand.support.enabled
-      ? [definePanel({name: 'support', component: SupportPanel, icon: SupportAgentIcon, label: 'Support'})]
+      ? [definePanel({name: 'support', component: SupportPanel, icon: SupportAgentIcon, label: 'Support', permissions: 'admin'})]
       : []),
   ];
 
