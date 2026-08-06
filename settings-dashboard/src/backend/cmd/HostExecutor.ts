@@ -130,6 +130,16 @@ export async function executeHostCommand(
         keyPath?: string;
         timeout?: number;
         autoDetectHost?: boolean;
+        /**
+         * Piped to the remote command's stdin. Use this for SECRETS.
+         *
+         * `command` itself is base64-encoded into the ssh argv below, which is
+         * obfuscation and not protection — anything in it is readable from `ps`
+         * in this container and on the host. stdin is the only channel that is
+         * not. See scripts/tools/onboarding.sh in template-root, which reads the
+         * onboarding password this way.
+         */
+        stdin?: string;
     }
 ): Promise<{ stdout: string, stderr: string }> {
     try {
@@ -196,7 +206,10 @@ export async function executeHostCommand(
         ].join(' ');
 
         // Pass `timeout` as a hard exec budget — see LocalExecutor.execute.
-        const result = await execute(sshCmd, false, timeout);
+        // `stdin` reaches the remote command because ssh forwards its own stdin
+        // over the channel; the local executor closes the pipe so the far side
+        // sees EOF instead of hanging.
+        const result = await execute(sshCmd, false, timeout, options?.stdin);
         return result;
     } catch (error) {
         throw new Error(`Failed to execute host command "${command.slice(0, 200)}${command.length > 200 ? '…' : ''}" : ${ error.message || error}`);

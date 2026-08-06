@@ -27,6 +27,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import { colors, font } from '@/app/pages/softTheme';
+import { OnboardingGate } from '@/app/pages/OnboardingGate';
 
 const SIDEBAR_WIDTH_OPEN = 280;
 const SIDEBAR_WIDTH_CLOSED = 72;
@@ -321,6 +322,11 @@ const App = ({
   );
 };
 
+// OnboardingGate wraps the shell rather than living on a route: "first start"
+// has to be unavoidable, and a route can be navigated away from. It renders
+// children untouched once the PCS is claimed and the welcome has been seen, and
+// also whenever its status call fails — a broken endpoint must never lock a
+// working dashboard behind a modal. See OnboardingGate.tsx.
 export const AppWrapper = ({
   children,
   dashboard,
@@ -330,14 +336,16 @@ export const AppWrapper = ({
   panels,
 }: AppWrapperProps) => (
   <StoreContextProvider value={store}>
-    <App
-      authProvider={authProvider}
-      dataProvider={dataProvider}
-      dashboard={dashboard}
-      panels={panels}
-      themeList={themeList}
-    >
-      {children}
-    </App>
+    <OnboardingGate>
+      <App
+        authProvider={authProvider}
+        dataProvider={dataProvider}
+        dashboard={dashboard}
+        panels={panels}
+        themeList={themeList}
+      >
+        {children}
+      </App>
+    </OnboardingGate>
   </StoreContextProvider>
 );

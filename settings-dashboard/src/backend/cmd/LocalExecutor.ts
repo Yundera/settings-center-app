@@ -10,11 +10,18 @@ import { spawn } from 'child_process';
  *                   rejects. This is what stops a hung `ssh` from lingering
  *                   forever — without it, a slow host command never returns
  *                   and (for callers on a timer) cycles pile up unbounded.
+ * @param stdinData  Written to the child's stdin, which is then closed. This is
+ *                   the ONLY safe channel for a secret: everything else this
+ *                   module sends travels in the command line (and, for
+ *                   executeHostCommand, base64 inside an ssh argv), where it is
+ *                   readable from `ps` in this container and on the host. Never
+ *                   logged, even when verbose.
  */
 export async function execute(
     cmd: string,
     verbose = true,
     timeoutMs = 0,
+    stdinData?: string,
 ): Promise<{ stdout: string, stderr: string }> {
     if (verbose) {
         console.log(`Executing command: ${cmd}`);
@@ -25,6 +32,18 @@ export async function execute(
     // `ssh` client spawned under it. Killing only the sh pid would orphan a
     // hung ssh, which is exactly the leak we are fixing.
     const child = spawn('/bin/sh', ['-c', cmd], { detached: true });
+
+    // Feed stdin and close it. Closing matters: `ssh` (and anything reading a
+    // password from stdin on the far side) blocks until EOF, so leaving the pipe
+    // open turns a fast call into a timeout. EPIPE is ignored — a child that
+    // exited before reading is the child's business, and the exit code below is
+    // what the caller reacts to.
+    if (stdinData !== undefined) {
+        child.stdin.on('error', () => { /* EPIPE: child already gone */ });
+        child.stdin.end(stdinData);
+    } else {
+        child.stdin.end();
+    }
 
     let stdout = '';
     let stderr = '';
