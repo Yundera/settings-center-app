@@ -1,6 +1,7 @@
 import {NextApiRequest, NextApiResponse} from 'next';
 import {SignJWT, jwtVerify} from 'jose';
 import {SESSION_KEY} from './sessionKey';
+import {currentEpoch} from './sessionEpoch';
 import {appendSetCookie} from './cookies';
 
 export const SESSION_COOKIE = 'admin_session';
@@ -35,7 +36,11 @@ export async function setSession(
   res: NextApiResponse,
   user: SessionUser,
 ): Promise<void> {
-  const jwt = await new SignJWT({user})
+  // Stamp the account's current session generation into the token. readSession
+  // rejects any token whose stamp is behind, which is how revoking an account
+  // or resetting its password ends sessions that are already in flight — see
+  // sessionEpoch.ts.
+  const jwt = await new SignJWT({user, epoch: currentEpoch(user.id)})
     .setProtectedHeader({alg: 'HS256'})
     .setIssuedAt()
     .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
@@ -55,6 +60,14 @@ export async function readSessionFromCookieHeader(cookieHeader: string): Promise
     const {payload} = await jwtVerify(token, SESSION_KEY);
     const user = (payload as any).user as SessionUser | undefined;
     if (!user?.id || !user?.provider) return null;
+
+    // Reject tokens issued before the account's last revocation. A token minted
+    // before this feature shipped has no `epoch` claim and reads as 0, which
+    // matches the default — so deploying this does not sign anyone out, but the
+    // first bump for an account invalidates everything outstanding for it.
+    const tokenEpoch = typeof (payload as any).epoch === 'number' ? (payload as any).epoch : 0;
+    if (tokenEpoch !== currentEpoch(user.id)) return null;
+
     return user;
   } catch {
     return null;

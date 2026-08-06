@@ -1,5 +1,6 @@
 import {NextApiRequest, NextApiResponse} from 'next';
 import {adminMiddleware} from '@/backend/auth/middleware';
+import {bumpEpoch} from '@/backend/auth/sessionEpoch';
 import {deleteUser, describeUserError, validateUsername} from '@/backend/server/Users/AutheliaUsers';
 
 export interface UsersDeleteRequest {
@@ -28,6 +29,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     try {
         await deleteUser(username);
+        // End sessions already issued to this account. Without it the account is
+        // gone from Authelia — so no NEW login is possible — but any admin_session
+        // JWT they hold stays valid for the rest of its 24h TTL, which for a
+        // revoked administrator means terminal and reboot keep working.
+        bumpEpoch(username);
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).json({status: 'success', username});
     } catch (error) {
