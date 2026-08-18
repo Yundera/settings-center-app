@@ -3,7 +3,7 @@ import type { Duplex } from 'stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import * as pty from 'node-pty';
 
-import { readSessionFromCookieHeader } from '@/backend/auth/session';
+import { readSessionFromHeaders } from '@/backend/auth/session';
 import { defaultHostUser, defaultPrivateKeyPath, detectHostIP } from '@/backend/cmd/HostExecutor';
 
 export const TERMINAL_WS_PATH = '/api/terminal/ws';
@@ -100,7 +100,12 @@ export function handleTerminalUpgrade(req: IncomingMessage, socket: Duplex, head
     // to an async closure and decide there. We must respond on `socket`
     // ourselves either way because we've claimed the upgrade.
     (async () => {
-        const user = await readSessionFromCookieHeader(req.headers.cookie || '');
+        // The AppShield gate authenticates the upgrade request itself (nginx
+        // auth_request runs before the proxy pass), and forwards the identity
+        // assertion on it like any other request — so the same check the HTTP
+        // routes use applies here. It has to be done again on our side because
+        // a WebSocket upgrade never passes through Next's middleware.
+        const user = await readSessionFromHeaders(req.headers);
         if (!user) {
             socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
             socket.destroy();

@@ -19,15 +19,20 @@ export function authMiddleware(
   };
 }
 
-// Group that grants administrative rights on the PCS. Set on the seeded `admin`
-// user by the template's ensure-authelia.sh, and assignable to further accounts
-// from the Account panel.
+// Role that grants administrative rights on the PCS. Derived from the `admins`
+// group, which the template's ensure-authelia.sh sets on the seeded operator
+// account and the Account panel can assign to further accounts.
+//
+// Note that the AppShield gate in front deliberately does NOT enforce group
+// membership (no OIDC_REQUIRED_GROUPS — see template-root's docker-compose.yml):
+// a non-admin account is allowed in as far as the Account panel, and this is what
+// stops it going further.
 export const ADMIN_ROLE = 'admin';
 
 /**
  * Like authMiddleware, but additionally requires the session to carry
- * role=admin (derived from the OIDC `groups` claim in
- * pages/api/auth/oidc/callback.ts).
+ * role=admin (derived from the `groups` claim of the gate's identity assertion,
+ * in backend/auth/session.ts).
  *
  * Every route under pages/api/admin/ must use this rather than authMiddleware.
  * A PCS can now hold more than one local account, and a plain account passing

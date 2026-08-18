@@ -61,19 +61,62 @@ services:
       - app-network
 
   # ---------------------------------------------------------------------------
-  # admin — settings-center-app under test.
+  # admin — the AppShield gate, mirroring template-root's yundera stack.
   #
   # Container name MUST be `admin`: auth-registrar derives the OIDC client id
-  # from a PTR lookup on the caller's IP, and the redirect-URI allowlist is
-  # built from `<name>-<suffix>`. Routed only through Caddy — no localhost port
-  # mapping, because the OIDC redirect URI is HTTPS-only.
+  # from a PTR lookup on the caller's IP, and the redirect-URI allowlist is built
+  # from `<name>-<suffix>`. The gate is now the caller, so the gate takes the
+  # name and the app under test becomes `admin-app` — same swap the prod template
+  # made. Routed only through Caddy: no localhost port mapping, because the OIDC
+  # redirect URI is HTTPS-only.
+  #
+  # This is what makes the harness worth having: the login path exercised here is
+  # the same gate the fleet runs, including the identity assertion the app
+  # verifies. `ADMIN_ASSERTION_SECRET` is a dev constant from .env rather than a
+  # generated secret — the prod value is minted by
+  # ensure-admin-gate-secret.sh.
   # ---------------------------------------------------------------------------
   admin:
+    image: ghcr.io/yundera/appshield:2.2.0
+    container_name: admin
+    hostname: admin
+    restart: unless-stopped
+    environment:
+      APP_NAME: "admin"
+      OIDC_REGISTRAR_URL: "http://auth-registrar:9092"
+      REDIRECT_HOST_SUFFIXES: "${DOMAIN}"
+      BACKEND_HOST: "admin-app"
+      # Dev mode listens on 4342 (server.ts); prod on 80.
+      BACKEND_PORT: "4342"
+      LISTEN_PORT: "80"
+      SESSION_DURATION_HOURS: "720"
+      IDENTITY_ASSERTION_SECRET: ${ADMIN_ASSERTION_SECRET:-dev-admin-gate-secret}
+      ALLOWED_PATHS: "api/health,api/perf,api/bench,api/brand"
+      # Next.js dev mode serves fast-refresh over a websocket and a lot of
+      # uncached chunks; buffering off keeps HMR responsive.
+      PROXY_BUFFERING: "off"
+    volumes:
+      - gate_data:/data
+      - certs:/certs:ro
+    networks:
+      - app-network
+    depends_on:
+      - admin-app
+    labels:
+      caddy_0: admin-${DOMAIN}
+      caddy_0.import: gateway_tls
+      caddy_0.reverse_proxy: "{{upstreams 80}}"
+
+  # ---------------------------------------------------------------------------
+  # admin-app — settings-center-app under test, behind the gate above.
+  # No caddy labels: the gate is the only route in.
+  # ---------------------------------------------------------------------------
+  admin-app:
     build:
       context: ../../
       dockerfile: dev/run/Dockerfile.admin-dev
-    container_name: admin
-    hostname: admin
+    container_name: admin-app
+    hostname: admin-app
     env_file:
       - ./.env
     environment:
@@ -87,9 +130,12 @@ services:
       # server-to-Caddy over HTTPS, and NODE_TLS_REJECT_UNAUTHORIZED=0 would
       # also mask a genuinely broken chain.
       NODE_EXTRA_CA_CERTS: /certs/ca.pem
-      # Same value the prod template sets — without it every login attempt
-      # fails with "OIDC_REGISTRAR_URL not configured".
-      OIDC_REGISTRAR_URL: http://auth-registrar:9092/register
+      # Shared with the gate: verifies the per-request identity assertion, and
+      # signs the control tokens that revoke gate sessions. Same value, both
+      # services — the app refuses every request if it does not match.
+      IDENTITY_ASSERTION_SECRET: ${ADMIN_ASSERTION_SECRET:-dev-admin-gate-secret}
+      IDENTITY_ASSERTION_AUDIENCE: "admin"
+      APPSHIELD_GATE_URL: "http://admin"
     volumes:
       - ssh_keys:/host_ssh/
       - admin_data:/app/data/
@@ -108,11 +154,6 @@ services:
     depends_on:
       pcs-host:
         condition: service_healthy
-    labels:
-      caddy_0: admin-${DOMAIN}
-      caddy_0.import: gateway_tls
-      # Dev mode listens on 4342 (server.ts); prod on 80.
-      caddy_0.reverse_proxy: "{{upstreams 4342}}"
 
   # ---------------------------------------------------------------------------
   # authelia — the PCS-local credential store, and the thing the Account panel
@@ -280,6 +321,9 @@ volumes:
   dex_data:
   dex_frontend:
   admin_data:
+  # Gate sessions (sessions.json) — so a `docker compose up` that recreates the
+  # gate does not sign you out mid-test.
+  gate_data:
   certs:
   caddy_data:
   caddy_config:

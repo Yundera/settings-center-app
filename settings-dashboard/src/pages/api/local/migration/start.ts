@@ -7,7 +7,7 @@ import {startMigration} from '@/backend/server/Migration/Migration';
  *
  * Reached via the Path C trigger:
  *   ssh -i $SSH_KEY admin@<srcHost> \
- *     'docker exec -i admin /app/settings-dashboard/scripts/start-migration.sh' \
+ *     'docker exec -i admin-app /app/settings-dashboard/scripts/start-migration.sh' \
  *     <<< '<json-payload>'
  *
  * The script does an HTTP POST to http://127.0.0.1:80/api/local/migration/start

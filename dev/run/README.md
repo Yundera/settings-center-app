@@ -5,7 +5,7 @@ the same auth topology the prod template ships — so the login path you exercis
 here is the login path that runs on a real PCS.
 
 ```
-browser ──► admin-dev.localhost         this app (Next.js dev mode, fast refresh)
+browser ──► admin-dev.localhost         AppShield gate (container `admin`)
                │ OIDC authorization_code
                ▼
            auth-dev.localhost           Dex — the broker every PCS app delegates to
@@ -13,7 +13,16 @@ browser ──► admin-dev.localhost         this app (Next.js dev mode, fast r
                ▼
         local-auth-dev.localhost        Authelia — the local credential store
                                         (users_database.yml lives here)
+
+gate ──► admin-app                      this app (Next.js dev mode, fast refresh)
+         X-AppShield-Assertion          signed identity, verified by the app;
+                                        no public route of its own
 ```
+
+The app is no longer an OIDC client: the gate authenticates, and states who the
+caller is in a per-request signed assertion. `ADMIN_ASSERTION_SECRET` in `.env`
+is the shared secret (defaults to a dev constant); on a real PCS it is minted by
+`ensure-admin-gate-secret.sh`.
 
 Every modern browser resolves `*.localhost` to `127.0.0.1` (RFC 6761), so there
 are no `/etc/hosts` edits. Services are published as **siblings** of `DOMAIN` —

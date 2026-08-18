@@ -9,9 +9,9 @@ import {getMigrationStatus} from '@/backend/server/Migration/Migration';
  * poll source pipeline state via:
  *
  *   ssh -i $SSH_KEY admin@<srcHost> \
- *     'docker exec admin curl -sS http://127.0.0.1:80/api/local/migration/status'
+ *     'docker exec admin-app curl -sS http://127.0.0.1:80/api/local/migration/status'
  *
- * Replaces the old `docker exec admin cat /app/.../migration-status.json`
+ * Replaces the old `docker exec admin-app cat /app/.../migration-status.json`
  * pattern, which broke when Migration.ts moved off JsonFileContext to
  * pure in-memory state. See AutoStatusProxy.ts in pcs-orchestrator.
  *

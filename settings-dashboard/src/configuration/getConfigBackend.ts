@@ -2,13 +2,23 @@ import {BaseConfig, getConfig as getConfigBackend} from "@/core/backend/LocalBac
 
 type Config = {
     BASE_PATH: string;
-    SESSION_KEY: string;          // optional, base64 HMAC key (dev). If unset, key is read/written at SESSION_KEY_PATH.
-    SESSION_KEY_PATH: string;     // optional path override (default: /app/data/admin-session-key).
-    SESSION_EPOCH_PATH: string;   // optional path override (default: /app/data/session-epochs.json).
     COMPOSE_FOLDER_PATH: string;
     HOST_ADDRESS: string; //optional, used for host commands
     MOCK: string;
-    OIDC_REGISTRAR_URL: string;
+
+    // --- Identity, as supplied by the AppShield gate in front of this app -----
+    // Shared with the gate. Verifies the per-request identity assertion the gate
+    // sends (backend/auth/gateIdentity.ts) AND signs the control tokens this app
+    // uses to revoke gate sessions (backend/auth/gateControl.ts). Without it
+    // NOTHING authenticates — the app fails closed by design.
+    IDENTITY_ASSERTION_SECRET: string;
+    // Expected `aud` on assertions = the gate's APP_NAME. Default 'admin'.
+    IDENTITY_ASSERTION_AUDIENCE: string;
+    // Base URL of our own gate on the pcs network. Default http://admin.
+    APPSHIELD_GATE_URL: string;
+    // DEV ONLY, ignored when NODE_ENV=production: `user` or `user:group,group`,
+    // treats every request as that identity so the app can run without a gate.
+    DEV_IDENTITY: string;
 
     DOMAIN: string;
     UID: string;

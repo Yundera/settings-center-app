@@ -48,7 +48,7 @@ export interface MigrationRequest {
     /**
      * Who initiated this migration. 'ui' is the operator-driven Path A/B
      * flow via the admin panel. 'cli' is the orchestrator-driven Path C flow
-     * via `docker exec admin … start-migration.ts`. Recorded into the status
+     * via `docker exec admin-app … start-migration.ts`. Recorded into the status
      * file so support diagnostics can tell automated runs from manual ones.
      */
     triggeredBy?: 'ui' | 'cli';

@@ -1,79 +1,76 @@
-import {NextApiRequest, NextApiResponse} from 'next';
-import {SignJWT, jwtVerify} from 'jose';
-import {SESSION_KEY} from './sessionKey';
-import {currentEpoch} from './sessionEpoch';
-import {appendSetCookie} from './cookies';
+import {NextApiRequest} from 'next';
+import {IncomingHttpHeaders} from 'http';
+import {GateIdentity, readGateIdentity} from './gateIdentity';
 
-export const SESSION_COOKIE = 'admin_session';
-const SESSION_TTL_SECONDS = 60 * 60 * 24; // 1 day
-
+/**
+ * The signed-in user, as the rest of the app has always seen it.
+ *
+ * The shape is unchanged on purpose: ~40 route handlers and the SPA's
+ * authProvider read it, and none of them needed to care that the identity now
+ * arrives from the AppShield gate rather than from a cookie this app signed
+ * itself. `readSession()` is the only seam that moved.
+ */
 export interface SessionUser {
   id: string;
   fullName: string;
   email: string;
   avatar: string;
   role: string;
-  provider: 'sso';
+  /** How the gate authenticated the caller: oidc | password | hash | oauth. */
+  provider: string;
 }
 
-function isHttps(req: {headers: Record<string, any>}): boolean {
-  const proto = (req.headers['x-forwarded-proto'] as string) || '';
-  return proto.split(',')[0].trim() === 'https';
+/**
+ * Groups that confer administrator rights on this PCS.
+ *
+ * Vendor-neutral by design: this app ships in the FOSS mesh template as well as
+ * the managed one, so it must not know the name of any particular identity
+ * provider. Any IdP wired into this PCS's Dex asserts administrator status the
+ * same way — by putting the account in `admins`.
+ *
+ * Producers today: Authelia (ensure-authelia.sh seeds the operator account into
+ * `admins`; the Account panel assigns it), and on managed boxes the operator
+ * IdP, whose owner policy is fail-closed — only the uid bound as owner_uid at
+ * client registration can complete an authorize against this PCS.
+ */
+const ADMIN_GROUPS = ['admin', 'admins'];
+
+/**
+ * Collapse the groups claim to this dashboard's binary role.
+ *
+ * Deliberately binary: a raw group name leaking into an authorization field is a
+ * hazard now that adminMiddleware gates every /api/admin route on it.
+ */
+function deriveRole(groups: string[]): string {
+  return groups.some(g => ADMIN_GROUPS.includes(g)) ? 'admin' : 'user';
 }
 
-function cookieAttrs(req: {headers: Record<string, any>}, maxAge: number): string {
-  return [
-    'HttpOnly',
-    'Path=/',
-    'SameSite=Lax',
-    `Max-Age=${maxAge}`,
-    isHttps(req) ? 'Secure' : '',
-  ].filter(Boolean).join('; ');
+function toSessionUser(identity: GateIdentity): SessionUser {
+  return {
+    id: identity.user,
+    fullName: identity.name || identity.user,
+    email: identity.email,
+    avatar: '',
+    role: deriveRole(identity.groups),
+    provider: identity.method,
+  };
 }
 
-export async function setSession(
-  req: NextApiRequest,
-  res: NextApiResponse,
-  user: SessionUser,
-): Promise<void> {
-  // Stamp the account's current session generation into the token. readSession
-  // rejects any token whose stamp is behind, which is how revoking an account
-  // or resetting its password ends sessions that are already in flight — see
-  // sessionEpoch.ts.
-  const jwt = await new SignJWT({user, epoch: currentEpoch(user.id)})
-    .setProtectedHeader({alg: 'HS256'})
-    .setIssuedAt()
-    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
-    .sign(SESSION_KEY);
-  appendSetCookie(res, `${SESSION_COOKIE}=${jwt}; ${cookieAttrs(req, SESSION_TTL_SECONDS)}`);
-}
-
+/** Identity for an API request, or null when the gate vouched for nobody. */
 export async function readSession(req: NextApiRequest): Promise<SessionUser | null> {
-  return readSessionFromCookieHeader(req.headers.cookie || '');
+  return readSessionFromHeaders(req.headers);
 }
 
-export async function readSessionFromCookieHeader(cookieHeader: string): Promise<SessionUser | null> {
-  const match = cookieHeader.split(/;\s*/).find(c => c.startsWith(`${SESSION_COOKIE}=`));
-  if (!match) return null;
-  const token = match.substring(SESSION_COOKIE.length + 1);
-  try {
-    const {payload} = await jwtVerify(token, SESSION_KEY);
-    const user = (payload as any).user as SessionUser | undefined;
-    if (!user?.id || !user?.provider) return null;
-
-    // Reject tokens issued before the account's last revocation. A token minted
-    // before this feature shipped has no `epoch` claim and reads as 0, which
-    // matches the default — so deploying this does not sign anyone out, but the
-    // first bump for an account invalidates everything outstanding for it.
-    const tokenEpoch = typeof (payload as any).epoch === 'number' ? (payload as any).epoch : 0;
-    if (tokenEpoch !== currentEpoch(user.id)) return null;
-
-    return user;
-  } catch {
-    return null;
-  }
-}
-
-export function clearSession(req: NextApiRequest, res: NextApiResponse): void {
-  appendSetCookie(res, `${SESSION_COOKIE}=; ${cookieAttrs(req, 0)}`);
+/**
+ * Same, from a bare header bag.
+ *
+ * Needed because two entry points never see a NextApiRequest: the pre-Next page
+ * gate in server.ts (serverGate.ts) and the terminal WebSocket upgrade, which
+ * Node hands us before any framework runs.
+ */
+export async function readSessionFromHeaders(
+  headers: IncomingHttpHeaders,
+): Promise<SessionUser | null> {
+  const identity = await readGateIdentity(headers);
+  return identity ? toSessionUser(identity) : null;
 }

@@ -1,14 +1,16 @@
 import {AuthProvider} from "ra-core";
+import {GATE_LOGIN_PATH, GATE_LOGOUT_PATH} from "@/core/gatePaths";
 
-// The server-side gate in server.ts redirects unauthenticated page loads to
-// /login before the SPA ever mounts, so checkAuth here is just a sanity
-// probe — any 401 from /api/me means the cookie expired between page load
-// and a downstream call.
+// Login lives in the AppShield gate in front of this app, not here. An
+// unauthenticated page load never reaches the SPA — the gate redirects it, and
+// serverGate.ts in server.ts refuses it as a second line — so checkAuth here is
+// just a sanity probe: any 401 from /api/me means the gate session ended between
+// page load and a downstream call.
 
 function bounceToLogin(): Promise<never> {
   if (typeof window === "undefined") return Promise.reject(new Error("Not authenticated"));
-  const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
-  window.location.replace(`/login?returnTo=${returnTo}`);
+  const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+  window.location.replace(`${GATE_LOGIN_PATH}?redirect=${redirect}`);
   return new Promise<never>(() => {}); // navigation in progress
 }
 
@@ -34,8 +36,8 @@ async function fetchMe(): Promise<MeUser | null> {
 
 export const localAuthProvider: AuthProvider = {
   // Drives the panel filter in App.tsx (`permissions[panel.permissions]`).
-  // `role` comes from the OIDC `groups` claim via deriveRole() in
-  // pages/api/auth/oidc/callback.ts — members of `admins` in Authelia's
+  // `role` comes from the groups claim in the gate's identity assertion via
+  // deriveRole() in backend/auth/session.ts — members of `admins` in Authelia's
   // users_database.yml get 'admin', everyone else 'user'.
   //
   // This is presentation only. The enforcing gate is adminMiddleware on every
@@ -62,13 +64,13 @@ export const localAuthProvider: AuthProvider = {
     if (!me) return bounceToLogin();
   },
   async logout() {
-    try {
-      await fetch('/api/auth/logout', {method: 'POST', credentials: 'same-origin'});
-    } catch {
-      // Even if the logout call fails, force the user back to the chooser —
-      // any stale cookie will be replaced on next sign-in.
-    }
-    return bounceToLogin();
+    // Logout is the gate's, not ours: it holds the session, and it ends on a
+    // terminal "Signed out" page rather than bouncing back through the login
+    // flow (the IdP's own 30-day session would otherwise sign the user straight
+    // back in and make logout look broken). So navigate there and let it finish
+    // — do not follow up with a bounce to login.
+    if (typeof window !== "undefined") window.location.replace(GATE_LOGOUT_PATH);
+    return new Promise<never>(() => {});
   },
   async getIdentity() {
     const me = await fetchMe();

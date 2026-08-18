@@ -1,62 +1,61 @@
 import {IncomingMessage, ServerResponse} from 'http';
-import {jwtVerify} from 'jose';
-import {SESSION_KEY} from './sessionKey';
-import {SESSION_COOKIE} from './session';
+import {readGateIdentity} from './gateIdentity';
 
 // Paths that bypass the page-level gate. API routes that need auth wrap
 // themselves (authMiddleware, or adminMiddleware for everything under
-// /api/admin/); everything in this list is intentionally reachable without a
-// session cookie (login flow, static assets, health).
+// /api/admin/); everything in this list is intentionally reachable without an
+// identity.
+//
+// KEEP THIS IN SYNC WITH THE GATE. The AppShield sidecar in front of this app
+// has its own ALLOWED_PATHS covering the same set — anything reachable here but
+// not there is unreachable in practice, and anything reachable there but not
+// here 302s to the login flow instead of answering. template-root's
+// docker-compose.yml is the other half.
 //
 // This gate checks authentication only, never role — that is deliberate. A
-// non-admin local account must still be able to load the SPA, where App.tsx
-// leaves it the Account panel and adminMiddleware 403s the rest.
+// non-admin account must still be able to load the SPA, where App.tsx leaves it
+// the Account panel and adminMiddleware 403s the rest.
 const BYPASS_PREFIXES = [
-  '/api/auth/',          // login, logout, providers, oidc/*
   '/api/me',             // does its own session check
-  '/api/health',         // public probe
+  '/api/health',         // public probe — the orchestrator polls it during
+                         //   provisioning, BEFORE any credential exists on the
+                         //   box, so it must never require one
   '/api/perf',           // public RAM-cached metrics snapshot (orchestrator `pcs perf`)
   '/api/brand',          // public brand config (name, logo, provider link).
-                         //   Must be reachable without a session: the /login
-                         //   chooser renders the logo and title before one
-                         //   exists. Carries no secrets — see resolveBrand.ts.
+                         //   Carries no secrets — see resolveBrand.ts.
   '/api/bench/',         // public disk/network bench cache (orchestrator `pcs perf`);
                          //   read-only snapshot + cooldown-gated lazy trigger,
                          //   so an unauthenticated caller can start at most one
                          //   bench per cooldown window (see BenchCache.ts)
   '/api/local/',         // loopback-only routes (orchestrator's Path C trigger,
                          //   source's migration-status poll) — gated by
-                         //   `loopbackOnly` middleware on the handler itself;
-                         //   must skip the session gate so unauthenticated
-                         //   loopback callers can reach `loopbackOnly`.
+                         //   `loopbackOnly` middleware on the handler itself.
+                         //   Deliberately NOT in the gate's ALLOWED_PATHS: the
+                         //   only legitimate callers run inside this container
+                         //   and reach it over loopback, bypassing the gate
+                         //   entirely, which is what keeps that trust path
+                         //   independent of the login chain.
   '/_next/',             // Next.js runtime
-  '/login',              // chooser
   '/favicon',
   '/logo',
   '/robots.txt',
   '/manifest',
 ];
 
+/**
+ * Where to send a browser that arrives without an identity.
+ *
+ * This is the gate's endpoint, not ours: the gate starts the OIDC flow, and this
+ * app no longer has a login page of its own. Reaching it means the request got
+ * here without passing the gate's own check — normally impossible, since the
+ * gate only proxies what it has authenticated. The realistic causes are a
+ * mismatched ALLOWED_PATHS, a missing/rotated IDENTITY_ASSERTION_SECRET, or
+ * something on the `pcs` network talking to this container directly.
+ */
+const GATE_LOGIN_PATH = '/nhl-auth/oidc/login';
+
 function shouldBypass(pathname: string): boolean {
-  if (pathname === '/login') return true;
   return BYPASS_PREFIXES.some(p => pathname.startsWith(p));
-}
-
-function readSessionCookieRaw(req: IncomingMessage): string | null {
-  const header = req.headers.cookie || '';
-  const match = header.split(/;\s*/).find(c => c.startsWith(`${SESSION_COOKIE}=`));
-  return match ? match.substring(SESSION_COOKIE.length + 1) : null;
-}
-
-async function hasValidSession(req: IncomingMessage): Promise<boolean> {
-  const token = readSessionCookieRaw(req);
-  if (!token) return false;
-  try {
-    const {payload} = await jwtVerify(token, SESSION_KEY);
-    return !!(payload as any).user?.id;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -70,14 +69,15 @@ export async function applyAuthGate(
 ): Promise<boolean> {
   if (shouldBypass(pathname)) return false;
 
-  if (await hasValidSession(req)) return false;
+  if (await readGateIdentity(req.headers)) return false;
 
-  // Page request (no /api/ prefix): bounce to chooser preserving target.
+  // Page request (no /api/ prefix): hand it back to the gate's login flow,
+  // preserving the target.
   if (!pathname.startsWith('/api/')) {
     const search = req.url && req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
-    const returnTo = encodeURIComponent(pathname + search);
+    const redirect = encodeURIComponent(pathname + search);
     res.statusCode = 302;
-    res.setHeader('Location', `/login?returnTo=${returnTo}`);
+    res.setHeader('Location', `${GATE_LOGIN_PATH}?redirect=${redirect}`);
     res.end();
     return true;
   }

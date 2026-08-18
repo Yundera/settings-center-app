@@ -6,7 +6,7 @@ import {NextApiRequest, NextApiResponse} from 'next';
  * because the only callers are processes running inside this container.
  *
  * Trust chain (Path C, see doc/architecture/migration.md):
- *   support-key SSH → docker exec admin → loopback HTTP → this handler
+ *   support-key SSH → docker exec admin-app → loopback HTTP → this handler
  *
  * Each link is something the user explicitly enabled. The loopback gate
  * exists so that a misconfigured reverse proxy or a leaked internal route

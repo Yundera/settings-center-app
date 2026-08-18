@@ -1,6 +1,6 @@
 import {NextApiRequest, NextApiResponse} from 'next';
 import {adminMiddleware} from '@/backend/auth/middleware';
-import {bumpEpoch} from '@/backend/auth/sessionEpoch';
+import {revokeGateSessions} from '@/backend/auth/gateControl';
 import {deleteUser, describeUserError, validateUsername} from '@/backend/server/Users/AutheliaUsers';
 
 export interface UsersDeleteRequest {
@@ -30,12 +30,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     try {
         await deleteUser(username);
         // End sessions already issued to this account. Without it the account is
-        // gone from Authelia — so no NEW login is possible — but any admin_session
-        // JWT they hold stays valid for the rest of its 24h TTL, which for a
-        // revoked administrator means terminal and reboot keep working.
-        bumpEpoch(username);
+        // gone from Authelia — so no NEW login is possible — but the gate session
+        // they hold stays valid for the rest of its TTL (30 days by default),
+        // which for a revoked administrator means terminal and reboot keep
+        // working. Reported rather than thrown: the account IS deleted at this
+        // point, and failing the response would be a lie about that.
+        const revoked = await revokeGateSessions({user: username});
         res.setHeader('Cache-Control', 'no-store');
-        res.status(200).json({status: 'success', username});
+        res.status(200).json({
+            status: 'success',
+            username,
+            ...(revoked === null
+                ? {warning: 'Account deleted, but existing sessions could not be revoked — check the gate.'}
+                : {}),
+        });
     } catch (error) {
         res.status(500).json({error: describeUserError(error)});
     }
