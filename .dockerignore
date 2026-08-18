@@ -1,6 +1,13 @@
 # Dependencies (will be installed in container)
 **/node_modules
 
+# Local pnpm content-addressable store. Gitignored, ~1 GB, and never needed in
+# the image — the builds install through their own --mount=type=cache store. It
+# was missing here, so every `docker build` (CI included) shipped the whole
+# thing across as build context before doing any work.
+.pnpm-store
+**/.pnpm-store
+
 # Build artifacts (will be built in container)
 **/.next
 **/dist

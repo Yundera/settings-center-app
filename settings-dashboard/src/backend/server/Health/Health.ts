@@ -1,5 +1,6 @@
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 import { latestCompletedSelfCheckRun } from "./SelfCheckLog";
+import { describePressure, readProcessPressure, type ProcessPressure } from "./ProcessPressure";
 import packageJson from "../../../../package.json";
 
 const LOG_FILE = "/DATA/AppData/casaos/apps/yundera/log/yundera.log";
@@ -26,6 +27,12 @@ export type SelfCheckStatus = {
 export type HealthSnapshot = {
     version: string;
     selfCheck: SelfCheckStatus;
+    // PID headroom inside this container. Sampled locally (plain /proc and
+    // /sys reads, no SSH, no shell), so unlike selfCheck it stays truthful
+    // when the host is unreachable — and it is the one signal that still
+    // works once the container can no longer fork. See ProcessPressure.ts for
+    // why this is worth a field.
+    processPressure: ProcessPressure;
     lastRefreshedAt: string | null; // ISO 8601 of last successful refresh
     // Error message from the most recent failed refresh, or null when the last
     // refresh succeeded (or none has run yet). Surfaced so a refresh failure is
@@ -58,6 +65,7 @@ function getState(): HealthState {
             snapshot: {
                 version: VERSION,
                 selfCheck: { ok: null, lastRunAt: null, passed: null, total: null },
+                processPressure: { pidsCurrent: null, pidsMax: null, zombies: null, warning: false },
                 lastRefreshedAt: null,
                 lastError: null,
             },
@@ -103,13 +111,27 @@ function parseSelfCheckStatus(logTail: string): SelfCheckStatus {
 }
 
 /**
- * Refresh the cached snapshot by reading the host log over SSH.
+ * Refresh the cached snapshot: the host log over SSH, plus this container's own
+ * process pressure from local /proc and /sys.
+ *
  * On failure we keep the previous selfCheck rather than blanking it on a
  * transient SSH hiccup, but record the error in `lastError` so the failure is
- * visible to callers instead of silently swallowed.
+ * visible to callers instead of silently swallowed. processPressure is refreshed
+ * on both paths — see the note in the body.
  */
 export async function refreshHealthSnapshot(): Promise<void> {
     const state = getState();
+
+    // Sampled first and kept outside the try below, deliberately: it needs no
+    // SSH, so it must survive the SSH call failing. The incident that put this
+    // here (see ProcessPressure.ts) is one where the host command fails
+    // *because* of what this measures — recording it only on the success path
+    // would blind the snapshot exactly when it has something to say.
+    const processPressure = await readProcessPressure();
+    if (processPressure.warning) {
+        console.warn(describePressure(processPressure));
+    }
+
     try {
         const result = await executeHostCommand(
             `tail -n ${LOG_TAIL_LINES} ${LOG_FILE}`
@@ -118,6 +140,7 @@ export async function refreshHealthSnapshot(): Promise<void> {
         state.snapshot = {
             version: VERSION,
             selfCheck,
+            processPressure,
             lastRefreshedAt: new Date().toISOString(),
             lastError: null,
         };
@@ -127,7 +150,7 @@ export async function refreshHealthSnapshot(): Promise<void> {
             "Health: failed to refresh self-check status from host log:",
             message
         );
-        state.snapshot = { ...state.snapshot, lastError: message };
+        state.snapshot = { ...state.snapshot, processPressure, lastError: message };
     }
 }
 

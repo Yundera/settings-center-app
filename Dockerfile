@@ -56,7 +56,14 @@ FROM node:20-alpine AS runner
 # `OCI runtime exec failed: exec: "curl": executable file not found in $PATH`,
 # the migrate-auto job fails with TRIGGER_FAILED, and the migration never
 # reaches the source. See doc/architecture/migration.md (Path C).
-RUN apk add --no-cache iproute2 openssh-client curl python3 make g++ linux-headers
+# `tini` becomes PID 1 — see the ENTRYPOINT note at the bottom of this stage;
+# without it this image leaks zombies until fork() stops working.
+# No `iproute2`: it was added solely so detectHostIP could shell out to
+# `ip route show default`, and that now parses /proc/net/route in-process
+# (HostExecutor.ts). No code path here runs `ip` any more. Note busybox still
+# provides a cut-down /sbin/ip, so the command has not disappeared from an
+# interactive shell in this container — only the full iproute2 build has.
+RUN apk add --no-cache tini openssh-client curl python3 make g++ linux-headers
 
 # Install pnpm for production
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -101,5 +108,29 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
 EXPOSE 80
+
+# PID 1 MUST be a real init, not `pnpm`.
+#
+# This app reaches the host by shelling out to `ssh` (HostExecutor.ts), and ssh
+# with ControlMaster/ControlPersist DAEMONIZES its multiplexing master through a
+# double fork — by design, the intermediate forks and eventually the master
+# itself are orphaned onto PID 1. A Node process (which is what `pnpm -r prod`
+# is) never wait()s on children it did not spawn, so every one of those orphans
+# became a permanent zombie holding a PID.
+#
+# Observed on a staging PCS: ~4 PIDs leaked per ControlPersist cycle, filling
+# the container's 9483-entry pid cgroup in six days. After that every fork()
+# returned EAGAIN, so each shell-out failed — surfacing as nonsense errors from
+# whatever ran next — until Node itself could not spawn a thread and aborted
+# (SIGABRT, exit 134). The restart cleared the zombies, which is why it looked
+# intermittent on a weekly cycle rather than like a leak.
+#
+# tini reaps orphans, which makes the whole class of bug impossible regardless
+# of what the app spawns. Keep this even if the ssh multiplexing options change.
+#
+# docker-entrypoint.sh is the node base image's own ENTRYPOINT, which this line
+# replaces; it is chained here rather than dropped so `pnpm …` (and the dev
+# harness's `command:` override) still resolve exactly as they did before.
+ENTRYPOINT ["/sbin/tini", "--", "docker-entrypoint.sh"]
 
 CMD ["pnpm", "-r", "prod"]

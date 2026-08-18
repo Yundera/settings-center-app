@@ -159,11 +159,12 @@ export async function runRsync(opts: RsyncOptions): Promise<void> {
 /**
  * Resolve the source PCS's host address from inside the container. Delegates
  * to HostExecutor.detectHostIP so this step uses the same detection
- * (HOST_ADDRESS env → default gateway → docker0 → 'host.docker.internal'
- * last-resort) as every other call site. The previous implementation
- * skipped detection entirely and went straight to 'host.docker.internal'
- * when HOST_ADDRESS was unset, which fails on bare-metal/VPS PCS where
- * 'host.docker.internal' isn't resolvable.
+ * (HOST_ADDRESS env, else the default gateway from /proc/net/route) as every
+ * other call site, and throws the same way when neither yields an address.
+ *
+ * An earlier implementation skipped detection and used 'host.docker.internal',
+ * which resolves nowhere on a bare-metal/VPS PCS; detectHostIP no longer falls
+ * back to that name either, for the same reason.
  */
 async function resolveSourceHost(): Promise<string> {
     return detectHostIP();

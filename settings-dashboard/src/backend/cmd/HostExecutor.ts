@@ -8,42 +8,95 @@ const defaultAuthorizedKeysPath = '/host_ssh/authorized_keys';
 export const defaultPrivateKeyPath = '/app/container_ssh_key';
 export const defaultHostUser = 'admin';
 
+const procNetRoutePath = '/proc/net/route';
+
+/** Memoised default gateway. The container's network cannot change under it. */
+let cachedHostIP: string | null = null;
+
 /**
- * Detects the host IP address from inside the container
+ * Extract the default gateway from the contents of /proc/net/route.
+ *
+ * The kernel prints addresses as little-endian hex, so the gateway of
+ *   eth0  00000000  010012AC  0003  …
+ * is AC.12.00.01 read backwards — 172.18.0.1. Exported so the parse can be
+ * exercised without a container.
+ */
+export function parseDefaultGateway(procNetRoute: string): string | null {
+    // Skip the header line.
+    for (const line of procNetRoute.split('\n').slice(1)) {
+        const fields = line.trim().split(/\s+/);
+        if (fields.length < 4) continue;
+
+        const [, destination, gateway, flagsHex] = fields;
+        // The default route is the one matching every destination.
+        if (destination !== '00000000') continue;
+        // RTF_GATEWAY (0x2) — a default route with no gateway is not usable here.
+        const flags = Number.parseInt(flagsHex, 16);
+        if (!Number.isFinite(flags) || (flags & 0x2) === 0) continue;
+        if (!/^[0-9A-Fa-f]{8}$/.test(gateway) || gateway === '00000000') continue;
+
+        const octets: number[] = [];
+        for (let i = 6; i >= 0; i -= 2) {
+            octets.push(Number.parseInt(gateway.slice(i, i + 2), 16));
+        }
+        return octets.join('.');
+    }
+    return null;
+}
+
+/**
+ * Address of the Docker host as seen from inside this container — the default
+ * gateway, which is the bridge address the host listens on.
+ *
+ * Read straight out of /proc/net/route rather than shelled out to
+ * `ip route show default | awk …`. Two reasons, both learned the hard way:
+ *
+ *  - Every host command called this, so the old version paid two fork()s per
+ *    call — on top of the ssh itself — for a value that cannot change while the
+ *    container lives. Now it is one file read, memoised after the first hit.
+ *  - Because it forked, it was the FIRST thing to break when the container ran
+ *    out of PIDs (see the ENTRYPOINT note in the Dockerfile) — and it answered
+ *    that failure by returning the literal 'host.docker.internal'. That name
+ *    only resolves under Docker Desktop; on a real PCS it resolves nowhere, so
+ *    a PID exhaustion was reported to the operator as
+ *    `ssh: Could not resolve hostname host.docker.internal`, pointing the
+ *    investigation at DNS and hostnames instead of at fork(). A wrong answer
+ *    that looks like a different subsystem's fault is worse than no answer:
+ *    this now throws, and the throw carries the real cause.
+ *
+ * HOST_ADDRESS still overrides everything, which is the supported escape hatch
+ * for a host that is not on the default route.
+ *
  * @returns Promise<string> - Host IP address
+ * @throws if the route table cannot be read or holds no usable default route
  */
 export async function detectHostIP(): Promise<string> {
-    if(getConfig("HOST_ADDRESS")){
-        return getConfig("HOST_ADDRESS");
+    const configured = getConfig("HOST_ADDRESS");
+    if (configured) {
+        return configured;
     }
+    if (cachedHostIP) {
+        return cachedHostIP;
+    }
+
+    let routeTable: string;
     try {
-        // Try to get the default gateway IP (works on Linux)
-        const result = await execute("ip route show default | awk '/default/ {print $3}'",false);
-        const hostIP = result.stdout.trim();
-
-        if (hostIP && hostIP.match(/^\d+\.\d+\.\d+\.\d+$/)) {
-            return hostIP;
-        }
-
-        // Fallback: try to parse docker0 interface
-        const dockerResult = await execute("ip route | grep docker0 | awk '{print $1}' | head -1",false);
-        const dockerNetwork = dockerResult.stdout.trim();
-
-        if (dockerNetwork) {
-            // Extract gateway from network (usually .1)
-            const networkParts = dockerNetwork.split('/')[0].split('.');
-            networkParts[3] = '1';
-            const gatewayIP = networkParts.join('.');
-            return gatewayIP;
-        }
-
-        // Last resort fallback
-        return 'host.docker.internal';
-
+        routeTable = await fs.readFile(procNetRoutePath, 'utf8');
     } catch (error) {
-        console.warn('Error detecting host IP, falling back to host.docker.internal:', error);
-        return 'host.docker.internal';
+        throw new Error(
+            `Cannot determine the host address: ${procNetRoutePath} is unreadable (${error instanceof Error ? error.message : String(error)}). Set HOST_ADDRESS to override.`
+        );
     }
+
+    const gateway = parseDefaultGateway(routeTable);
+    if (!gateway) {
+        throw new Error(
+            `Cannot determine the host address: no default gateway in ${procNetRoutePath}. Set HOST_ADDRESS to override.`
+        );
+    }
+
+    cachedHostIP = gateway;
+    return gateway;
 }
 
 /**
@@ -166,7 +219,11 @@ export async function executeHostCommand(
         if (!host && autoDetectHost) {
             host = await detectHostIP();
         } else if (!host) {
-            host = 'host.docker.internal'; // fallback
+            // autoDetectHost:false is "I am supplying the host myself", so
+            // arriving here without one is a caller bug. It used to guess
+            // 'host.docker.internal', which resolves nowhere on a real PCS —
+            // same trap as the one detectHostIP just stopped falling into.
+            throw new Error('executeHostCommand: autoDetectHost is false but no host was supplied');
         }
 
         // Base64-encode the command so no character in the script gets
@@ -210,14 +267,26 @@ export async function executeHostCommand(
             '-o', 'ServerAliveInterval=5',
             '-o', 'ServerAliveCountMax=2',
             // Connection multiplexing: the first call opens a master that
-            // persists 60 s; subsequent calls reuse it as cheap channels
-            // instead of paying a full TCP + key-exchange handshake every
-            // time. This is what makes the 5 s metrics cadence affordable —
-            // the expensive crypto handshake happens once per minute, not
-            // 12 times.
+            // persists; subsequent calls reuse it as cheap channels instead of
+            // paying a full TCP + key-exchange handshake every time. This is
+            // what makes the 5 s metrics cadence affordable — the expensive
+            // crypto handshake happens once, not 12 times a minute.
+            //
+            // The persist window is 1 h, not the 60 s it used to be, because
+            // the master is not free to recreate: ssh daemonises it through a
+            // double fork, so each master lifecycle orphans processes onto
+            // PID 1 (harmless now that tini reaps them — see the Dockerfile
+            // ENTRYPOINT note — but still churn). At 60 s against the 5 min
+            // idle metrics cadence the master expired between essentially
+            // every poll, so multiplexing was paying its setup cost over and
+            // over and delivering none of its benefit. An hour means one
+            // master per container lifetime in practice. A wedged master is
+            // still dropped promptly by the ServerAlive settings above, and
+            // the container mints a fresh keypair on each start, so nothing
+            // depends on the master expiring quickly.
             '-o', 'ControlMaster=auto',
             '-o', 'ControlPath=/tmp/ssh-mux-%C',
-            '-o', 'ControlPersist=60s',
+            '-o', 'ControlPersist=1h',
             `${user}@${host}`,
             remoteRunner,
         ].join(' ');
