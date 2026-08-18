@@ -34,6 +34,22 @@ async function fetchMe(): Promise<MeUser | null> {
   }
 }
 
+/**
+ * The upstream IdP's logout endpoint, or null when the deployment configures
+ * none. Read at logout time rather than cached at load: a session can outlive a
+ * config change, and this is not hot enough for the round trip to matter.
+ */
+async function fetchUpstreamLogoutUrl(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/me', {credentials: 'same-origin'});
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data?.upstreamLogoutUrl === 'string' ? data.upstreamLogoutUrl : null;
+  } catch {
+    return null;
+  }
+}
+
 export const localAuthProvider: AuthProvider = {
   // Drives the panel filter in App.tsx (`permissions[panel.permissions]`).
   // `role` comes from the groups claim in the gate's identity assertion via
@@ -64,12 +80,38 @@ export const localAuthProvider: AuthProvider = {
     if (!me) return bounceToLogin();
   },
   async logout() {
-    // Logout is the gate's, not ours: it holds the session, and it ends on a
-    // terminal "Signed out" page rather than bouncing back through the login
+    // Two sessions end here, and the browser has to end one of them itself.
+    //
+    // The gate owns this app's session and ends it at GATE_LOGOUT_PATH, on a
+    // terminal "Signed out" page rather than a bounce back through the login
     // flow (the IdP's own 30-day session would otherwise sign the user straight
-    // back in and make logout look broken). So navigate there and let it finish
-    // — do not follow up with a bounce to login.
-    if (typeof window !== "undefined") window.location.replace(GATE_LOGOUT_PATH);
+    // back in and make logout look broken).
+    //
+    // But that IdP session is exactly what makes the connector chooser theatre:
+    // while it stands, picking a connector is a silent redirect and nobody is
+    // asked for a credential. Ending it cannot be done server-side — the cookie
+    // is the browser's, host-only on a sibling host — so the POST goes out from
+    // here. `no-cors` keeps it a simple request: no preflight, nothing required
+    // of the IdP's CORS config, and an opaque response we never read. The cookie
+    // rides because both hosts are `<app>-${DOMAIN}` and the request is
+    // therefore same-site, which SameSite=lax permits.
+    //
+    // Best-effort by construction, as logout is in the specs that define it: the
+    // await orders this before the navigation, and every outcome — no configured
+    // upstream, network failure, opaque rejection — still falls through to the
+    // gate logout below. Failing to reach the IdP must never trap the user
+    // inside this app.
+    if (typeof window === "undefined") return;
+    const upstream = await fetchUpstreamLogoutUrl();
+    if (upstream) {
+      try {
+        await fetch(upstream, {method: 'POST', mode: 'no-cors', credentials: 'include'});
+      } catch {
+        // Opaque by design — a thrown error here says the request never left,
+        // not that the IdP refused. Either way the gate session still has to go.
+      }
+    }
+    window.location.replace(GATE_LOGOUT_PATH);
     return new Promise<never>(() => {});
   },
   async getIdentity() {

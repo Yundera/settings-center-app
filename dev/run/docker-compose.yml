@@ -136,6 +136,11 @@ services:
       IDENTITY_ASSERTION_SECRET: ${ADMIN_ASSERTION_SECRET:-dev-admin-gate-secret}
       IDENTITY_ASSERTION_AUDIENCE: "admin"
       APPSHIELD_GATE_URL: "http://admin"
+      # Ends Authelia's session at logout, so the next sign-in actually asks for
+      # a password instead of being waved through by its 30-day cookie. Fired by
+      # the BROWSER (the cookie never reaches this container) as a same-site
+      # no-cors POST — see the same knob in template-root's docker-compose.yml.
+      UPSTREAM_LOGOUT_URL: "https://local-auth-${DOMAIN}/api/logout"
     volumes:
       - ssh_keys:/host_ssh/
       - admin_data:/app/data/

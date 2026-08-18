@@ -20,6 +20,19 @@ type Config = {
     // treats every request as that identity so the app can run without a gate.
     DEV_IDENTITY: string;
 
+    // --- Logout --------------------------------------------------------------
+    // Where to POST to end the UPSTREAM IdP's session when the user logs out, or
+    // unset when there is nothing upstream to end. The gate ends its own session
+    // at /nhl-auth/logout; this ends the one behind Dex, without which the next
+    // sign-in is a silent redirect and the chooser never asks for a credential.
+    //
+    // A full URL supplied by the deployment, deliberately not derived here: this
+    // app ships in the FOSS mesh template as well as the managed one and must not
+    // know the name of any particular identity provider — the same rule that
+    // keeps ADMIN_GROUPS vendor-neutral in backend/auth/session.ts. template-root
+    // points it at Authelia's /api/logout.
+    UPSTREAM_LOGOUT_URL: string;
+
     DOMAIN: string;
     UID: string;
     PUBLIC_IP: string;
