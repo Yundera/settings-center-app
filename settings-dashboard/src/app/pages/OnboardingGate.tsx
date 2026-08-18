@@ -60,6 +60,15 @@ interface OnboardingResult {
 
 const DEFAULT_DISPLAYNAME = 'Administrator';
 
+// softTheme's tokens are written for the app's DARK surfaces: `title.small` is
+// pure white and `textMuted` is a pale blue. MUI's Dialog paper is white, so
+// spreading them here rendered the titles white-on-white (invisible, though
+// still in the a11y tree) and the body text at roughly 2:1 contrast. These two
+// dialogs are the only place the design system meets a light surface, so the
+// light-surface variants live here rather than being added to the shared theme.
+const dialogTitleSx = {...title.small, color: colors.textDark};
+const dialogBodySx = {fontSize: font.detail, color: 'rgba(10, 39, 63, 0.72)'};
+
 export const OnboardingGate = ({children}: {children: React.ReactNode}) => {
     const [status, setStatus] = useState<OnboardingStatus | null>(null);
     const [checked, setChecked] = useState(false);
@@ -148,9 +157,9 @@ export const OnboardingGate = ({children}: {children: React.ReactNode}) => {
             <>
                 {children}
                 <Dialog open maxWidth="sm" fullWidth onClose={dismissWelcome}>
-                    <DialogTitle sx={{...title.small}}>Your PCS is ready</DialogTitle>
+                    <DialogTitle sx={dialogTitleSx}>Your PCS is ready</DialogTitle>
                     <DialogContent>
-                        <Typography sx={{fontSize: font.detail, color: colors.textMuted}}>
+                        <Typography sx={dialogBodySx}>
                             You are signed in as <strong>{status.username || 'your account'}</strong>. Local
                             accounts, domains and installed apps are all managed from here.
                         </Typography>
@@ -168,10 +177,10 @@ export const OnboardingGate = ({children}: {children: React.ReactNode}) => {
     // Unclaimed → blocking. No onClose, no skip: this is the whole point.
     return (
         <Dialog open maxWidth="sm" fullWidth disableEscapeKeyDown>
-            <DialogTitle sx={{...title.small}}>Set up your account</DialogTitle>
+            <DialogTitle sx={dialogTitleSx}>Set up your account</DialogTitle>
             <DialogContent>
                 <Stack spacing={2} sx={{marginTop: 1}}>
-                    <Typography sx={{fontSize: font.detail, color: colors.textMuted}}>
+                    <Typography sx={dialogBodySx}>
                         This server has no local account yet. Choose the username and password you
                         will use to sign in from now on — you can keep using single sign-on as well.
                     </Typography>

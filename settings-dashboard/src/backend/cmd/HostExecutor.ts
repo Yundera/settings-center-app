@@ -112,11 +112,14 @@ export async function getContainerKeyFingerprint(): Promise<string | null> {
  * non-trivial bash scripts (df, find, multi-line bash -c '...') hit this
  * repeatedly.
  *
- * New strategy: base64-encode the entire command and pipe it through
- * `base64 -d | bash` on the host. The OUTER ssh argument is then
- * alphanumeric-only, so /bin/sh does no expansion or quote interpretation
- * at all. The inner bash sees the script verbatim, exactly as written.
- * Same pattern is already used by `installAdminKeyOnHost` further down.
+ * New strategy: base64-encode the entire command and hand it to bash on the
+ * host through PROCESS SUBSTITUTION — `bash <(echo B64 | base64 -d)`. The
+ * OUTER ssh argument is then alphanumeric-only, so /bin/sh does no expansion
+ * or quote interpretation at all, and the inner bash sees the script verbatim.
+ *
+ * Not a plain `| base64 -d | bash` pipe: that makes the decode pipe the
+ * script's stdin, which breaks the `stdin` option below. See the detailed note
+ * at the remoteRunner construction.
  *
  * @param command - The command to execute on the host (any valid bash script)
  * @param options - Optional configuration
@@ -168,14 +171,28 @@ export async function executeHostCommand(
 
         // Base64-encode the command so no character in the script gets
         // interpreted by either the local shell or the remote shell. Plain
-        // ASCII (A-Z, a-z, 0-9, +, /, =) is safe inside single quotes.
+        // ASCII (A-Z, a-z, 0-9, +, /, =) is safe inside both quote layers.
         // The remote runner MUST be a single quoted argument so the local
-        // /bin/sh doesn't parse the `| base64 -d | bash` pipeline locally
-        // — without the wrapping quotes it would try to pipe ssh's stdout
-        // through base64 and bash in the *admin container* (Alpine, no
-        // bash), producing `bash: not found`.
+        // /bin/sh doesn't parse the redirection and pipeline locally — without
+        // the wrapping quotes it would try to run them in the *admin container*
+        // (Alpine, no bash), producing `bash: not found`.
+        //
+        // THE SCRIPT IS FED VIA PROCESS SUBSTITUTION, NOT A PIPE. This is
+        // load-bearing and easy to "simplify" back into a bug. The obvious
+        // `echo B64 | base64 -d | bash` leaves the decode pipe as bash's
+        // stdin — already at EOF — so the remote script can never read the
+        // `stdin` payload below, and every secret-passing caller silently gets
+        // nothing (onboarding.sh dies with "no password on stdin"). With
+        // `bash <(…)` the script arrives on a /dev/fd path and stdin stays
+        // connected to the ssh channel, which is the whole point.
+        //
+        // The outer `bash -c` is deliberate too: process substitution is a
+        // bash/zsh feature, and ssh runs this string through the remote user's
+        // LOGIN shell, which is not guaranteed to be bash. Invoking bash
+        // explicitly makes the runner independent of that. Exit codes
+        // propagate through both layers unchanged.
         const commandB64 = Buffer.from(command, 'utf8').toString('base64');
-        const remoteRunner = `'echo ${commandB64} | base64 -d | bash'`;
+        const remoteRunner = `'bash -c "bash <(echo ${commandB64} | base64 -d)"'`;
 
         // Connect phase gets a short bound so a dead host fails fast; the full
         // `timeout` is the hard wall-clock budget enforced by the local
@@ -207,8 +224,9 @@ export async function executeHostCommand(
 
         // Pass `timeout` as a hard exec budget — see LocalExecutor.execute.
         // `stdin` reaches the remote command because ssh forwards its own stdin
-        // over the channel; the local executor closes the pipe so the far side
-        // sees EOF instead of hanging.
+        // over the channel AND the remote runner above keeps that channel as
+        // the script's stdin; the local executor closes the pipe so the far
+        // side sees EOF instead of hanging.
         const result = await execute(sshCmd, false, timeout, options?.stdin);
         return result;
     } catch (error) {
