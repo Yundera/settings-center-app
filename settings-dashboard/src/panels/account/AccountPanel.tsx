@@ -31,6 +31,7 @@ import KeyIcon from "@mui/icons-material/Key";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import {useNotify} from "react-admin";
 import {apiRequest} from "@/core/authApi";
 import {button, card, colors, font, spacing, title} from "@/app/pages/softTheme";
@@ -38,10 +39,12 @@ import {button, card, colors, font, spacing, title} from "@/app/pages/softTheme"
 /**
  * AccountPanel — "Account" page.
  *
- * Two sections:
+ * Three sections:
  *   1. Your account — who you are signed in as, and a link to Authelia's own
  *      portal, which is where password and 2FA self-service actually lives.
  *   2. Local accounts — add / revoke / reset the PCS's local users. Admin only.
+ *   3. Onboarding — replay the first-start wizard by unclaiming the box. Admin
+ *      only, and destructive: see the dialog copy and onboarding.sh.
  *
  * This is the ONLY panel a non-admin sees (see the `permissions` field on every
  * other definePanel call in App.tsx), so section 1 has to stand on its own.
@@ -75,6 +78,25 @@ interface GeneratedCredential {
     username: string;
     password: string;
 }
+
+interface OnboardingStatus {
+    claimed: boolean;
+    completed: boolean;
+    username: string;
+}
+
+interface OnboardingResetResult {
+    claimed: boolean;
+    completed: boolean;
+    username: string;
+    backup: string;
+}
+
+// Typed into the confirmation field before the reset button unlocks. The host
+// script guards itself with a mandatory `--confirm` flag for the same reason:
+// this disables every local account on the PCS, and the account it locks out
+// first is the one clicking the button.
+const RESET_CONFIRM_WORD = "reset";
 
 const ADMIN_GROUP = "admins";
 // Matches PROTECTED_USER in scripts/tools/authelia-user-manager.sh — the seeded
@@ -157,6 +179,12 @@ export const AccountPanel = () => {
     const [emailTarget, setEmailTarget] = useState<AutheliaUser | null>(null);
     const [emailValue, setEmailValue] = useState("");
 
+    // Onboarding replay
+    const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
+    const [resetOpen, setResetOpen] = useState(false);
+    const [resetWord, setResetWord] = useState("");
+    const [resetting, setResetting] = useState(false);
+
     // Confirmations + the one-time credential dialog
     const [revokeTarget, setRevokeTarget] = useState<AutheliaUser | null>(null);
     const [resetTarget, setResetTarget] = useState<AutheliaUser | null>(null);
@@ -195,9 +223,21 @@ export const AccountPanel = () => {
         }
     }, []);
 
+    const loadOnboarding = useCallback(async () => {
+        try {
+            setOnboarding(await apiRequest<OnboardingStatus>("/api/admin/onboarding-status"));
+        } catch {
+            // Informational only — the reset control stands without it.
+            setOnboarding(null);
+        }
+    }, []);
+
     useEffect(() => {
-        if (isAdmin) void loadUsers();
-    }, [isAdmin, loadUsers]);
+        if (isAdmin) {
+            void loadUsers();
+            void loadOnboarding();
+        }
+    }, [isAdmin, loadUsers, loadOnboarding]);
 
     const resetAddForm = () => {
         setNewUsername("");
@@ -253,6 +293,28 @@ export const AccountPanel = () => {
             notify(err?.message || "Failed to reset the password", {type: "warning"});
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const submitReonboard = async () => {
+        setResetting(true);
+        try {
+            const result = await apiRequest<OnboardingResetResult>(
+                "/api/admin/onboarding-reset", "POST", {confirm: true});
+            notify(
+                result.backup
+                    ? `Onboarding reset — previous accounts backed up to ${result.backup}`
+                    : "Onboarding reset",
+                {type: "info", autoHideDuration: 10000},
+            );
+            // Reload rather than re-render: OnboardingGate decides on mount, so
+            // the blocking wizard only appears on a fresh load of the shell —
+            // which is also the fastest way back to a working credential, and
+            // this session cannot do anything else useful until there is one.
+            window.location.reload();
+        } catch (err: any) {
+            notify(err?.message || "Failed to reset onboarding", {type: "warning"});
+            setResetting(false);
         }
     };
 
@@ -462,6 +524,53 @@ export const AccountPanel = () => {
                 </Card>
             )}
 
+            {/* ---------------- Onboarding (admin only) ---------------- */}
+            {isAdmin && (
+                <Card sx={card.root}>
+                    <Box sx={card.header}>
+                        <Typography sx={title.small}>Onboarding</Typography>
+                    </Box>
+                    <CardContent sx={card.content}>
+                        <Stack spacing={2}>
+                            <Typography sx={{color: colors.textMuted, fontSize: font.detail, lineHeight: 1.6}}>
+                                The first-start wizard runs once, when this server has no local
+                                account yet. Re-running it puts the server back into that state so
+                                the owner account can be created again from scratch.
+                            </Typography>
+                            {onboarding && (
+                                <Typography sx={{color: colors.textMuted, fontSize: font.detail}}>
+                                    Currently{" "}
+                                    <strong>{onboarding.claimed ? "claimed" : "unclaimed"}</strong>
+                                    {onboarding.claimed && onboarding.username
+                                        ? <> by <strong>{onboarding.username}</strong></>
+                                        : null}.
+                                </Typography>
+                            )}
+                            <Alert severity="warning">
+                                This deletes <strong>every local account</strong> on this PCS and
+                                signs you out of the dashboard until you create a new one. The
+                                &ldquo;Local Account&rdquo; option disappears from the sign-in page
+                                while the server is unclaimed, so if single sign-on is unavailable
+                                the only way back in is SSH. Existing password hashes are backed up
+                                next to the account database first.
+                            </Alert>
+                            <Box>
+                                <Button
+                                    startIcon={<RestartAltIcon/>}
+                                    onClick={() => {
+                                        setResetWord("");
+                                        setResetOpen(true);
+                                    }}
+                                    sx={{...button.primary, backgroundColor: colors.statusErrorAlt}}
+                                >
+                                    Re-run onboarding
+                                </Button>
+                            </Box>
+                        </Stack>
+                    </CardContent>
+                </Card>
+            )}
+
             {/* ---------------- Add user ---------------- */}
             <Dialog open={addOpen} onClose={() => !submitting && setAddOpen(false)} fullWidth maxWidth="sm">
                 <DialogTitle>Add a local account</DialogTitle>
@@ -584,6 +693,44 @@ export const AccountPanel = () => {
                     <Button onClick={() => void submitRevoke()} disabled={submitting}
                             sx={{...button.primary, backgroundColor: colors.statusErrorAlt}}>
                         {submitting ? "Revoking…" : "Revoke"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* ---------------- Re-run onboarding ---------------- */}
+            <Dialog open={resetOpen} onClose={() => !resetting && setResetOpen(false)} fullWidth maxWidth="sm">
+                <DialogTitle>Re-run onboarding</DialogTitle>
+                <DialogContent>
+                    <Stack spacing={2} sx={{mt: 1}}>
+                        <Alert severity="error">
+                            Every local account on this PCS is deleted and the setup wizard runs
+                            again on the next page load. Your current session stops being useful
+                            immediately.
+                        </Alert>
+                        <Typography sx={{fontSize: font.detail}}>
+                            Password hashes are copied to a timestamped backup beside the account
+                            database, but nothing signs in again until the wizard creates a new
+                            owner account. Make sure you can still reach this server another way —
+                            single sign-on or SSH — before continuing.
+                        </Typography>
+                        <TextField
+                            label={`Type "${RESET_CONFIRM_WORD}" to confirm`}
+                            value={resetWord}
+                            size="small"
+                            fullWidth
+                            autoFocus
+                            onChange={e => setResetWord(e.target.value)}
+                        />
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setResetOpen(false)} disabled={resetting}>Cancel</Button>
+                    <Button
+                        onClick={() => void submitReonboard()}
+                        disabled={resetting || resetWord.trim().toLowerCase() !== RESET_CONFIRM_WORD}
+                        sx={{...button.primary, backgroundColor: colors.statusErrorAlt}}
+                    >
+                        {resetting ? "Resetting…" : "Re-run onboarding"}
                     </Button>
                 </DialogActions>
             </Dialog>
