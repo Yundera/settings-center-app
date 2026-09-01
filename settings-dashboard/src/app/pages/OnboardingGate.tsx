@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
     Alert,
     Backdrop,
@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import {apiRequest} from '@/core/authApi';
+import {readReturnTarget} from '@/app/pages/onboardingReturn';
 import {button, colors, font, spacing, title} from '@/app/pages/softTheme';
 
 /**
@@ -43,6 +44,19 @@ import {button, colors, font, spacing, title} from '@/app/pages/softTheme';
  *
  * Failure to reach the endpoint renders children — a status call that 500s or
  * 403s must not lock an otherwise-working dashboard behind a modal.
+ *
+ * ARRIVING FROM MAISON. Maison's dashboard is gated the same way and links here
+ * with `?return=<where the owner was>`, so the owner who started at the box's
+ * root domain is put back there instead of being left on the admin app they
+ * never asked for. Whenever there is nothing left to do and a valid return
+ * target, this component sends them back — which covers all three exits (the
+ * wizard succeeded, the welcome was dismissed, or another tab did it first)
+ * without any of them knowing about the return trip. See onboardingReturn.ts for
+ * why the target is validated rather than trusted.
+ *
+ * The redirect is deliberately NOT taken when the status call failed: Maison's
+ * gate is armed by a file that is still there, so bouncing back on an unknown
+ * status would put the owner in a loop between the two dashboards.
  */
 
 interface OnboardingStatus {
@@ -80,6 +94,25 @@ export const OnboardingGate = ({children}: {children: React.ReactNode}) => {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [generated, setGenerated] = useState<string | null>(null);
+
+    // Read once, at mount: the URL still carries `?return=` after the wizard has
+    // run, and re-reading it later would only add ways for it to change.
+    const returnTo = useMemo(() => readReturnTarget(), []);
+
+    // Nothing left to do — either it already was, or this session just finished
+    // it. Distinct from `!status`, which means we could not find out.
+    const settled = !!status && status.claimed && status.completed;
+
+    // The trip back to whichever dashboard sent us here. Held to a password that
+    // is shown exactly once: navigating away from that alert would destroy the
+    // only copy of it.
+    const leaving = settled && !!returnTo && !generated;
+
+    useEffect(() => {
+        if (leaving && returnTo) {
+            window.location.replace(returnTo);
+        }
+    }, [leaving, returnTo]);
 
     useEffect(() => {
         let cancelled = false;
@@ -139,6 +172,17 @@ export const OnboardingGate = ({children}: {children: React.ReactNode}) => {
     }, []);
 
     if (!checked) {
+        return (
+            <Backdrop open sx={{backgroundColor: colors.bgApp, zIndex: 2000}}>
+                <CircularProgress />
+            </Backdrop>
+        );
+    }
+
+    // Setup is done and we came from somewhere — hold the shell until the
+    // redirect above lands, so the admin dashboard does not flash up on the way
+    // out.
+    if (leaving) {
         return (
             <Backdrop open sx={{backgroundColor: colors.bgApp, zIndex: 2000}}>
                 <CircularProgress />
