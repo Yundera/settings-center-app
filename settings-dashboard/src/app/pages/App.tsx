@@ -27,12 +27,14 @@ import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import HttpsIcon from "@mui/icons-material/Https";
+import TuneIcon from "@mui/icons-material/Tune";
 
 import {AccessPanel} from "@/panels/access/AccessPanel";
 import {AccountPanel} from "@/panels/account/AccountPanel";
 import {OperatorPanel} from "@/panels/operator/OperatorPanel";
 import {CertificatesPanel} from "@/panels/certificates/CertificatesPanel";
 import {DomainPanel} from "@/panels/domain/DomainPanel";
+import {FeaturesPanel} from "@/panels/features/FeaturesPanel";
 import {HealthPanel} from "@/panels/health/HealthPanel";
 import {MigrationPanel} from "@/panels/migration/MigrationPanel";
 import {ResourcesPanel} from "@/panels/resources/ResourcesPanel";
@@ -70,6 +72,12 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
     definePanel({name: 'domain',             component: DomainPanel,            icon: LanguageIcon,       label: 'Domain',             permissions: 'admin'}),
     definePanel({name: 'certificates',       component: CertificatesPanel,      icon: HttpsIcon,          label: 'Certificates',       permissions: 'admin'}),
     definePanel({name: 'access',             component: AccessPanel,            icon: VpnKeyIcon,         label: 'Access',             permissions: 'admin'}),
+    // Gated on hasOperator rather than `operator`: the latter is also non-null via
+    // the domain-zone fallback, and a box that merely sits on a known zone has no
+    // operator-run services to opt out of.
+    ...(brand.hasOperator
+      ? [definePanel({name: 'yundera-features', component: FeaturesPanel, icon: TuneIcon, label: `${brand.support.operatorName ?? brand.brand.name} Features`, permissions: 'admin'})]
+      : []),
     definePanel({name: 'terminal',           component: TerminalPanel,          icon: TerminalIcon,       label: 'Terminal',           permissions: 'admin'}),
     definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health',             permissions: 'admin'}),
     definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources',          permissions: 'admin'}),

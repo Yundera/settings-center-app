@@ -1,16 +1,22 @@
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 
 /**
- * Reads / writes the durable opt-out flag for the support-key safety net.
+ * Reads the durable opt-out flag for the support-key safety net.
  *
  * The flag lives in /DATA/AppData/casaos/apps/yundera/.pcs.env as
  * ENSURE_SUPPORT_KEY. Polarity:
  *   absent / "true" / "1" / "yes" / "on" → ensure (default)
  *   "false" / "0" / "no" / "off"          → opt-out
  *
- * The host-side self-check ensure-yundera-support-key.sh consumes the
- * same key on every tick. The dashboard handles the immediate add/remove
- * via SupportAccess.ts; this module just persists the durable intent.
+ * The host-side self-check ensure-support-key.sh consumes the same key on
+ * every tick.
+ *
+ * READ ONLY. Writing the flag belongs to feature-support-key.sh via
+ * Features.ts, which also removes the key from authorized_keys in the same
+ * step — "off" that leaves the key on disk is a lie, and one implementation of
+ * that is enough. What survives here is the half the script does not do:
+ * reporting the stored intent so a caller can show it next to the live key
+ * presence from SupportAccess.ts and flag a divergence.
  */
 
 const PCS_ENV = "/DATA/AppData/casaos/apps/yundera/.pcs.env";
@@ -25,10 +31,4 @@ export async function getEnsureSupportKey(): Promise<{ ensure: boolean; rawValue
     const result = await executeHostCommand(`sudo -n bash ${ENV_MGR} get ENSURE_SUPPORT_KEY ${PCS_ENV}`);
     const raw = (result.stdout || "").trim();
     return { ensure: !isOptedOut(raw), rawValue: raw };
-}
-
-export async function setEnsureSupportKey(ensure: boolean): Promise<{ ensure: boolean; rawValue: string }> {
-    const value = ensure ? "true" : "false";
-    await executeHostCommand(`sudo -n bash ${ENV_MGR} set ENSURE_SUPPORT_KEY ${value} ${PCS_ENV}`);
-    return { ensure, rawValue: value };
 }

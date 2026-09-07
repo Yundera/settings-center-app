@@ -1,14 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { adminMiddleware } from "@/backend/auth/middleware";
-import {
-    disableSupportAccess,
-    enableSupportAccess,
-    getSupportAccessStatus,
-} from "@/backend/server/Support/SupportAccess";
-import {
-    getEnsureSupportKey,
-    setEnsureSupportKey,
-} from "@/backend/server/Support/SupportEnsure";
+import { getSupportAccessStatus } from "@/backend/server/Support/SupportAccess";
+import { getEnsureSupportKey } from "@/backend/server/Support/SupportEnsure";
+import { describeFeatureError, setFeature } from "@/backend/server/Features/Features";
 
 /**
  * Durable support-access toggle.
@@ -22,6 +16,18 @@ import {
  * applies it (add/remove the key). The two together avoid the
  * "I disabled it and it came back" surprise — the next self-check
  * tick won't re-add it because the flag now says opt-out.
+ *
+ * The write goes through feature-support-key.sh (Features.ts), which is the
+ * same script the Yundera Features panel drives. THAT IS THE POINT: three
+ * surfaces now offer this switch — here, the Access panel's card, and the
+ * Features page — and a second implementation of "what off means" is how they
+ * would drift apart. The script already does both halves (flag + immediate
+ * removal by fingerprint), so nothing is lost by delegating, and its failure
+ * mode is the one this route always had: both paths need the orchestrator's
+ * /support/ssh-key to identify the key.
+ *
+ * The GET deliberately stays local — it reports intent AND reality, which the
+ * script does not, and which is what the two panels render.
  */
 async function handler(req: NextApiRequest, res: NextApiResponse) {
     try {
@@ -45,10 +51,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             if (typeof ensure !== 'boolean') {
                 return res.status(400).json({ error: 'Body must include { ensure: boolean }' });
             }
-            await setEnsureSupportKey(ensure);
-            const applied = ensure
-                ? await enableSupportAccess()
-                : await disableSupportAccess();
+            await setFeature('support-key', ensure);
             const accessStatus = await getSupportAccessStatus();
             return res.status(200).json({
                 ensure,
@@ -56,14 +59,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
                 username: accessStatus.username,
                 fingerprint: accessStatus.fingerprint,
                 comment: accessStatus.comment,
-                appliedStatus: applied.status,
+                // Observed after the fact rather than reported by the operation,
+                // now that the host script owns the add/remove.
+                appliedStatus: accessStatus.enabled ? 'present' : 'absent',
             });
         }
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (error) {
         res.status(500).json({
             error: 'Support ensure operation failed',
-            details: error instanceof Error ? error.message : String(error),
+            details: describeFeatureError(error),
         });
     }
 }
