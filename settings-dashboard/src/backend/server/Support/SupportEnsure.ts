@@ -1,9 +1,10 @@
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
+import { yndPath } from "@/configuration/yndRoot";
 
 /**
  * Reads the durable opt-out flag for the support-key safety net.
  *
- * The flag lives in /DATA/AppData/casaos/apps/yundera/.pcs.env as
+ * The flag lives in the stack's `.pcs.env` (see `yndRoot()`) as
  * ENSURE_SUPPORT_KEY. Polarity:
  *   absent / "true" / "1" / "yes" / "on" → ensure (default)
  *   "false" / "0" / "no" / "off"          → opt-out
@@ -19,8 +20,8 @@ import { executeHostCommand } from "@/backend/cmd/HostExecutor";
  * presence from SupportAccess.ts and flag a divergence.
  */
 
-const PCS_ENV = "/DATA/AppData/casaos/apps/yundera/.pcs.env";
-const ENV_MGR = "/DATA/AppData/casaos/apps/yundera/scripts/tools/env-file-manager.sh";
+const PCS_ENV = yndPath(".pcs.env");
+const ENV_MGR = yndPath("scripts/tools/env-file-manager.sh");
 
 function isOptedOut(raw: string): boolean {
     const v = raw.trim().toLowerCase();

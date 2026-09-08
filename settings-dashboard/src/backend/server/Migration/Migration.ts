@@ -7,6 +7,7 @@ import {
     RsyncProgress,
     MIGRATION_STEPS,
 } from './MigrationTypes';
+import { yndRoot } from '@/configuration/yndRoot';
 import { runPreflight } from './steps/preflight';
 import { pushMigrationKey, cleanupMigrationKey } from './steps/pushKey';
 import { runRsync } from './steps/rsync';
@@ -368,7 +369,7 @@ async function runMigration(req: MigrationRequest): Promise<void> {
             const sdMsg = sdErr instanceof Error ? sdErr.message : String(sdErr);
             console.error('[Migration] schedule source_down failed:', sdMsg);
             await setStep('source_down', 'failed',
-                `Scheduling failed: ${sdMsg}. Stop the admin container at /DATA/AppData/casaos/apps/yundera manually.`);
+                `Scheduling failed: ${sdMsg}. Stop the admin container at ${yndRoot()} manually.`);
         }
 
         // ---- Webhook (terminal status push — last step) ----

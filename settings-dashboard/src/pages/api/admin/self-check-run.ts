@@ -1,8 +1,9 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
+import {yndPath} from "@/configuration/yndRoot";
 
-const SELF_CHECK_SCRIPT = "/DATA/AppData/casaos/apps/yundera/scripts/self-check.sh";
+const SELF_CHECK_SCRIPT = yndPath("scripts/self-check.sh");
 
 /**
  * Kicks off self-check.sh detached on the host. Returns immediately.

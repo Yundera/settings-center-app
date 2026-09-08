@@ -1,7 +1,10 @@
 import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
+import { yndPath } from '@/configuration/yndRoot';
 
-const SELF_CHECK_SCRIPT = '/DATA/AppData/casaos/apps/yundera/scripts/self-check.sh';
-const LOG_FILE = '/DATA/AppData/casaos/apps/yundera/log/yundera.log';
+// This box's own root, used against the TARGET — correct because rsync.ts
+// copies the whole of /DATA across, so the target's tree is this tree.
+const SELF_CHECK_SCRIPT = yndPath('scripts/self-check.sh');
+const LOG_FILE = yndPath('log/yundera.log');
 
 /**
  * After the offline diff rsync, trigger the target's self-check by SSHing

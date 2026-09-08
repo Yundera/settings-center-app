@@ -1,6 +1,6 @@
 import path from 'path';
 import {executeHostCommand} from '@/backend/cmd/HostExecutor';
-import {getConfig} from '@/configuration/getConfigBackend';
+import {yndRoot} from '@/configuration/yndRoot';
 import {shq} from '@/backend/server/Migration/MigrationSSH';
 
 /**
@@ -55,7 +55,7 @@ const MIN_PASSWORD = 8;
 const MAX_DISPLAYNAME = 64;
 
 function scriptPath(): string {
-    const composeFolder = getConfig('COMPOSE_FOLDER_PATH') || '/DATA/AppData/casaos/apps/yundera/';
+    const composeFolder = yndRoot();
     return path.join(composeFolder, 'scripts/tools/onboarding.sh');
 }
 

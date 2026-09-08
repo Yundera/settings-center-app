@@ -6,8 +6,9 @@ import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 import { getConfig } from "@/configuration/getConfigBackend";
 import { enableSupportAccess } from "@/backend/server/Support/SupportAccess";
 import { loadBrandFile } from "@/brand/loadBrandFile";
+import { yndPath } from "@/configuration/yndRoot";
 
-const LOG_FILE = "/DATA/AppData/casaos/apps/yundera/log/yundera.log";
+const LOG_FILE = yndPath("log/yundera.log");
 const MAX_LOG_LINES = 5000;
 const MAX_SUBJECT_LEN = 200;
 const MAX_MESSAGE_LEN = 10000;

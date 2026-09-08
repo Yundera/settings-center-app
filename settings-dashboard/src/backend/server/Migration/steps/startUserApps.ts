@@ -1,7 +1,15 @@
 import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
+import { yndPath } from '@/configuration/yndRoot';
 
-const SCRIPT_PATH = '/DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-casaos-apps-up-to-date.sh';
-const LOG_FILE = '/DATA/AppData/casaos/apps/yundera/log/yundera.log';
+const LOG_FILE = yndPath('log/yundera.log');
+
+/**
+ * Stacks the target's own self-check owns. Bringing them up from here would
+ * race `ensure-user-compose-stack-up.sh` / `ensure-maison-stack.sh` /
+ * `ensure-kopia-stack.sh`, which `target_self_check` has already run — and
+ * those three need env and secrets this loop does not render.
+ */
+const SYSTEM_STACKS = ['yundera', 'maison', 'kopia', 'casaos'];
 
 export interface FailedApp {
     name: string;
@@ -10,59 +18,84 @@ export interface FailedApp {
 
 export interface StartUserAppsResult {
     /**
-     * Apps whose `docker compose up -d` failed on the target. The script
-     * itself still exited 0 under FORCE_START=1 — these are recoverable
-     * per-app failures (typically a deleted/renamed upstream image), not a
-     * migration-level failure. The user re-installs the listed apps from the
-     * AppStore after the migration completes.
+     * Apps whose `docker compose up -d` failed on the target. These are
+     * recoverable per-app failures (typically a deleted/renamed upstream
+     * image), not a migration-level failure. The user re-installs the listed
+     * apps from the store after the migration completes.
      */
     failedApps: FailedApp[];
 }
 
 /**
- * Bring up the user's CasaOS apps on the migration target.
+ * Bring the user's apps up on the migration target.
  *
- * The script `ensure-casaos-apps-up-to-date.sh` already knows how to render
- * the per-app env (DOMAIN, PUBLIC_IPV4/V6, DEFAULT_PWD, EMAIL, …) by reading
- * the target's `/DATA/AppData/casaos/apps/yundera/.env` and then runs
- * `docker compose up -d` per app. By the time we run here, `target_self_check`
- * has already re-executed the target's self-check chain — including
- * `ensure-public-ip.sh` and the other env-regenerating ensure-scripts — so
- * the .env on disk reflects the TARGET's IP/domain, not the rsynced source
- * values. The compose-up calls therefore inject the right env for the new
- * host.
+ * WHAT THIS USED TO DO, AND WHY IT NO LONGER CAN. This step used to run
+ * `ensure-casaos-apps-up-to-date.sh` with `FORCE_START=1`. That script was
+ * deleted with CasaOS (2026-08-02), so the step has been failing the whole
+ * migration ever since — it is the "re-point `start_user_apps`" item in
+ * template-root's `doc/maison-migration.md` phase 2. The loop below is what
+ * that script did for our purposes, inlined: one `docker compose up -d` per
+ * app folder.
  *
- * The default behaviour of that script is "skip apps that aren't currently
- * running" — correct on a healthy box (don't resurrect apps the user
- * intentionally stopped from the CasaOS UI), wrong post-migration where no
- * user apps are running yet because they were just rsynced. We pass
- * FORCE_START=1 to bypass that gate exactly once, during the migration
- * pipeline. After this step succeeds, ensure-casaos-apps-up-to-date.sh
- * resumes its normal gated behaviour on subsequent self-checks.
+ * WHY AN INLINE LOOP RATHER THAN A HOST SCRIPT. There is no longer a script
+ * on the box whose job is "start the user's apps": Maison starts an app when
+ * a person asks it to, and Docker's restart policies handle a reboot. A
+ * migration target is the one situation where neither applies — the app files
+ * exist, the containers do not — so the loop lives here, at the only caller.
  *
- * Failure model: per-app failures (missing/renamed upstream images, broken
- * compose files) are NOT migration-fatal. The script emits one
- * `FAILED_APP: <name>: <reason>` line per failed app and exits 0 under
- * FORCE_START=1. We parse those markers and return them so the caller can
- * surface the list to the user via the migration step's message. Only an
- * actual script-level failure (SSH dropped, timeout, script crashed before
- * completing) throws here and rolls the migration back — losing 1/22 apps
- * to a deleted ghcr.io tag must not undo a complete data migration.
+ * WHERE THE APPS ARE. `/DATA/AppData/<app>/`, Maison's flat layout: compose,
+ * `.env` and the app's data in one folder. Compose auto-loads
+ * `docker-compose.override.yml` and `.env` from the project directory, so a
+ * bare `up -d` there is exactly what Maison itself runs. Apps that predate
+ * Maison have the same folder — the app mirror wrote it, and its render check
+ * asserted it resolves identically to the CasaOS-side original.
  *
- * Idempotent. Runs `docker compose up -d` per app; already-up containers
- * are no-ops. Skips `yundera` (the system stack — managed separately by
- * ensure-user-compose-* via `target_self_check`).
+ * ENV IS ALREADY CORRECT BY THE TIME WE RUN. `target_self_check` has
+ * re-executed the target's ensure-chain, including `ensure-public-ip.sh`, so
+ * the values these composes interpolate describe the TARGET's IP and domain,
+ * not the rsynced source's.
+ *
+ * IT STARTS EVERYTHING, deliberately. On a healthy box "don't resurrect what
+ * the user stopped" is the right rule; on a migration target nothing is
+ * running because nothing was ever created, so the rule has nothing to read.
+ * This is the same reason the old script was called with `FORCE_START=1`.
+ *
+ * Failure model, unchanged: per-app failures (missing upstream image, broken
+ * compose) are NOT migration-fatal — they are reported as `FAILED_APP` and
+ * surfaced to the user, because losing 1/22 apps to a deleted ghcr.io tag must
+ * not undo a complete data migration. Only a step-level failure (SSH dropped,
+ * timeout) throws and rolls the migration back.
+ *
+ * Idempotent: `up -d` on an already-running stack is a no-op.
  */
 export async function startUserAppsOnTarget(
     keypair: MigrationKeyPair,
     target: string
 ): Promise<StartUserAppsResult> {
+    // Built from constants only — no caller input reaches this string.
+    // `/DATA/AppData/*/` does not match dot-directories, which is how Maison's
+    // own hidden state and `<app>.<date>.archive` folders stay out of it.
+    //
+    // QUOTING: this goes to `bash -c` through shq(), i.e. single-quoted, so the
+    // remote login shell hands it over verbatim and every `$app` / `$(…)` below
+    // is expanded by that bash and not before it. Double quotes here would let
+    // the login shell expand them first, against an empty environment.
+    const script =
+        `for dir in /DATA/AppData/*/; do ` +
+        `app=$(basename "$dir"); ` +
+        `case " ${SYSTEM_STACKS.join(' ')} " in *" $app "*) continue;; esac; ` +
+        `[ -f "$dir/docker-compose.yml" ] || continue; ` +
+        `if ! out=$(cd "$dir" && docker compose up -d 2>&1); then ` +
+        `echo "FAILED_APP: $app: $(printf '%s' "$out" | tr '\\n' ' ' | cut -c1-200)"; ` +
+        `fi; ` +
+        `done; exit 0`;
+
     let stdout: string;
     try {
         const result = await execOnTarget(
             keypair,
             target,
-            `FORCE_START=1 bash ${shq(SCRIPT_PATH)}`,
+            `bash -c ${shq(script)}`,
             { sudo: true, timeout: 15 * 60 * 1000 },
         );
         stdout = result.stdout || '';
@@ -85,10 +118,9 @@ export async function startUserAppsOnTarget(
 }
 
 /**
- * Extract `FAILED_APP: <name>: <reason>` markers from the script's stdout.
+ * Extract `FAILED_APP: <name>: <reason>` markers from the loop's stdout.
  * Strict line-anchored match so docker compose's own error lines (which may
- * contain "failed" or "error" in the middle of a line) don't false-positive.
- * Reasons are already capped to ~200 chars by the shell side.
+ * contain "failed" or "error" mid-line) don't false-positive.
  */
 function parseFailedApps(stdout: string): FailedApp[] {
     const out: FailedApp[] = [];

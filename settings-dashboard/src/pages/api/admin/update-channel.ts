@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { adminMiddleware } from '@/backend/auth/middleware';
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
-import { getConfig } from '@/configuration/getConfigBackend';
+import { yndRoot } from '@/configuration/yndRoot';
 import path from 'path';
 
 interface UpdateChannelRequest {
@@ -15,7 +15,7 @@ interface UpdateChannelResponse {
 }
 
 async function updateChannelHandler(req: NextApiRequest, res: NextApiResponse<UpdateChannelResponse>) {
-  const remoteDataApp = getConfig("COMPOSE_FOLDER_PATH") || "/DATA/AppData/casaos/apps/yundera/";
+  const remoteDataApp = yndRoot();
 
   const envFilePath = path.join(remoteDataApp, '.pcs.env');
   // Per-key atomic edits via env-file-manager.sh — never round-trip the whole

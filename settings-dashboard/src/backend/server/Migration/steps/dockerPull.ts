@@ -1,5 +1,6 @@
 import { basename, dirname } from 'path';
 import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
+import { yndPath } from '@/configuration/yndRoot';
 
 /**
  * After online rsync completes, pre-warm the target's image cache so the
@@ -31,8 +32,7 @@ import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
  * for the whole multi-minute step.
  */
 
-const DOCKER_INSTALL_SCRIPT =
-    '/DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-docker-installed.sh';
+const DOCKER_INSTALL_SCRIPT = yndPath('scripts/self-check/ensure-docker-installed.sh');
 
 export interface DockerPullResult {
     composeFilesPulled: string[];
@@ -71,9 +71,10 @@ export async function pullImagesOnTarget(
     }
 
     // 2. Enumerate every compose file rsynced under /DATA/AppData (yundera
-    //    system stack + user apps). yundera lives at
-    //    /DATA/AppData/casaos/apps/yundera; user apps at
-    //    /DATA/AppData/casaos/apps/<name>. -maxdepth 4 covers both.
+    //    system stack + user apps). Apps are at /DATA/AppData/<name>, the
+    //    yundera stack at /DATA/AppData/yundera — but a source that predates
+    //    the root move still nests it at casaos/apps/yundera, so -maxdepth 4
+    //    stays: it covers both layouts, and the flat one costs nothing.
     const findCmd =
         `find /DATA/AppData -maxdepth 4 -type f ` +
         `\\( -name 'docker-compose.yml' -o -name 'compose.yml' -o -name 'docker-compose.yaml' \\) 2>/dev/null`;

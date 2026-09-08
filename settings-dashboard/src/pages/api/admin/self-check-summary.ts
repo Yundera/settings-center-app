@@ -2,8 +2,9 @@ import {NextApiRequest, NextApiResponse} from 'next'
 import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 import {latestSelfCheckRun, ScriptResult, SelfCheckRun} from "@/backend/server/Health/SelfCheckLog";
+import {yndPath} from "@/configuration/yndRoot";
 
-const LOG_FILE = "/DATA/AppData/casaos/apps/yundera/log/yundera.log";
+const LOG_FILE = yndPath("log/yundera.log");
 
 // A full run is ~200 log lines when everything is quiet, but a failing script
 // re-runs its command verbosely, so give the tail plenty of headroom. Reading

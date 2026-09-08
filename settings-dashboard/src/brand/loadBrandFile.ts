@@ -3,20 +3,20 @@ import path from 'path';
 import DEFAULT_BRAND_JSON from './brand.default.json';
 import {mergeBrandFile} from './brandPayload';
 import type {BrandFile} from './BrandTypes';
-import {getConfig} from '@/configuration/getConfigBackend';
+import {yndRoot} from '@/configuration/yndRoot';
 
 /**
  * Loads brand.json: the baked default, optionally overridden by a file the
  * stack drops next to its compose file.
  *
  * WHERE THE OVERRIDE LIVES — this is the easy thing to get wrong.
- * COMPOSE_FOLDER_PATH (/DATA/AppData/casaos/apps/yundera/) is a HOST path. It
- * is only ever used to build strings for executeHostCommand(), i.e. commands
- * that run on the PCS host over SSH. It is NOT readable from inside this
- * container. The stack directory is bind-mounted here at /app/data (see the
- * admin service in template-root's docker-compose.yml), so that is the path
- * that actually resolves. The COMPOSE_FOLDER_PATH candidate is kept last for
- * a hypothetical non-containerised run; it is expected to miss in prod.
+ * yndRoot() (from COMPOSE_FOLDER_PATH) is a HOST path. It is only ever used to
+ * build strings for executeHostCommand(), i.e. commands that run on the PCS
+ * host over SSH. It is NOT readable from inside this container. The stack
+ * directory is bind-mounted here at /app/data (see the admin service in
+ * template-root's docker-compose.yml), so that is the path that actually
+ * resolves. The yndRoot() candidate is kept last for a hypothetical
+ * non-containerised run; it is expected to miss in prod.
  */
 
 const SUPPORTED_SCHEMA_VERSION = 1;
@@ -53,7 +53,7 @@ function overrideCandidates(): string[] {
     candidates.push('/app/data/brand.json');
 
     // Last resort: correct only if this ever runs outside the container.
-    const composeFolder = getConfig('COMPOSE_FOLDER_PATH') || '/DATA/AppData/casaos/apps/yundera/';
+    const composeFolder = yndRoot();
     candidates.push(path.join(composeFolder, 'brand.json'));
 
     return candidates;

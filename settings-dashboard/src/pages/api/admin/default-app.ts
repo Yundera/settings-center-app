@@ -1,7 +1,7 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
-import {getConfig} from "@/configuration/getConfigBackend";
+import {yndRoot} from "@/configuration/yndRoot";
 import path from 'path';
 
 interface DefaultAppRequest {
@@ -27,7 +27,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     try {
-        const composeFolder = getConfig("COMPOSE_FOLDER_PATH") || "/DATA/AppData/casaos/apps/yundera/";
+        const composeFolder = yndRoot();
         const envFilePath = path.join(composeFolder, '.pcs.env');
         // Per-key atomic edits via env-file-manager.sh. The previous full-file
         // round-trip silently truncated .pcs.env on read failure (file mode

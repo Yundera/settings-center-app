@@ -1,10 +1,11 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
+import {yndPath} from "@/configuration/yndRoot";
 
-const PCS_ENV = "/DATA/AppData/casaos/apps/yundera/.pcs.env";
-const ENV_MGR = "/DATA/AppData/casaos/apps/yundera/scripts/tools/env-file-manager.sh";
-const ENSURE_SCRIPT = "/DATA/AppData/casaos/apps/yundera/scripts/self-check/ensure-nightly-self-check.sh";
+const PCS_ENV = yndPath(".pcs.env");
+const ENV_MGR = yndPath("scripts/tools/env-file-manager.sh");
+const ENSURE_SCRIPT = yndPath("scripts/self-check/ensure-nightly-self-check.sh");
 const VAR_NAME = "SELF_CHECK_CRON";
 const DEFAULT_SCHEDULE = "0 3 * * *";
 

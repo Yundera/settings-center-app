@@ -3,6 +3,7 @@ import { executeHostCommand } from '@/backend/cmd/HostExecutor';
 import { MigrationRequest, PreflightResult } from '../MigrationTypes';
 import { shq, sshpassToTarget, waitForTargetSSH } from '../MigrationSSH';
 import { assertRootfulDocker } from '../MigrationVolumes';
+import { yndPath } from '@/configuration/yndRoot';
 
 /**
  * Preflight runs from the SOURCE host and verifies the TARGET is reachable
@@ -54,7 +55,7 @@ export async function runPreflight(req: MigrationRequest): Promise<PreflightResu
     //    block migrations on a signal we can't read.
     try {
         const probe = `
-LOG="/DATA/AppData/casaos/apps/yundera/log/yundera.log"
+LOG="${yndPath('log/yundera.log')}"
 if ! sudo -n test -f "$LOG" 2>/dev/null; then
   echo "STATUS=UNKNOWN"; echo "reason=no self-check log at $LOG"; exit 0
 fi

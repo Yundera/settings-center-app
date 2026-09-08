@@ -1,4 +1,5 @@
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
+import { yndPath } from '@/configuration/yndRoot';
 
 /**
  * Final source-side teardown: stop the `admin` container — the last piece of
@@ -21,11 +22,11 @@ import { executeHostCommand } from '@/backend/cmd/HostExecutor';
  * ahead of this detached stop anyway; both converge on "source is silent."
  *
  * Recovery: if anything downstream goes wrong, the source VPS is still alive
- * — only its containers are stopped. `docker compose -f
- * /DATA/AppData/casaos/apps/yundera/docker-compose.yml up -d` revives it.
+ * — only its containers are stopped. `docker compose -f <stack>/docker-compose.yml
+ * up -d` revives it, where <stack> is the root yndRoot() resolves to.
  */
 
-const YUNDERA_COMPOSE = '/DATA/AppData/casaos/apps/yundera/docker-compose.yml';
+const YUNDERA_COMPOSE = yndPath('docker-compose.yml');
 const SOURCE_DOWN_SCRIPT_PATH = '/tmp/migration-source-down.sh';
 const SOURCE_DOWN_LOG_PATH = '/tmp/migration-source-down.log';
 

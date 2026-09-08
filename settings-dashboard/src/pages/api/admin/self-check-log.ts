@@ -1,8 +1,9 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
+import {yndPath} from "@/configuration/yndRoot";
 
-const LOG_FILE = "/DATA/AppData/casaos/apps/yundera/log/yundera.log";
+const LOG_FILE = yndPath("log/yundera.log");
 const DEFAULT_LINES = 300;
 const MAX_LINES = 5000;
 

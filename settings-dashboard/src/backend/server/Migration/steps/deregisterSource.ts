@@ -1,5 +1,6 @@
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
 import { shq } from '../MigrationSSH';
+import { yndPath } from '@/configuration/yndRoot';
 
 /**
  * The cutover. Runs LOCAL on the source PCS, AFTER `start_user_apps` (the
@@ -23,7 +24,7 @@ import { shq } from '../MigrationSSH';
  * See doc/architecture/migration.md — "Invariant 1".
  */
 
-const SYSTEM_COMPOSE = '/DATA/AppData/casaos/apps/yundera/docker-compose.yml';
+const SYSTEM_COMPOSE = yndPath('docker-compose.yml');
 
 export async function deregisterSource(): Promise<void> {
     // Enumerate the system stack's services and stop every one except

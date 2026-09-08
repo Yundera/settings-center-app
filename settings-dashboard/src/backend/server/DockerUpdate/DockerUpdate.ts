@@ -1,9 +1,9 @@
-import {getConfig} from "@/configuration/getConfigBackend";
+import {yndRoot} from "@/configuration/yndRoot";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
 import { JsonFileContext } from '../SimpleMutex';
 import { DockerImageInfo, DockerUpdateStatus, ImageStatus, LastUpdateStatus } from './DockerUpdateTypes';
 
-const composePath = getConfig("COMPOSE_FOLDER_PATH") || "/DATA/AppData/casaos/apps/yundera/";
+const composePath = yndRoot();
 
 // Default status
 const DEFAULT_STATUS: DockerUpdateStatus = {

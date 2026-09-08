@@ -1,5 +1,6 @@
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
 import { shq } from '../MigrationSSH';
+import { yndPath, yndRoot } from '@/configuration/yndRoot';
 
 /**
  * Stop THIS PCS (the source) before the offline diff rsync, so its data
@@ -18,7 +19,7 @@ import { shq } from '../MigrationSSH';
  * back to a serving state.
  */
 
-const CRON_MARKER_FILE = '/DATA/AppData/casaos/apps/yundera/.self-check-cron-disabled';
+const CRON_MARKER_FILE = yndPath('.self-check-cron-disabled');
 
 // The compose stack that hosts the migration's own infrastructure (admin
 // app, mesh-router, auth-registrar, etc.). Excluded from stop_source's
@@ -27,7 +28,7 @@ const CRON_MARKER_FILE = '/DATA/AppData/casaos/apps/yundera/.self-check-cron-dis
 // stops resolving mid-cutover. The source VPS as a whole is destroyed
 // later by the orchestrator's pool reaper after promotion + GRACE_MINUTES,
 // not by this pipeline.
-const SYSTEM_STACK_PATH = '/DATA/AppData/casaos/apps/yundera/';
+const SYSTEM_STACK_PATH = yndRoot() + '/';
 
 export async function stopSource(): Promise<void> {
     // 1. Bring down every USER compose stack (excluding the yundera system

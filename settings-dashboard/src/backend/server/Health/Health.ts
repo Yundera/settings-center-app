@@ -2,8 +2,9 @@ import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 import { latestCompletedSelfCheckRun } from "./SelfCheckLog";
 import { describePressure, readProcessPressure, type ProcessPressure } from "./ProcessPressure";
 import packageJson from "../../../../package.json";
+import { yndPath } from "@/configuration/yndRoot";
 
-const LOG_FILE = "/DATA/AppData/casaos/apps/yundera/log/yundera.log";
+const LOG_FILE = yndPath("log/yundera.log");
 
 // Tail enough lines to almost certainly contain the most recent self-check
 // summary line even when there are several runs and verbose script output
