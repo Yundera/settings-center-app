@@ -1,9 +1,10 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
-import {yndPath} from "@/configuration/yndRoot";
+import {yndScriptsPrelude} from "@/configuration/yndRoot";
 
-const SELF_CHECK_SCRIPT = yndPath("scripts/self-check.sh");
+// Host-resolved script tree — see yndScriptsPrelude() in yndRoot.ts.
+const SELF_CHECK_SCRIPT = '"$YND_SCRIPTS/self-check.sh"';
 
 /**
  * Kicks off self-check.sh detached on the host. Returns immediately.
@@ -27,7 +28,7 @@ async function handler(
         // SSH session is the `admin` sudoer, so wrap the whole thing in
         // `sudo -n` (NOPASSWD via /etc/sudoers.d/90-admin-nopasswd).
         await executeHostCommand(
-            `nohup sudo -n bash ${SELF_CHECK_SCRIPT} > /dev/null 2>&1 < /dev/null &`
+            `${yndScriptsPrelude()}nohup sudo -n bash ${SELF_CHECK_SCRIPT} > /dev/null 2>&1 < /dev/null &`
         );
         res.status(200).json({status: 'started'});
     } catch (error) {

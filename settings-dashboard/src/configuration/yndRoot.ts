@@ -44,3 +44,71 @@ export function yndRoot(): string {
 export function yndPath(...segments: string[]): string {
     return path.join(yndRoot(), ...segments);
 }
+
+/**
+ * THE SCRIPT TREE IS NO LONGER AT `yndRoot()/scripts`, AND WHERE IT IS DEPENDS
+ * ON THE HOST — so it is resolved by the shell, on the box the command runs on,
+ * and never baked into a constant here.
+ *
+ * template-root split the stack into two roots (its `doc/template-subtree.md`,
+ * 2026-09-16): state — the env files, `dex/`, `log/`, `docker-compose.yml` —
+ * stays at `yndRoot()`, while the script tree moved to `yndRoot()/template/`,
+ * so the template's own `rsync --delete` stops pointing at a directory holding
+ * the owner's Authelia database. `COMPOSE_FOLDER_PATH` above still points at
+ * the state root and is still right; only `scripts/` moved out from under it.
+ *
+ * BOTH LAYOUTS ARE LIVE, PERMANENTLY:
+ *   - a PCS created after the split has ONLY `template/scripts` — `pcs-init.sh`
+ *     installs `root/template/` and nothing else, and the compat shim at the
+ *     template's `root/scripts/` is "never installed on a box" (its README);
+ *   - a PCS that crossed over from the pre-split layout has BOTH, because the
+ *     `.always.sh` migration refreshes the legacy tree in place;
+ *   - a PCS that never crossed — frozen UPDATE_URL, powered off, old image —
+ *     has only the legacy `scripts/`. template-root keeps that escape hatch
+ *     open with no expiry date, so this is not a window that closes.
+ *
+ * Hence a probe rather than a constant, and one evaluated REMOTELY: these
+ * strings are shipped to a host and run there (see the HOST PATH note above).
+ * The migration steps make that difference load-bearing — they run commands on
+ * the TARGET box, whose layout is its own business, not this container's.
+ *
+ * The cost of getting this wrong is not subtle: every call becomes
+ * `env-file-manager.sh: command not found` (exit 127), which is how the demo
+ * service and this app both broke on 2026-09-16, and how this app broke once
+ * before on the 2026-09-08 root move.
+ */
+const TEMPLATE_SUBDIR = "template";
+
+/** `[template-layout dir, legacy dir]` for a stack root, as host paths. */
+function scriptsDirCandidates(root: string): [string, string] {
+    return [path.posix.join(root, TEMPLATE_SUBDIR, "scripts"), path.posix.join(root, "scripts")];
+}
+
+/**
+ * Shell prelude that defines `$YND_SCRIPTS` on the host running the command.
+ * Prepend it and reference `"$YND_SCRIPTS/tools/env-file-manager.sh"`:
+ *
+ * ```ts
+ * executeHostCommand(`${yndScriptsPrelude()}sudo -n "$YND_SCRIPTS/self-check.sh"`)
+ * ```
+ *
+ * Double quotes throughout, deliberately: migration sends commands to the
+ * target wrapped in `shq()` (single quotes), and a single quote in here would
+ * have to survive that nesting. `$YND_SCRIPTS` is likewise written so the
+ * SOURCE shell never expands it — only the shell that finally runs the script.
+ */
+export function yndScriptsPrelude(root: string = yndRoot()): string {
+    const [templateDir, legacyDir] = scriptsDirCandidates(root);
+    return `YND_SCRIPTS="${templateDir}"; [ -d "$YND_SCRIPTS" ] || YND_SCRIPTS="${legacyDir}"; `;
+}
+
+/**
+ * A command whose stdout is the scripts dir on the host that runs it — for the
+ * callers that cannot use the prelude because something wraps their whole
+ * command (`sudo -n <cmd>`, `shq(<cmd>)`) and would swallow a second statement.
+ * One extra round trip, against a step that already costs minutes.
+ */
+export function yndScriptsDirCommand(root: string = yndRoot()): string {
+    const [templateDir, legacyDir] = scriptsDirCandidates(root);
+    return `[ -d "${templateDir}" ] && echo "${templateDir}" || echo "${legacyDir}"`;
+}

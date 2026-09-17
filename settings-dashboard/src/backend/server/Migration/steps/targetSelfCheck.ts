@@ -1,9 +1,10 @@
-import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
+import { execOnTarget, MigrationKeyPair, shq, targetScriptsDir } from '../MigrationSSH';
 import { yndPath } from '@/configuration/yndRoot';
 
-// This box's own root, used against the TARGET — correct because rsync.ts
-// copies the whole of /DATA across, so the target's tree is this tree.
-const SELF_CHECK_SCRIPT = yndPath('scripts/self-check.sh');
+// The log is state and lives at the stack root, which rsync.ts makes identical
+// on both boxes. The SCRIPT is not: where the tree sits inside that root
+// depends on the box, so it is probed on the target — see targetScriptsDir().
+const SELF_CHECK_SCRIPT = 'self-check.sh';
 const LOG_FILE = yndPath('log/yundera.log');
 
 /**
@@ -29,7 +30,8 @@ export async function triggerTargetSelfCheck(
     target: string
 ): Promise<void> {
     try {
-        await execOnTarget(keypair, target, `bash ${shq(SELF_CHECK_SCRIPT)}`, {
+        const scriptsDir = await targetScriptsDir(keypair, target);
+        await execOnTarget(keypair, target, `bash ${shq(`${scriptsDir}/${SELF_CHECK_SCRIPT}`)}`, {
             sudo: true,
             timeout: 15 * 60 * 1000,
         });

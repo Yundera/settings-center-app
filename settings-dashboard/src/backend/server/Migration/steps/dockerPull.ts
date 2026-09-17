@@ -1,5 +1,5 @@
 import { basename, dirname } from 'path';
-import { execOnTarget, MigrationKeyPair, shq } from '../MigrationSSH';
+import { execOnTarget, MigrationKeyPair, shq, targetScriptsDir } from '../MigrationSSH';
 import { yndPath } from '@/configuration/yndRoot';
 
 /**
@@ -32,7 +32,8 @@ import { yndPath } from '@/configuration/yndRoot';
  * for the whole multi-minute step.
  */
 
-const DOCKER_INSTALL_SCRIPT = yndPath('scripts/self-check/ensure-docker-installed.sh');
+/** Resolved against the TARGET's own layout — see targetScriptsDir(). */
+const DOCKER_INSTALL_SCRIPT = 'self-check/ensure-docker-installed.sh';
 
 export interface DockerPullResult {
     composeFilesPulled: string[];
@@ -56,7 +57,8 @@ export async function pullImagesOnTarget(
     } catch {
         onProgress?.('Installing Docker on target…');
         try {
-            await execOnTarget(keypair, target, `bash ${shq(DOCKER_INSTALL_SCRIPT)}`, {
+            const scriptsDir = await targetScriptsDir(keypair, target);
+            await execOnTarget(keypair, target, `bash ${shq(`${scriptsDir}/${DOCKER_INSTALL_SCRIPT}`)}`, {
                 sudo: true,
                 timeout: 10 * 60 * 1000,
             });

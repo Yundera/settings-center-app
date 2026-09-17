@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { adminMiddleware } from '@/backend/auth/middleware';
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
-import { yndRoot } from '@/configuration/yndRoot';
+import { yndRoot, yndScriptsPrelude } from '@/configuration/yndRoot';
 import path from 'path';
 
 interface UpdateChannelRequest {
@@ -23,13 +23,15 @@ async function updateChannelHandler(req: NextApiRequest, res: NextApiResponse<Up
   // when `cat` failed (file mode 0600 owned by pcs after env-file-manager's
   // mv-from-mktemp side-effect), losing every other key (OPERATOR_API,
   // PUBLIC_IP*, etc.).
-  const envMgr = path.join(remoteDataApp, 'scripts/tools/env-file-manager.sh');
+  // Resolved on the host, not here: the script tree is at $YND_SCRIPTS, which
+  // is `template/scripts` or `scripts` depending on the box (see yndRoot.ts).
+  const envMgr = '"$YND_SCRIPTS/tools/env-file-manager.sh"';
 
   try {
     if (req.method === 'GET') {
       try {
         const result = await executeHostCommand(
-          `sudo -n "${envMgr}" get UPDATE_URL "${envFilePath}"`
+          `${yndScriptsPrelude()}sudo -n ${envMgr} get UPDATE_URL "${envFilePath}"`
         );
         const updateUrl = result.stdout.trim() || null;
         return res.status(200).json({ success: true, updateUrl });
@@ -57,7 +59,7 @@ async function updateChannelHandler(req: NextApiRequest, res: NextApiResponse<Up
       }
 
       await executeHostCommand(
-        `sudo -n "${envMgr}" set UPDATE_URL '${updateUrl}' "${envFilePath}"`
+        `${yndScriptsPrelude()}sudo -n ${envMgr} set UPDATE_URL '${updateUrl}' "${envFilePath}"`
       );
 
       return res.status(200).json({

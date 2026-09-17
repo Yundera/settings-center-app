@@ -1,5 +1,6 @@
 import { executeHostCommand } from '@/backend/cmd/HostExecutor';
 import type { MigrationRequest } from './MigrationTypes';
+import { yndScriptsDirCommand } from '@/configuration/yndRoot';
 
 /**
  * Shared SSH primitives for migration.
@@ -83,6 +84,32 @@ export function targetSSHCommand(keypair: MigrationKeyPair, target: string, cmd:
         `${keypair.migrationUser}@${target}`,
         shq(cmd),
     ].join(' ');
+}
+
+/**
+ * Where the Yundera script tree lives ON THE TARGET — probed, not assumed.
+ *
+ * The target has a layout of its own: it is a freshly-provisioned box, so it
+ * carries only `template/scripts`, while a long-lived source that crossed over
+ * still has the legacy `scripts/` as well (see yndScriptsPrelude() in
+ * yndRoot.ts). Resolving this container's layout and using it over there is the
+ * bug this function exists to avoid.
+ *
+ * The prelude cannot be used by these callers: `execOnTarget(..., {sudo:true})`
+ * prefixes `sudo -n` to the whole string and `shq()` wraps it, so a second
+ * statement would either run as the wrong user or be swallowed. One extra
+ * round trip inside a step that already costs minutes is the cheaper answer.
+ *
+ * The stack ROOT is the same on both boxes — rsync copies the whole of /DATA —
+ * so only the sub-layout is in question here.
+ */
+export async function targetScriptsDir(keypair: MigrationKeyPair, target: string): Promise<string> {
+    const {stdout} = await execOnTarget(keypair, target, yndScriptsDirCommand());
+    const dir = (stdout.trim().split('\n').pop() || '').trim();
+    if (!dir.startsWith('/')) {
+        throw new Error(`Could not locate the Yundera script tree on ${target}: ${JSON.stringify(stdout.trim().slice(0, 200))}`);
+    }
+    return dir;
 }
 
 /**

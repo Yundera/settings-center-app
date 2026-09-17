@@ -1,6 +1,5 @@
-import path from 'path';
 import {executeHostCommand} from '@/backend/cmd/HostExecutor';
-import {yndRoot} from '@/configuration/yndRoot';
+import {yndScriptsPrelude} from '@/configuration/yndRoot';
 import {shq} from '@/backend/server/Migration/MigrationSSH';
 
 /**
@@ -48,10 +47,8 @@ const USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_DISPLAYNAME = 64;
 
-function scriptPath(): string {
-    const composeFolder = yndRoot();
-    return path.join(composeFolder, 'scripts/tools/authelia-user-manager.sh');
-}
+// Host-resolved, not shq()-quoted — see yndScriptsPrelude() in yndRoot.ts.
+const SCRIPT_REF = '"$YND_SCRIPTS/tools/authelia-user-manager.sh"';
 
 /**
  * Run a subcommand and parse its JSON stdout.
@@ -62,7 +59,7 @@ function scriptPath(): string {
  * keeps a display name like `a'; rm -rf /` inert.
  */
 async function run<T>(args: string[]): Promise<T> {
-    const cmd = `sudo -n ${shq(scriptPath())} ${args.map(shq).join(' ')}`;
+    const cmd = `${yndScriptsPrelude()}sudo -n ${SCRIPT_REF} ${args.map(shq).join(' ')}`;
     const {stdout} = await executeHostCommand(cmd);
     const text = stdout.trim();
     if (!text) {

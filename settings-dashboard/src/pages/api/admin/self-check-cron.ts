@@ -1,11 +1,12 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
-import {yndPath} from "@/configuration/yndRoot";
+import {yndPath, yndScriptsPrelude} from "@/configuration/yndRoot";
 
 const PCS_ENV = yndPath(".pcs.env");
-const ENV_MGR = yndPath("scripts/tools/env-file-manager.sh");
-const ENSURE_SCRIPT = yndPath("scripts/self-check/ensure-nightly-self-check.sh");
+// Host-resolved script tree — see yndScriptsPrelude() in yndRoot.ts.
+const ENV_MGR = '"$YND_SCRIPTS/tools/env-file-manager.sh"';
+const ENSURE_SCRIPT = '"$YND_SCRIPTS/self-check/ensure-nightly-self-check.sh"';
 const VAR_NAME = "SELF_CHECK_CRON";
 const DEFAULT_SCHEDULE = "0 3 * * *";
 
@@ -29,7 +30,7 @@ async function handler(
 ) {
     try {
         if (req.method === 'GET') {
-            const result = await executeHostCommand(`${ENV_MGR} get ${VAR_NAME} ${PCS_ENV}`);
+            const result = await executeHostCommand(`${yndScriptsPrelude()}${ENV_MGR} get ${VAR_NAME} ${PCS_ENV}`);
             const raw = (result.stdout || '').trim();
             const effective = raw === '' ? DEFAULT_SCHEDULE : raw;
             return res.status(200).json({
@@ -51,11 +52,11 @@ async function handler(
             // Quote the value for the shell since cron expressions contain spaces.
             // env-file-manager.sh writes to .pcs.env (owned by pcs:pcs), so
             // sudo to elevate from the admin SSH session.
-            await executeHostCommand(`sudo -n ${ENV_MGR} set ${VAR_NAME} '${value}' ${PCS_ENV}`);
+            await executeHostCommand(`${yndScriptsPrelude()}sudo -n ${ENV_MGR} set ${VAR_NAME} '${value}' ${PCS_ENV}`);
 
             // Apply immediately by re-running the ensure script. The script
             // installs root's crontab, so it must run as root.
-            await executeHostCommand(`sudo -n bash ${ENSURE_SCRIPT}`);
+            await executeHostCommand(`${yndScriptsPrelude()}sudo -n bash ${ENSURE_SCRIPT}`);
 
             return res.status(200).json({status: 'ok', value});
         }

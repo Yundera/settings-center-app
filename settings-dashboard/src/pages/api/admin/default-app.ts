@@ -1,7 +1,7 @@
 import {NextApiRequest, NextApiResponse} from 'next'
 import {adminMiddleware} from "@/backend/auth/middleware";
 import {executeHostCommand} from "@/backend/cmd/HostExecutor";
-import {yndRoot} from "@/configuration/yndRoot";
+import {yndRoot, yndScriptsPrelude} from "@/configuration/yndRoot";
 import path from 'path';
 
 interface DefaultAppRequest {
@@ -33,12 +33,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         // round-trip silently truncated .pcs.env on read failure (file mode
         // 0600 owned by pcs after env-file-manager's mv-from-mktemp side-effect),
         // dropping every other key (OPERATOR_API, PUBLIC_IP*, etc.).
-        const envMgr = path.join(composeFolder, 'scripts/tools/env-file-manager.sh');
+        // Host-resolved script tree — see yndScriptsPrelude() in yndRoot.ts.
+        const envMgr = '"$YND_SCRIPTS/tools/env-file-manager.sh"';
 
         // host/port are already constrained to the regexes above, so no shell
         // metacharacters can reach the single-quoted argument.
-        await executeHostCommand(`sudo -n "${envMgr}" set DEFAULT_SERVICE_HOST '${host}' "${envFilePath}"`);
-        await executeHostCommand(`sudo -n "${envMgr}" set DEFAULT_SERVICE_PORT '${port}' "${envFilePath}"`);
+        await executeHostCommand(`${yndScriptsPrelude()}sudo -n ${envMgr} set DEFAULT_SERVICE_HOST '${host}' "${envFilePath}"`);
+        await executeHostCommand(`${yndScriptsPrelude()}sudo -n ${envMgr} set DEFAULT_SERVICE_PORT '${port}' "${envFilePath}"`);
 
         res.status(200).json({status: 'success', host, port});
     } catch (error) {

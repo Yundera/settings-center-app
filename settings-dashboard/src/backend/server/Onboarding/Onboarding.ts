@@ -1,6 +1,5 @@
-import path from 'path';
 import {executeHostCommand} from '@/backend/cmd/HostExecutor';
-import {yndRoot} from '@/configuration/yndRoot';
+import {yndScriptsPrelude} from '@/configuration/yndRoot';
 import {shq} from '@/backend/server/Migration/MigrationSSH';
 
 /**
@@ -54,10 +53,9 @@ const USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
 const MIN_PASSWORD = 8;
 const MAX_DISPLAYNAME = 64;
 
-function scriptPath(): string {
-    const composeFolder = yndRoot();
-    return path.join(composeFolder, 'scripts/tools/onboarding.sh');
-}
+// Host-resolved, not shq()-quoted — see scriptRef() in Features.ts and
+// yndScriptsPrelude() in yndRoot.ts.
+const SCRIPT_REF = '"$YND_SCRIPTS/tools/onboarding.sh"';
 
 async function run<T>(args: string[], opts?: {env?: Record<string, string>; stdin?: string}): Promise<T> {
     // Non-secret inputs ride in the environment; the password rides in stdin.
@@ -66,7 +64,7 @@ async function run<T>(args: string[], opts?: {env?: Record<string, string>; stdi
     const env = Object.entries(opts?.env || {})
         .map(([k, v]) => `${k}=${shq(v)}`)
         .join(' ');
-    const cmd = `sudo -n ${env ? `env ${env} ` : ''}${shq(scriptPath())} ${args.map(shq).join(' ')}`;
+    const cmd = `${yndScriptsPrelude()}sudo -n ${env ? `env ${env} ` : ''}${SCRIPT_REF} ${args.map(shq).join(' ')}`;
 
     const {stdout} = await executeHostCommand(cmd, {stdin: opts?.stdin});
     const text = stdout.trim();

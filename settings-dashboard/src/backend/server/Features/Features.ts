@@ -1,6 +1,5 @@
-import path from 'path';
 import {executeHostCommand} from '@/backend/cmd/HostExecutor';
-import {yndRoot} from '@/configuration/yndRoot';
+import {yndScriptsPrelude} from '@/configuration/yndRoot';
 import {shq} from '@/backend/server/Migration/MigrationSSH';
 
 /**
@@ -48,13 +47,16 @@ export interface FeatureState {
     error?: string;
 }
 
-function scriptPath(id: FeatureId): string {
-    const composeFolder = yndRoot();
-    return path.join(composeFolder, 'scripts/tools', FEATURE_SCRIPTS[id]);
+// Not shq()-quoted and not a real path: the host resolves $YND_SCRIPTS from
+// the prelude below, because the script tree sits in a different place
+// depending on the box — see yndScriptsPrelude() in yndRoot.ts. The file names
+// are literals in FEATURE_SCRIPTS, so nothing here needs quoting.
+function scriptRef(id: FeatureId): string {
+    return `"$YND_SCRIPTS/tools/${FEATURE_SCRIPTS[id]}"`;
 }
 
 async function run(id: FeatureId, verb: 'status' | 'enable' | 'disable'): Promise<boolean> {
-    const {stdout} = await executeHostCommand(`sudo -n ${shq(scriptPath(id))} ${verb}`);
+    const {stdout} = await executeHostCommand(`${yndScriptsPrelude()}sudo -n ${scriptRef(id)} ${verb}`);
     const text = stdout.trim();
     if (!text) {
         throw new Error(`${FEATURE_SCRIPTS[id]} returned no output`);

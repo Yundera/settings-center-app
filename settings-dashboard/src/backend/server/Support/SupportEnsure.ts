@@ -1,5 +1,5 @@
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
-import { yndPath } from "@/configuration/yndRoot";
+import { yndPath, yndScriptsPrelude } from "@/configuration/yndRoot";
 
 /**
  * Reads the durable opt-out flag for the support-key safety net.
@@ -21,7 +21,8 @@ import { yndPath } from "@/configuration/yndRoot";
  */
 
 const PCS_ENV = yndPath(".pcs.env");
-const ENV_MGR = yndPath("scripts/tools/env-file-manager.sh");
+// Host-resolved script tree — see yndScriptsPrelude() in yndRoot.ts.
+const ENV_MGR = '"$YND_SCRIPTS/tools/env-file-manager.sh"';
 
 function isOptedOut(raw: string): boolean {
     const v = raw.trim().toLowerCase();
@@ -29,7 +30,7 @@ function isOptedOut(raw: string): boolean {
 }
 
 export async function getEnsureSupportKey(): Promise<{ ensure: boolean; rawValue: string }> {
-    const result = await executeHostCommand(`sudo -n bash ${ENV_MGR} get ENSURE_SUPPORT_KEY ${PCS_ENV}`);
+    const result = await executeHostCommand(`${yndScriptsPrelude()}sudo -n bash ${ENV_MGR} get ENSURE_SUPPORT_KEY ${PCS_ENV}`);
     const raw = (result.stdout || "").trim();
     return { ensure: !isOptedOut(raw), rawValue: raw };
 }
