@@ -32,7 +32,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         // End sessions already issued to this account. Without it the account is
         // gone from Authelia — so no NEW login is possible — but the gate session
         // they hold stays valid for the rest of its TTL (30 days by default),
-        // which for a revoked administrator means terminal and reboot keep
+        // which for a revoked administrator means SSH key management and reboot keep
         // working. Reported rather than thrown: the account IS deleted at this
         // point, and failing the response would be a lie about that.
         const revoked = await revokeGateSessions({user: username});

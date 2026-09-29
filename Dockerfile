@@ -2,9 +2,6 @@
 # Stage 1: Dependencies (for build)
 # =============================================================================
 FROM node:20-alpine AS deps
-# python3+make+g++ are needed to compile node-pty (native binding for the
-# in-app web terminal) against musl.
-RUN apk add --no-cache python3 make g++ linux-headers
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
@@ -46,11 +43,8 @@ RUN rm -rf settings-dashboard/.next/cache settings-dashboard/.next/trace
 # =============================================================================
 FROM node:20-alpine AS runner
 
-# Install runtime dependencies. python3+make+g++ are needed at install time
-# to compile node-pty's native binding against musl in this stage's
-# isolated --prod install (deps stage's binaries don't make it here).
-# `curl` is used by the orchestrator's Path C trigger: it SSHes into the
-# host and runs `docker exec admin curl … http://127.0.0.1:80/api/local/migration/start`
+# Install runtime dependencies. `curl` is used by the orchestrator's Path C
+# trigger: it SSHes into the host and runs `docker exec admin curl … http://127.0.0.1:80/api/local/migration/start`
 # to kick off the source-driven migration pipeline. Without curl in the
 # admin image, the orchestrator's `docker exec` reports
 # `OCI runtime exec failed: exec: "curl": executable file not found in $PATH`,
@@ -63,7 +57,7 @@ FROM node:20-alpine AS runner
 # (HostExecutor.ts). No code path here runs `ip` any more. Note busybox still
 # provides a cut-down /sbin/ip, so the command has not disappeared from an
 # interactive shell in this container — only the full iproute2 build has.
-RUN apk add --no-cache tini openssh-client curl python3 make g++ linux-headers
+RUN apk add --no-cache tini openssh-client curl
 
 # Install pnpm for production
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -81,10 +75,6 @@ RUN --mount=type=cache,id=pnpm-prod,target=/root/.local/share/pnpm/store \
     rm -rf node_modules/.pnpm/@next+swc-linux-x64-gnu* \
            node_modules/.pnpm/@next+swc-linux-arm64-gnu* \
            node_modules/.pnpm/typescript@*
-
-# Drop the build toolchain now that node-pty is compiled — keeps the runner
-# image lean.
-RUN apk del python3 make g++ linux-headers
 
 # Copy built application
 COPY --from=builder /app/settings-dashboard/.next ./settings-dashboard/.next

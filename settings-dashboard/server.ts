@@ -3,7 +3,6 @@ import { parse } from 'url'
 import next from 'next'
 import {start} from "@/backend/server";
 import {initializeAllContexts} from "@/backend/server/initializeAllContexts";
-import { handleTerminalUpgrade } from "@/backend/server/Terminal/TerminalHandler";
 import { applyAuthGate } from "@/backend/auth/serverGate";
 
 // Environment comes from the container env only. There used to be an
@@ -39,14 +38,6 @@ app.prepare().then(async () => {
         // Handle all routes with Next.js
         handle(req, res, parsedUrl)
     })
-
-    // Terminal panel WebSocket. Once any `upgrade` listener is attached,
-    // Node no longer auto-closes unmatched upgrade requests, so we must
-    // destroy the socket ourselves for anything that isn't our endpoint.
-    server.on('upgrade', (req, socket, head) => {
-        if (handleTerminalUpgrade(req, socket, head)) return;
-        socket.destroy();
-    });
 
     await initializeAllContexts();
 

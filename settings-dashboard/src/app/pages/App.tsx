@@ -25,7 +25,6 @@ import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import SpeedIcon from "@mui/icons-material/Speed";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import TerminalIcon from "@mui/icons-material/Terminal";
 import HttpsIcon from "@mui/icons-material/Https";
 import TuneIcon from "@mui/icons-material/Tune";
 
@@ -40,7 +39,6 @@ import {MigrationPanel} from "@/panels/migration/MigrationPanel";
 import {ResourcesPanel} from "@/panels/resources/ResourcesPanel";
 import {SupportPanel} from "@/panels/support/SupportPanel";
 import {SystemInformationPanel} from "@/panels/system-information/SystemInformationPanel";
-import {TerminalPanel} from "@/panels/terminal/TerminalPanel";
 import {useBrand} from "@/core/configuration/brandContext";
 
 const MyApp = ({authProvider, dataProvider, permissions}: {
@@ -78,7 +76,6 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
     ...(brand.hasOperator
       ? [definePanel({name: 'yundera-features', component: FeaturesPanel, icon: TuneIcon, label: `${brand.support.operatorName ?? brand.brand.name} Features`, permissions: 'admin'})]
       : []),
-    definePanel({name: 'terminal',           component: TerminalPanel,          icon: TerminalIcon,       label: 'Terminal',           permissions: 'admin'}),
     definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health',             permissions: 'admin'}),
     definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources',          permissions: 'admin'}),
     definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration',          permissions: 'admin'}),

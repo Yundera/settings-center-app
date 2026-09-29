@@ -596,8 +596,8 @@ export const AccountPanel = () => {
                         />
                         {newIsAdmin && (
                             <Alert severity="warning">
-                                Administrators get the whole dashboard, including the terminal and
-                                SSH key management — effectively root on this server.
+                                Administrators get the whole dashboard, including SSH key
+                                management — effectively root on this server.
                             </Alert>
                         )}
                     </Stack>

@@ -12,7 +12,7 @@ import {getConfig} from '@/configuration/getConfigBackend';
  * Why it matters: deleting an account or resetting its password stops the NEXT
  * login only. Without revocation, a gate session already in someone's hands
  * stays valid for the rest of its TTL — 30 days by default — and for a revoked
- * administrator on this app that means terminal, SSH keys and reboot keep
+ * administrator on this app that means SSH keys and reboot keep
  * working. That is the gap this closes.
  */
 

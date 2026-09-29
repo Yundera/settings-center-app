@@ -64,9 +64,8 @@ export async function readSession(req: NextApiRequest): Promise<SessionUser | nu
 /**
  * Same, from a bare header bag.
  *
- * Needed because two entry points never see a NextApiRequest: the pre-Next page
- * gate in server.ts (serverGate.ts) and the terminal WebSocket upgrade, which
- * Node hands us before any framework runs.
+ * Needed because the pre-Next page gate in server.ts (serverGate.ts) never sees
+ * a NextApiRequest — it runs before any framework does.
  */
 export async function readSessionFromHeaders(
   headers: IncomingHttpHeaders,

@@ -36,8 +36,8 @@ export const ADMIN_ROLE = 'admin';
  *
  * Every route under pages/api/admin/ must use this rather than authMiddleware.
  * A PCS can now hold more than one local account, and a plain account passing
- * authMiddleware would otherwise reach the terminal, the SSH key store, and
- * reboot. Hiding panels in App.tsx is cosmetic — this is the real gate.
+ * authMiddleware would otherwise reach the SSH key store and reboot. Hiding
+ * panels in App.tsx is cosmetic — this is the real gate.
  */
 export function adminMiddleware(
   handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void,
