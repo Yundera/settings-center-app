@@ -47,17 +47,3 @@ export function resolveBrand(): BrandPayload {
     return toBrandPayload(file, {hasOperator: hasOperator(), serverDomain});
 }
 
-/**
- * Host suffixes whose fetched SSH keys the Access panel marks as "trusted
- * source" rather than the neutral "TLS-verified" tone.
- *
- * Empty when there is no operator — with nobody to vouch for a host, nothing
- * is official, and claiming otherwise would be the assurance the badge exists
- * to make. Deliberately NOT user-curatable: a user who can add entries can
- * mark any host as vouched-for by the operator, which inverts the point.
- */
-export function trustedPubkeyHostSuffixes(): string[] {
-    const file = loadBrandFile();
-    if (!hasOperator() || !file.operator) return [];
-    return file.operator.trustedPubkeyHostSuffixes ?? [];
-}

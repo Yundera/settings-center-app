@@ -138,16 +138,3 @@ export async function readGateIdentity(headers: IncomingHttpHeaders): Promise<Ga
     return null;
   }
 }
-
-/**
- * The gate's own session cookie, as forwarded to us. Not a credential we
- * validate — the assertion is that — but the handle needed to ask the gate to
- * revoke *other* sessions while sparing this one (see gateControl.ts).
- */
-export const GATE_SESSION_COOKIE = 'appshield_session';
-
-export function gateSessionId(headers: IncomingHttpHeaders): string | null {
-  const header = headers.cookie || '';
-  const match = header.split(/;\s*/).find(c => c.startsWith(`${GATE_SESSION_COOKIE}=`));
-  return match ? match.substring(GATE_SESSION_COOKIE.length + 1) : null;
-}

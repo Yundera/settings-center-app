@@ -12,7 +12,7 @@ import {shq} from '@/backend/server/Migration/MigrationSSH';
  * the entire reason this indirection exists — see doc/pcs-onboarding.md in
  * template-root.
  *
- * Same stdout-is-JSON contract as AutheliaUsers.ts.
+ * Stdout is the script's JSON answer; errors carry its `ERROR: …` line.
  */
 
 export interface OnboardingStatus {
@@ -36,15 +36,6 @@ export interface OnboardingResult {
     completed: boolean;
     /** Present only when the password was generated host-side. Shown ONCE. */
     password?: string;
-}
-
-export interface OnboardingResetResult {
-    /** Always false — the script fails rather than returning a claimed box. */
-    claimed: boolean;
-    completed: boolean;
-    username: string;
-    /** Path of the timestamped users_database.yml copy the script kept. */
-    backup: string;
 }
 
 // Mirrors validate_username in authelia-user-manager.sh, which is the enforcing
@@ -129,24 +120,6 @@ export async function runOnboarding(opts: {
 
 export async function markOnboardingCompleted(): Promise<void> {
     await run<{completed: boolean}>(['mark-completed']);
-}
-
-/**
- * Unclaim the box so the first-start wizard replays.
- *
- * This is a SELF-LOCKOUT operation, and the reason onboarding.sh's own header
- * says to keep `reset` terminal-only: it disables every local account, the gate
- * blocks the session that triggered it, and ensure-dex.sh then withdraws the
- * Local Account connector — so on a PCS whose Yundera Login is absent or broken
- * the only way back in is the support SSH key. Exposed anyway, on request, with
- * the risk spelled out at the two places that can still refuse: the confirmation
- * dialog in AccountPanel and the `confirm` flag on the route.
- *
- * The script keeps a timestamped `*.reset-backup` copy of users_database.yml —
- * the only copy of the previous password hashes — and returns its path.
- */
-export async function resetOnboarding(): Promise<OnboardingResetResult> {
-    return run<OnboardingResetResult>(['reset', '--confirm']);
 }
 
 /**
