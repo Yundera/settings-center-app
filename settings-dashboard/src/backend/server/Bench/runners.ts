@@ -2,11 +2,10 @@ import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 
 // Shared bench runners.
 //
-// The disk and network benchmarks were originally inlined in their admin
-// endpoints. They are now extracted here so the public `/api/bench/*`
-// endpoints can share a single implementation behind the BenchCache
-// single-flight wrapper — the admin endpoints still call them directly for
-// on-demand refresh.
+// The disk and network benchmarks behind the public `/api/bench/*` endpoints
+// (the orchestrator's `pcs perf`), run through the BenchCache single-flight
+// wrapper. The admin Resources panel that also called them directly is gone —
+// Maison shows resources now.
 
 // ─── Disk bench ────────────────────────────────────────────────────────
 

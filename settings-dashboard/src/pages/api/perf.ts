@@ -6,7 +6,7 @@ import { getPublicMetricsResponse } from "@/backend/server/Metrics/Metrics";
  *
  * Returns the sanitised CPU / RAM / disk-IO / disk-occupation / net-bytes
  * snapshot maintained in RAM by the Metrics module. The cache is refreshed by
- * a background SSH loop (5 min idle / 5 s while the dashboard is active) —
+ * a background SSH loop every 5 minutes —
  * this handler never opens SSH or shells out, so it is safe to leave
  * unauthenticated, same pattern as /api/health.
  *

@@ -6,9 +6,7 @@ import { getNetworkBench } from "@/backend/server/Bench/BenchCache";
  *
  * Same single-flight / cooldown-gated lazy-trigger contract as
  * /api/bench/disk — see that file for the full description. Cached result,
- * public path re-triggers at most once per cooldown window; immediate
- * cooldown-free refresh via the auth-gated
- * /api/admin/resources/network-test endpoint.
+ * public path re-triggers at most once per cooldown window.
  */
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {

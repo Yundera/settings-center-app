@@ -11,9 +11,6 @@
 //   • concurrent requests during a run share the same in-flight promise.
 //   • the response is non-blocking: callers immediately see
 //     {status:"pending"} while a bench is running, and poll for the result.
-//   • the auth-gated /api/admin/resources/* endpoints call the runners
-//     directly and are NOT subject to the cooldown — they are the
-//     on-demand refresh route for an authenticated admin.
 //
 // State lives in RAM only — the lifecycle is the admin container. A restart
 // re-arms the lazy trigger on the next public poll. Pinned to globalThis for

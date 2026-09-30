@@ -4,8 +4,10 @@ import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 // Sampling cadence
 // ============================================================
 //
-// The loop runs forever so metric history keeps accumulating, but it samples
-// slowly when nobody is watching and fast while the Resources panel is open.
+// The loop runs forever at a fixed slow cadence; its only reader is the public
+// /api/perf snapshot (the orchestrator's `pcs perf`). The admin Resources panel
+// that used to switch it to a 5 s cadence while open was removed — Maison shows
+// resources now.
 //
 // A previous version used a fixed 5 s `setInterval` that never waited for the
 // prior cycle to finish. Under host load an SSH cycle could take longer than
@@ -14,32 +16,12 @@ import { executeHostCommand } from "@/backend/cmd/HostExecutor";
 // a self-rescheduling `setTimeout` chain: the next cycle is armed only AFTER
 // the current one fully settles, so cycles can never overlap.
 
-const SLOW_INTERVAL_MS = 5 * 60 * 1000;   // baseline cadence when the dashboard is idle
-const FAST_INTERVAL_MS = 5 * 1000;        // cadence while the dashboard is actively polling
-
-// The dashboard counts as "active" if /api/admin/metrics was read within this
-// window. Kept comfortably above the frontend's 5 s poll so a single dropped
-// poll doesn't bounce the loop back to the slow cadence.
-const ACTIVE_WINDOW_MS = 20 * 1000;
+const INTERVAL_MS = 5 * 60 * 1000;
 
 // Hard wall-clock budget for one host round-trip. executeHostCommand passes
 // this to the local executor, which SIGKILLs the ssh process tree if exceeded
 // — a cycle that cannot finish in time dies instead of lingering.
 const COLLECT_TIMEOUT_MS = 15 * 1000;
-
-// Adaptive backoff: when a cycle takes longer than this fraction of the
-// timeout budget, the host is probably under load. The next delay is stretched
-// proportionally (see computeNextDelay) so we don't pile more SSH load onto a
-// sick host, while still updating the UI often enough to be useful.
-const STRESS_THRESHOLD_MS = COLLECT_TIMEOUT_MS / 2;   // 7.5 s
-// Cap for the stressed-active delay. Stays well below SLOW_INTERVAL_MS so a
-// user actively watching the panel still gets refreshes within a minute even
-// when the host is struggling.
-const MAX_ACTIVE_BACKOFF_MS = 60 * 1000;              // 60 s
-
-// History ring buffer bounds — trimmed by both age and entry count.
-const HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;  // keep up to 12 h of points
-const HISTORY_MAX_ENTRIES = 720;                // hard cap on RAM / response size
 
 /**
  * Single bash payload that gathers every metric in one SSH round-trip.
@@ -71,8 +53,6 @@ echo "===NETDEV==="
 cat /proc/net/dev
 echo "===DF==="
 df -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs --output=source,target,size,used,avail
-echo "===TOP==="
-ps -eo pid,user,pcpu,pmem,comm --sort=-pcpu --no-headers | head -10
 `;
 
 // ============================================================
@@ -114,7 +94,6 @@ export interface RawSample {
     disks: DiskStat[];
     nets: NetIfStat[];
     filesystems: { source: string; target: string; sizeBytes: number; usedBytes: number; availBytes: number }[];
-    topProcesses: { pid: number; user: string; cpuPct: number; memPct: number; comm: string }[];
 }
 
 export interface MetricsSnapshot {
@@ -134,32 +113,6 @@ export interface MetricsSnapshot {
     lastError: string | null;
 }
 
-/**
- * Slim historical point kept in the ring buffer. Carries only what the graphs
- * plot — deliberately NOT the full sample (process list, filesystems), so the
- * buffer stays small in RAM and cheap to ship to the browser every poll.
- */
-export interface MetricsHistoryPoint {
-    /** ms since unix epoch */
-    sampledAt: number;
-    cpuBusyFrac: number | null;
-    /** memory used fraction, 0..1 */
-    memUsedFrac: number;
-    load1: number;
-    netRxBps: Record<string, number>;
-    netTxBps: Record<string, number>;
-    diskReadBps: Record<string, number>;
-    diskWriteBps: Record<string, number>;
-}
-
-/** Shape returned by GET /api/admin/metrics. */
-export interface MetricsResponse {
-    /** Full latest snapshot — powers the detail cards, process table, filesystems. */
-    current: MetricsSnapshot;
-    /** Slim historical points for the graphs, oldest first. */
-    history: MetricsHistoryPoint[];
-}
-
 // ============================================================
 // State
 // ============================================================
@@ -167,7 +120,7 @@ export interface MetricsResponse {
 // Pinned to globalThis because Next.js dev mode compiles API routes through
 // its own bundler and gives them a separate module instance from the one
 // loaded by tsx for server.ts. Module-level `let`s end up duplicated: the
-// background refresh writes to the tsx copy, while /api/admin/metrics reads
+// background refresh writes to the tsx copy, while /api/perf reads
 // from a pristine route copy. globalThis is the single process-wide object
 // both copies share.
 const STATE_KEY = "__yundera_metrics_state__" as const;
@@ -175,12 +128,9 @@ const STATE_KEY = "__yundera_metrics_state__" as const;
 interface MetricsState {
     previous: RawSample | null;
     snapshot: MetricsSnapshot;
-    history: MetricsHistoryPoint[];
     refreshTimer: NodeJS.Timeout | null;
     /** true while a refresh cycle is running — guards against double-arming */
     inFlight: boolean;
-    /** ms epoch of the last /api/admin/metrics read */
-    lastReadAt: number;
     /** true once startMetricsRefresh has armed the loop */
     started: boolean;
 }
@@ -197,19 +147,15 @@ function getState(): MetricsState {
                 lastRefreshedAt: null,
                 lastError: null,
             },
-            history: [],
             refreshTimer: null,
             inFlight: false,
-            lastReadAt: 0,
             started: false,
         };
         g[STATE_KEY] = s;
     } else {
         // Backfill fields on a state object left behind by an older module
         // version (Next.js dev hot-reload) so callers never hit `undefined`.
-        s.history ??= [];
         s.inFlight ??= false;
-        s.lastReadAt ??= 0;
         s.started ??= false;
     }
     return s;
@@ -220,12 +166,6 @@ const SECTOR_BYTES = 512;
 // ============================================================
 // Public API
 // ============================================================
-
-/** Full response for GET /api/admin/metrics — latest snapshot + history buffer. */
-export function getMetricsResponse(): MetricsResponse {
-    const s = getState();
-    return { current: s.snapshot, history: s.history };
-}
 
 /**
  * Shape returned by the public GET /api/perf endpoint. A trimmed slice of the
@@ -253,11 +193,10 @@ export interface PublicPerfResponse {
 }
 
 /**
- * Sanitised snapshot for the public /api/perf endpoint. Reads from the same
- * RAM cache as /api/admin/metrics — no shell, no SSH on call — so it is as
- * cheap and abuse-resistant as /api/health. Drops `topProcesses` and the
- * filesystem `source` field; everything else is host-shape data the
- * orchestrator already infers from network traffic.
+ * Sanitised snapshot for the public /api/perf endpoint. Reads from the RAM
+ * cache — no shell, no SSH on call — so it is as cheap and abuse-resistant as
+ * /api/health. Drops the filesystem `source` field; everything else is
+ * host-shape data the orchestrator already infers from network traffic.
  */
 export function getPublicMetricsResponse(): PublicPerfResponse {
     const s = getState();
@@ -290,32 +229,7 @@ export function getPublicMetricsResponse(): PublicPerfResponse {
 }
 
 /**
- * Record that a client just read the metrics endpoint. Flips the sampling loop
- * to the fast cadence and, on an idle→active transition, pulls the next
- * refresh forward so the graph starts updating immediately instead of waiting
- * out the 5-minute baseline timer.
- */
-export function notifyMetricsRead(): void {
-    const state = getState();
-    const wasActive = isActive(state);
-    state.lastReadAt = Date.now();
-
-    // Only nudge on the idle→active edge, and only when no cycle is running
-    // (a running cycle's own reschedule will already see the fresh lastReadAt
-    // and pick the fast cadence).
-    if (!wasActive && !state.inFlight && state.refreshTimer) {
-        clearTimeout(state.refreshTimer);
-        state.refreshTimer = setTimeout(() => void runRefreshCycle(), 0);
-        state.refreshTimer.unref?.();
-    }
-}
-
-function isActive(state: MetricsState): boolean {
-    return Date.now() - state.lastReadAt < ACTIVE_WINDOW_MS;
-}
-
-/**
- * Run one host round-trip and update the snapshot + history. Never throws —
+ * Run one host round-trip and update the snapshot. Never throws —
  * SSH failures are swallowed and the previous snapshot is kept.
  */
 export async function refreshMetricsSnapshot(): Promise<void> {
@@ -331,35 +245,10 @@ export async function refreshMetricsSnapshot(): Promise<void> {
             lastError: null,
         };
         state.previous = current;
-        appendHistory(state, current, rates);
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn("Metrics: failed to refresh from host:", msg);
         state.snapshot = { ...state.snapshot, lastError: msg };
-    }
-}
-
-/** Append a slim point to the ring buffer and trim it by age and count. */
-function appendHistory(state: MetricsState, sample: RawSample, rates: MetricsSnapshot["rates"]): void {
-    const memUsedFrac = sample.mem.totalBytes > 0
-        ? (sample.mem.totalBytes - sample.mem.availableBytes) / sample.mem.totalBytes
-        : 0;
-    state.history.push({
-        sampledAt: sample.sampledAt,
-        cpuBusyFrac: rates.cpuBusyFrac,
-        memUsedFrac,
-        load1: sample.load1,
-        netRxBps: rates.netRxBps,
-        netTxBps: rates.netTxBps,
-        diskReadBps: rates.diskReadBps,
-        diskWriteBps: rates.diskWriteBps,
-    });
-    const cutoff = Date.now() - HISTORY_WINDOW_MS;
-    while (state.history.length > 0 && state.history[0].sampledAt < cutoff) {
-        state.history.shift();
-    }
-    if (state.history.length > HISTORY_MAX_ENTRIES) {
-        state.history.splice(0, state.history.length - HISTORY_MAX_ENTRIES);
     }
 }
 
@@ -371,32 +260,13 @@ function appendHistory(state: MetricsState, sample: RawSample, rates: MetricsSna
 async function runRefreshCycle(): Promise<void> {
     const state = getState();
     state.inFlight = true;
-    const startedAt = Date.now();
     try {
         await refreshMetricsSnapshot();
     } finally {
-        const durationMs = Date.now() - startedAt;
         state.inFlight = false;
-        const delay = computeNextDelay(state, durationMs);
-        state.refreshTimer = setTimeout(() => void runRefreshCycle(), delay);
+        state.refreshTimer = setTimeout(() => void runRefreshCycle(), INTERVAL_MS);
         state.refreshTimer.unref?.();
     }
-}
-
-/**
- * Pick the next refresh delay based on whether the dashboard is being watched
- * and how long the last cycle took. A cycle that used >50 % of the timeout
- * budget — including one that timed out outright — triggers proportional
- * backoff, capped so the UI doesn't stall when a user is actively viewing.
- */
-function computeNextDelay(state: MetricsState, lastDurationMs: number): number {
-    if (!isActive(state)) {
-        return SLOW_INTERVAL_MS;
-    }
-    if (lastDurationMs > STRESS_THRESHOLD_MS) {
-        return Math.min(MAX_ACTIVE_BACKOFF_MS, Math.max(FAST_INTERVAL_MS, lastDurationMs * 2));
-    }
-    return FAST_INTERVAL_MS;
 }
 
 /** Kick off the sampling loop. Idempotent. */
@@ -426,9 +296,8 @@ function parse(stdout: string, sampledAt: number): RawSample {
     const disks = parseDiskstats(sections.DISKSTATS ?? "");
     const nets = parseNetDev(sections.NETDEV ?? "");
     const filesystems = parseDf(sections.DF ?? "");
-    const topProcesses = parseTop(sections.TOP ?? "");
 
-    return { uptime, sampledAt, load1, load5, load15, nproc, mem, cpu, disks, nets, filesystems, topProcesses };
+    return { uptime, sampledAt, load1, load5, load15, nproc, mem, cpu, disks, nets, filesystems };
 }
 
 function splitSections(stdout: string): Record<string, string> {
@@ -527,25 +396,6 @@ function parseDf(s: string): RawSample["filesystems"] {
             sizeBytes: parseInt(p[2], 10) || 0,
             usedBytes: parseInt(p[3], 10) || 0,
             availBytes: parseInt(p[4], 10) || 0,
-        });
-    }
-    return out;
-}
-
-function parseTop(s: string): RawSample["topProcesses"] {
-    const out: RawSample["topProcesses"] = [];
-    for (const line of s.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        // ps -eo pid,user,pcpu,pmem,comm --no-headers
-        const p = trimmed.split(/\s+/);
-        if (p.length < 5) continue;
-        out.push({
-            pid:     parseInt(p[0], 10) || 0,
-            user:    p[1],
-            cpuPct:  parseFloat(p[2]) || 0,
-            memPct:  parseFloat(p[3]) || 0,
-            comm:    p.slice(4).join(" "),
         });
     }
     return out;

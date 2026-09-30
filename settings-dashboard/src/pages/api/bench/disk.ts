@@ -12,8 +12,7 @@ import { getDiskBench } from "@/backend/server/Bench/BenchCache";
  * can start a run (win or fail), so the endpoint cannot be used to spam the
  * host with `dd` — see BenchCache.ts.
  *
- * For an immediate, cooldown-free refresh use the auth-gated
- * /api/admin/resources/disk-test endpoint. The cached value's lifecycle is the
+ * The cached value's lifecycle is the
  * admin container's process; a restart re-arms the lazy trigger on the next call.
  *
  * Response shape:

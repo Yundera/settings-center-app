@@ -20,19 +20,15 @@ import CloudIcon from "@mui/icons-material/Cloud";
 import LanguageIcon from "@mui/icons-material/Language";
 import DeveloperBoardIcon from "@mui/icons-material/DeveloperBoard";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
-import SpeedIcon from "@mui/icons-material/Speed";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import HttpsIcon from "@mui/icons-material/Https";
 import TuneIcon from "@mui/icons-material/Tune";
 
 import {OperatorPanel} from "@/panels/operator/OperatorPanel";
-import {CertificatesPanel} from "@/panels/certificates/CertificatesPanel";
 import {DomainPanel} from "@/panels/domain/DomainPanel";
 import {FeaturesPanel} from "@/panels/features/FeaturesPanel";
 import {HealthPanel} from "@/panels/health/HealthPanel";
 import {MigrationPanel} from "@/panels/migration/MigrationPanel";
-import {ResourcesPanel} from "@/panels/resources/ResourcesPanel";
 import {SupportPanel} from "@/panels/support/SupportPanel";
 import {SystemInformationPanel} from "@/panels/system-information/SystemInformationPanel";
 import {useBrand} from "@/core/configuration/brandContext";
@@ -80,7 +76,6 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
   const availablePanels: PanelInterface[] = [
     definePanel({name: 'system-information', component: SystemInformationPanel, icon: InfoOutlinedIcon, label: 'System Information', permissions: 'admin'}),
     definePanel({name: 'domain',             component: DomainPanel,            icon: LanguageIcon,       label: 'Domain',             permissions: 'admin'}),
-    definePanel({name: 'certificates',       component: CertificatesPanel,      icon: HttpsIcon,          label: 'Certificates',       permissions: 'admin'}),
     // Gated on hasOperator rather than `operator`: the latter is also non-null via
     // the domain-zone fallback, and a box that merely sits on a known zone has no
     // operator-run services to opt out of.
@@ -88,7 +83,6 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
       ? [definePanel({name: 'yundera-features', component: FeaturesPanel, icon: TuneIcon, label: `${brand.support.operatorName ?? brand.brand.name} Features`, permissions: 'admin'})]
       : []),
     definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health',             permissions: 'admin'}),
-    definePanel({name: 'resources',          component: ResourcesPanel,         icon: SpeedIcon,          label: 'Resources',          permissions: 'admin'}),
     definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration',          permissions: 'admin'}),
     ...(brand.operator
       ? [definePanel({name: 'operator', component: OperatorPanel, icon: CloudIcon, label: brand.operator.panelLabel, permissions: 'admin'})]
