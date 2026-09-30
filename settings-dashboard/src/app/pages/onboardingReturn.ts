@@ -19,7 +19,7 @@
  *
  * The admin app and every other app are routed at parallel labels —
  * `admin-${DOMAIN}`, `maison-${DOMAIN}`, `${DOMAIN}` — for the gateway, nip.io
- * and sslip.io shapes alike. PcsWelcome.tsx and AccountPanel use the same trick
+ * and sslip.io shapes alike. PcsWelcome.tsx and App.tsx (forwardMovedPanels) use the same trick
  * to find their sibling services; `window.APP_CONFIG.DOMAIN` is not an option,
  * because FRONTEND_PUBLIC_ENV publishes only BASE_PATH and the domain is
  * deliberately kept off the unauthenticated /api/brand payload.

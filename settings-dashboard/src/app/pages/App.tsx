@@ -16,7 +16,6 @@ import {AuthProvider} from "ra-core";
 import {definePanel} from "@/core/definePanel";
 import type {PanelInterface} from "@/core/PanelInterface";
 
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import CloudIcon from "@mui/icons-material/Cloud";
 import LanguageIcon from "@mui/icons-material/Language";
 import DeveloperBoardIcon from "@mui/icons-material/DeveloperBoard";
@@ -27,7 +26,6 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import HttpsIcon from "@mui/icons-material/Https";
 import TuneIcon from "@mui/icons-material/Tune";
 
-import {AccountPanel} from "@/panels/account/AccountPanel";
 import {OperatorPanel} from "@/panels/operator/OperatorPanel";
 import {CertificatesPanel} from "@/panels/certificates/CertificatesPanel";
 import {DomainPanel} from "@/panels/domain/DomainPanel";
@@ -40,20 +38,22 @@ import {SystemInformationPanel} from "@/panels/system-information/SystemInformat
 import {useBrand} from "@/core/configuration/brandContext";
 
 /**
- * The Access panel moved to auth-console (the auth stack's web UI). Links to it
- * still arrive here — pcs-orchestrator's support deeplink
+ * The Account and Access panels moved to auth-console (the auth stack's web UI).
+ * Links to them still arrive here — pcs-orchestrator's support deeplink
  * (`#/access?account=admin&pubkeyUrl=…`, see buildSupportDeeplink) and old
- * bookmarks — so forward them, query included, to the same page there. The
- * sibling host swaps the `admin-` prefix, like AccountPanel's links.
+ * bookmarks — so forward them, query included, to the matching page there
+ * (`#/account` → the console's Account page at `/`). The sibling host swaps the
+ * `admin-` prefix, which is correct for the gateway, nip.io and sslip.io hosts.
  */
-const forwardMovedAccessLink = () => {
+const MOVED_PANELS: Record<string, string> = {access: "/access", account: "/"};
+const forwardMovedPanels = () => {
   if (typeof window === "undefined") return;
-  const m = window.location.hash.match(/^#\/access(\?.*)?$/);
+  const m = window.location.hash.match(/^#\/(access|account)(\?.*)?$/);
   const host = window.location.host;
   if (!m || !host.startsWith("admin-")) return;
-  window.location.replace(`https://auth-console-${host.slice("admin-".length)}/access${m[1] ?? ""}`);
+  window.location.replace(`https://auth-console-${host.slice("admin-".length)}${MOVED_PANELS[m[1]]}${m[2] ?? ""}`);
 };
-forwardMovedAccessLink();
+forwardMovedPanels();
 
 const MyApp = ({authProvider, dataProvider, permissions}: {
   authProvider: AuthProvider,
@@ -73,15 +73,12 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
   //   support  — an operator-only surface. Without one, every call in
   //              SupportKey.ts throws; hiding beats rendering a dead toggle.
   //
-  // `permissions: 'admin'` on everything except `account`: a PCS can hold more
-  // than one local account now, and only members of Authelia's `admins` group
-  // administer the box. A plain user is left with Account alone, which links out
-  // to the sign-in portal and the Auth Console (local accounts and SSH access
-  // live there now). This is cosmetic — adminMiddleware on the matching
+  // `permissions: 'admin'` on every panel: only members of Authelia's `admins`
+  // group administer the box. Accounts and SSH access are managed in auth-console
+  // (see forwardMovedPanels). This is cosmetic — adminMiddleware on the matching
   // /api/admin routes is what actually enforces it.
   const availablePanels: PanelInterface[] = [
     definePanel({name: 'system-information', component: SystemInformationPanel, icon: InfoOutlinedIcon, label: 'System Information', permissions: 'admin'}),
-    definePanel({name: 'account',            component: AccountPanel,           icon: AccountCircleIcon,  label: 'Account'}),
     definePanel({name: 'domain',             component: DomainPanel,            icon: LanguageIcon,       label: 'Domain',             permissions: 'admin'}),
     definePanel({name: 'certificates',       component: CertificatesPanel,      icon: HttpsIcon,          label: 'Certificates',       permissions: 'admin'}),
     // Gated on hasOperator rather than `operator`: the latter is also non-null via

@@ -9,8 +9,8 @@ import {button, colors, font, spacing} from '@/app/pages/softTheme';
  *
  * The admin app and the PCS root are routed at parallel labels — `admin-${DOMAIN}`
  * and `${DOMAIN}` — for the gateway, nip.io and sslip.io variants alike, so
- * stripping the prefix is correct for every deployment shape. AccountPanel uses
- * the same trick to find its sibling services.
+ * stripping the prefix is correct for every deployment shape. App.tsx
+ * (forwardMovedPanels) uses the same trick to find auth-console.
  *
  * This replaces a read of `window.APP_CONFIG.DOMAIN`, which never resolved:
  * FRONTEND_PUBLIC_ENV publishes only BASE_PATH, so the button below has never

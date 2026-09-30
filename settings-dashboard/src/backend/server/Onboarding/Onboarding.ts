@@ -30,6 +30,15 @@ export interface OnboardingStatus {
     username: string;
 }
 
+export interface OnboardingResetResult {
+    /** Always false — the script fails rather than returning a claimed box. */
+    claimed: boolean;
+    completed: boolean;
+    username: string;
+    /** Path of the timestamped users_database.yml copy the script kept. */
+    backup: string;
+}
+
 export interface OnboardingResult {
     username: string;
     claimed: boolean;
@@ -120,6 +129,21 @@ export async function runOnboarding(opts: {
 
 export async function markOnboardingCompleted(): Promise<void> {
     await run<{completed: boolean}>(['mark-completed']);
+}
+
+/**
+ * Unclaim the box so the first-start wizard replays ("Re-run onboarding").
+ *
+ * A self-lockout operation: it disables every local account and ensure-dex.sh
+ * withdraws the Local Account connector, so afterwards Yundera Login is the only
+ * way back to the wizard. The route refuses when that connector is off, spares
+ * the caller's gate session and revokes every other one; the UI makes the
+ * operator type `reset` first. The script keeps a timestamped `*.reset-backup`
+ * copy of users_database.yml — the only copy of the previous password hashes —
+ * and returns its path.
+ */
+export async function resetOnboarding(): Promise<OnboardingResetResult> {
+    return run<OnboardingResetResult>(['reset', '--confirm']);
 }
 
 /**

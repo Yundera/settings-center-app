@@ -3,6 +3,7 @@ import Box from "@mui/material/Box";
 import React from "react";
 import {PublicIp} from "@/component/PublicIp";
 import {RebootSystem} from "@/component/RebootSystem";
+import {RerunOnboarding} from "@/component/RerunOnboarding";
 import {colors, font, spacing} from '@/app/pages/softTheme';
 
 export const SystemInformationPanel = () => {
@@ -37,6 +38,7 @@ export const SystemInformationPanel = () => {
             }}>
                 <PublicIp />
                 <RebootSystem />
+                <RerunOnboarding />
             </Box>
         </Box>
     );
