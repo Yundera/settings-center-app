@@ -36,8 +36,6 @@ type Config = {
     DOMAIN: string;
     UID: string;
     PUBLIC_IP: string;
-    DEFAULT_SERVICE_HOST: string;
-    DEFAULT_SERVICE_PORT: string;
 
     // Bare operator control-plane base URL (no /user); callers append explicit
     // subpaths. Always read via operatorApi() in ./operatorApi.ts, never

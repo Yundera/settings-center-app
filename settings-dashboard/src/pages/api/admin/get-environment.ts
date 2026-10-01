@@ -17,8 +17,6 @@ async function handler(
         const envConfig = {
             DOMAIN: getConfig("DOMAIN") || '',
             PUBLIC_IP: getConfig("PUBLIC_IP") || '',
-            DEFAULT_SERVICE_HOST: getConfig("DEFAULT_SERVICE_HOST") || '',
-            DEFAULT_SERVICE_PORT: getConfig("DEFAULT_SERVICE_PORT") || '',
         };
 
         res.status(200).json({

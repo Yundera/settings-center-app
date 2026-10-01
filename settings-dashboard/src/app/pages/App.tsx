@@ -17,7 +17,6 @@ import {definePanel} from "@/core/definePanel";
 import type {PanelInterface} from "@/core/PanelInterface";
 
 import CloudIcon from "@mui/icons-material/Cloud";
-import LanguageIcon from "@mui/icons-material/Language";
 import DeveloperBoardIcon from "@mui/icons-material/DeveloperBoard";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
@@ -25,7 +24,6 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
 
 import {OperatorPanel} from "@/panels/operator/OperatorPanel";
-import {DomainPanel} from "@/panels/domain/DomainPanel";
 import {FeaturesPanel} from "@/panels/features/FeaturesPanel";
 import {HealthPanel} from "@/panels/health/HealthPanel";
 import {MigrationPanel} from "@/panels/migration/MigrationPanel";
@@ -34,20 +32,26 @@ import {SystemInformationPanel} from "@/panels/system-information/SystemInformat
 import {useBrand} from "@/core/configuration/brandContext";
 
 /**
- * The Account and Access panels moved to auth-console (the auth stack's web UI).
+ * The Account and Access panels moved to auth-console (the auth stack's web UI),
+ * and the Domain panel to mesh-console (the mesh stack's).
  * Links to them still arrive here — pcs-orchestrator's support deeplink
  * (`#/access?account=admin&pubkeyUrl=…`, see buildSupportDeeplink) and old
  * bookmarks — so forward them, query included, to the matching page there
  * (`#/account` → the console's Account page at `/`). The sibling host swaps the
  * `admin-` prefix, which is correct for the gateway, nip.io and sslip.io hosts.
  */
-const MOVED_PANELS: Record<string, string> = {access: "/access", account: "/"};
+const MOVED_PANELS: Record<string, {console: string, path: string}> = {
+  access: {console: "auth-console", path: "/access"},
+  account: {console: "auth-console", path: "/"},
+  domain: {console: "mesh-console", path: "/domain"},
+};
 const forwardMovedPanels = () => {
   if (typeof window === "undefined") return;
-  const m = window.location.hash.match(/^#\/(access|account)(\?.*)?$/);
+  const m = window.location.hash.match(/^#\/(access|account|domain)(\?.*)?$/);
   const host = window.location.host;
   if (!m || !host.startsWith("admin-")) return;
-  window.location.replace(`https://auth-console-${host.slice("admin-".length)}${MOVED_PANELS[m[1]]}${m[2] ?? ""}`);
+  const moved = MOVED_PANELS[m[1]];
+  window.location.replace(`https://${moved.console}-${host.slice("admin-".length)}${moved.path}${m[2] ?? ""}`);
 };
 forwardMovedPanels();
 
@@ -70,12 +74,11 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
   //              SupportKey.ts throws; hiding beats rendering a dead toggle.
   //
   // `permissions: 'admin'` on every panel: only members of Authelia's `admins`
-  // group administer the box. Accounts and SSH access are managed in auth-console
-  // (see forwardMovedPanels). This is cosmetic — adminMiddleware on the matching
+  // group administer the box. Accounts and SSH access are managed in auth-console,
+  // the domain in mesh-console (see forwardMovedPanels). This is cosmetic — adminMiddleware on the matching
   // /api/admin routes is what actually enforces it.
   const availablePanels: PanelInterface[] = [
     definePanel({name: 'system-information', component: SystemInformationPanel, icon: InfoOutlinedIcon, label: 'System Information', permissions: 'admin'}),
-    definePanel({name: 'domain',             component: DomainPanel,            icon: LanguageIcon,       label: 'Domain',             permissions: 'admin'}),
     // Gated on hasOperator rather than `operator`: the latter is also non-null via
     // the domain-zone fallback, and a box that merely sits on a known zone has no
     // operator-run services to opt out of.

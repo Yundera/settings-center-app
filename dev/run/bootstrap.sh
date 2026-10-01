@@ -137,7 +137,7 @@ chmod 700 /home/admin/.ssh
 chmod 600 /home/admin/.ssh/authorized_keys
 
 # The dashboard runs `docker ps` (and friends) over SSH as `admin`, unelevated —
-# see DockerUpdate.ts / docker-ps.ts. On a real PCS the socket is group-readable
+# see DockerUpdate.ts. On a real PCS the socket is group-readable
 # by a `docker` group that admin belongs to; here the socket is bind-mounted from
 # the host and arrives owned by whatever GID the host uses, so admin gets
 # "permission denied" and the Health / containers panels 500. Add admin to a

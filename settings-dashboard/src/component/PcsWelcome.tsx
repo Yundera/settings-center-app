@@ -62,7 +62,7 @@ export const PcsWelcome: React.FC = () => {
                     marginBottom: '25px',
                 }}
             >
-                Manage your domain, monitor server health, check PCS status, and update
+                Monitor server health, check PCS status, and update
                 core configuration. More settings will be added over time.
             </Typography>
 
