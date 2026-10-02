@@ -74,7 +74,7 @@ services:
   # the same gate the fleet runs, including the identity assertion the app
   # verifies. `ADMIN_ASSERTION_SECRET` is a dev constant from .env rather than a
   # generated secret — the prod value is minted by
-  # ensure-admin-gate-secret.sh.
+  # ensure-user-compose-stack-up.sh.
   # ---------------------------------------------------------------------------
   admin:
     image: ghcr.io/yundera/appshield:2.2.0

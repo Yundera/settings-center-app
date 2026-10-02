@@ -22,7 +22,7 @@ gate ──► admin-app                      this app (Next.js dev mode, fast r
 The app is no longer an OIDC client: the gate authenticates, and states who the
 caller is in a per-request signed assertion. `ADMIN_ASSERTION_SECRET` in `.env`
 is the shared secret (defaults to a dev constant); on a real PCS it is minted by
-`ensure-admin-gate-secret.sh`.
+`ensure-user-compose-stack-up.sh`.
 
 Every modern browser resolves `*.localhost` to `127.0.0.1` (RFC 6761), so there
 are no `/etc/hosts` edits. Services are published as **siblings** of `DOMAIN` —
