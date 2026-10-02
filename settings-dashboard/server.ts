@@ -2,7 +2,6 @@ import { createServer } from 'http'
 import { parse } from 'url'
 import next from 'next'
 import {start} from "@/backend/server";
-import {initializeAllContexts} from "@/backend/server/initializeAllContexts";
 import { applyAuthGate } from "@/backend/auth/serverGate";
 
 // Environment comes from the container env only. There used to be an
@@ -38,8 +37,6 @@ app.prepare().then(async () => {
         // Handle all routes with Next.js
         handle(req, res, parsedUrl)
     })
-
-    await initializeAllContexts();
 
     // Start background tasks (don't await this)
     start().then(() => {

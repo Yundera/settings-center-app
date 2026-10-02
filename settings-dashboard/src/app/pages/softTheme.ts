@@ -66,7 +66,7 @@ export const radius = {
 
 export const font = {
     titleLarge: '24px', // Page-level titles (e.g. "System Health" heading)
-    title: '21px',      // Card header titles (e.g. "Update Channel", "Software Status")
+    title: '21px',      // Card header titles (e.g. "Update Channel", "System Status")
     label: '16px',      // Field labels, body text, button text
     detail: '14px',     // Detail/secondary information text
     caption: '12px',    // Small captions, input labels, chip text
