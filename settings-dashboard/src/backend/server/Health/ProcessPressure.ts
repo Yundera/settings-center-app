@@ -33,7 +33,7 @@ const PIDS_MAX_PATHS = ['/sys/fs/cgroup/pids.max', '/sys/fs/cgroup/pids/pids.max
 /**
  * Fraction of the pid budget above which we start shouting. A healthy admin
  * container sits near 50 PIDs out of ~9500 (well under 1 %), and nothing it
- * legitimately does — migrations included — approaches a quarter of the
+ * legitimately does approaches a quarter of the
  * budget. Crossing this means something is leaking, not that the box is busy.
  */
 const PIDS_WARN_RATIO = 0.25;

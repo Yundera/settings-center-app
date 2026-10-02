@@ -18,7 +18,6 @@ import type {PanelInterface} from "@/core/PanelInterface";
 
 import CloudIcon from "@mui/icons-material/Cloud";
 import DeveloperBoardIcon from "@mui/icons-material/DeveloperBoard";
-import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
@@ -26,7 +25,6 @@ import TuneIcon from "@mui/icons-material/Tune";
 import {OperatorPanel} from "@/panels/operator/OperatorPanel";
 import {FeaturesPanel} from "@/panels/features/FeaturesPanel";
 import {HealthPanel} from "@/panels/health/HealthPanel";
-import {MigrationPanel} from "@/panels/migration/MigrationPanel";
 import {SupportPanel} from "@/panels/support/SupportPanel";
 import {SystemInformationPanel} from "@/panels/system-information/SystemInformationPanel";
 import {useBrand} from "@/core/configuration/brandContext";
@@ -86,7 +84,6 @@ const MyApp = ({authProvider, dataProvider, permissions}: {
       ? [definePanel({name: 'yundera-features', component: FeaturesPanel, icon: TuneIcon, label: `${brand.support.operatorName ?? brand.brand.name} Features`, permissions: 'admin'})]
       : []),
     definePanel({name: 'health',             component: HealthPanel,            icon: DeveloperBoardIcon, label: 'Health',             permissions: 'admin'}),
-    definePanel({name: 'migration',          component: MigrationPanel,         icon: SwapHorizIcon,      label: 'Migration',          permissions: 'admin'}),
     ...(brand.operator
       ? [definePanel({name: 'operator', component: OperatorPanel, icon: CloudIcon, label: brand.operator.panelLabel, permissions: 'admin'})]
       : []),

@@ -25,12 +25,6 @@ import {getConfig} from "@/configuration/getConfigBackend";
  * `executeHostCommand()`. The stack directory is bind-mounted at `/app/data`
  * for the few things this app reads directly — see `brand/loadBrandFile.ts`,
  * which documents that distinction and is the one place both appear.
- *
- * THE MIGRATION TARGET SHARES THIS ROOT, which is why the PCS-to-PCS steps
- * use this function for paths on the *other* box too. `Migration/steps/rsync.ts`
- * copies the whole of `/DATA` from source to target, so the target's tree is
- * this tree — layout included. A target on a different layout is not a case
- * that can arise: it has no template of its own until ours lands on it.
  */
 const YND_ROOT_LEGACY = "/DATA/AppData/casaos/apps/yundera";
 
@@ -69,8 +63,6 @@ export function yndPath(...segments: string[]): string {
  *
  * Hence a probe rather than a constant, and one evaluated REMOTELY: these
  * strings are shipped to a host and run there (see the HOST PATH note above).
- * The migration steps make that difference load-bearing — they run commands on
- * the TARGET box, whose layout is its own business, not this container's.
  *
  * The cost of getting this wrong is not subtle: every call becomes
  * `env-file-manager.sh: command not found` (exit 127), which is how the demo
@@ -92,10 +84,10 @@ function scriptsDirCandidates(root: string): [string, string] {
  * executeHostCommand(`${yndScriptsPrelude()}sudo -n "$YND_SCRIPTS/self-check.sh"`)
  * ```
  *
- * Double quotes throughout, deliberately: migration sends commands to the
- * target wrapped in `shq()` (single quotes), and a single quote in here would
- * have to survive that nesting. `$YND_SCRIPTS` is likewise written so the
- * SOURCE shell never expands it — only the shell that finally runs the script.
+ * Double quotes throughout, deliberately: a caller may wrap the command in
+ * `shq()` (single quotes), and a single quote in here would have to survive
+ * that nesting. `$YND_SCRIPTS` is likewise written so no intermediate shell
+ * expands it — only the shell that finally runs the script.
  */
 export function yndScriptsPrelude(root: string = yndRoot()): string {
     const [templateDir, legacyDir] = scriptsDirCandidates(root);

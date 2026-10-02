@@ -27,14 +27,6 @@ const BYPASS_PREFIXES = [
                          //   read-only snapshot + cooldown-gated lazy trigger,
                          //   so an unauthenticated caller can start at most one
                          //   bench per cooldown window (see BenchCache.ts)
-  '/api/local/',         // loopback-only routes (orchestrator's Path C trigger,
-                         //   source's migration-status poll) — gated by
-                         //   `loopbackOnly` middleware on the handler itself.
-                         //   Deliberately NOT in the gate's ALLOWED_PATHS: the
-                         //   only legitimate callers run inside this container
-                         //   and reach it over loopback, bypassing the gate
-                         //   entirely, which is what keeps that trust path
-                         //   independent of the login chain.
   '/_next/',             // Next.js runtime
   '/favicon',
   '/logo',

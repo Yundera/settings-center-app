@@ -1,6 +1,6 @@
 import {executeHostCommand} from '@/backend/cmd/HostExecutor';
 import {yndScriptsPrelude} from '@/configuration/yndRoot';
-import {shq} from '@/backend/server/Migration/MigrationSSH';
+import {shq} from '@/backend/cmd/shq';
 
 /**
  * First-run onboarding.

@@ -43,13 +43,7 @@ RUN rm -rf settings-dashboard/.next/cache settings-dashboard/.next/trace
 # =============================================================================
 FROM node:20-alpine AS runner
 
-# Install runtime dependencies. `curl` is used by the orchestrator's Path C
-# trigger: it SSHes into the host and runs `docker exec admin curl … http://127.0.0.1:80/api/local/migration/start`
-# to kick off the source-driven migration pipeline. Without curl in the
-# admin image, the orchestrator's `docker exec` reports
-# `OCI runtime exec failed: exec: "curl": executable file not found in $PATH`,
-# the migrate-auto job fails with TRIGGER_FAILED, and the migration never
-# reaches the source. See doc/architecture/migration.md (Path C).
+# Install runtime dependencies.
 # `tini` becomes PID 1 — see the ENTRYPOINT note at the bottom of this stage;
 # without it this image leaks zombies until fork() stops working.
 # No `iproute2`: it was added solely so detectHostIP could shell out to
@@ -57,7 +51,7 @@ FROM node:20-alpine AS runner
 # (HostExecutor.ts). No code path here runs `ip` any more. Note busybox still
 # provides a cut-down /sbin/ip, so the command has not disappeared from an
 # interactive shell in this container — only the full iproute2 build has.
-RUN apk add --no-cache tini openssh-client curl
+RUN apk add --no-cache tini openssh-client
 
 # Install pnpm for production
 RUN corepack enable && corepack prepare pnpm@latest --activate

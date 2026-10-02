@@ -143,9 +143,8 @@ export async function generateSSHKey(): Promise<{publicKey: string, privateKeyPa
  * double-quotes and only escaped `"`. That broke for any command containing
  * `$`, backticks, single-quote-escape idioms (`'\''`), nested $(...), or
  * heredocs — the local /bin/sh would expand `$VARS`, mangle inner quotes,
- * or fail with `unterminated quoted string`. Migration steps with
- * non-trivial bash scripts (df, find, multi-line bash -c '...') hit this
- * repeatedly.
+ * or fail with `unterminated quoted string`. Callers with non-trivial bash
+ * scripts (df, find, multi-line bash -c '...') hit this repeatedly.
  *
  * New strategy: base64-encode the entire command and hand it to bash on the
  * host through PROCESS SUBSTITUTION — `bash <(echo B64 | base64 -d)`. The
@@ -188,7 +187,7 @@ export async function executeHostCommand(
             // executor SIGKILLs the ssh tree if exceeded), not just an SSH
             // ConnectTimeout. The default is generous because some one-shot
             // callers run legitimately slow commands without passing a
-            // timeout (e.g. `du -sb /DATA` in migration preflight). Callers
+            // timeout. Callers
             // that need a tight bound — the metrics loop in particular —
             // pass their own value. A dead connection still fails fast via
             // ServerAlive regardless of this budget.
