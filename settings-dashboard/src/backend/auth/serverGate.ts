@@ -27,6 +27,10 @@ const BYPASS_PREFIXES = [
                          //   read-only snapshot + cooldown-gated lazy trigger,
                          //   so an unauthenticated caller can start at most one
                          //   bench per cooldown window (see BenchCache.ts)
+  '/api/identity/',      // identity push from the operator (key + push). Must
+                         //   work on a box that lost every credential, so no
+                         //   session can be required; the signed, encrypted
+                         //   bundle is the authentication (backend/identity/)
   '/_next/',             // Next.js runtime
   '/favicon',
   '/logo',
