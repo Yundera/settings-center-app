@@ -40,6 +40,17 @@ export interface OperatorConfig {
         email?: string;
     };
     /**
+     * Feedback from Maison's "Send feedback" (pages/api/feedback/ingest.ts).
+     * Optional: an absent block means on, mailed to support.email.
+     * `enabled: false` makes the ingest route answer 404, which hides the
+     * entry in Maison. `email` is SERVER-SIDE ONLY, for the same reason as
+     * support.email; the FEEDBACK_EMAIL env var overrides it.
+     */
+    feedback?: {
+        enabled: boolean;
+        email?: string;
+    };
+    /**
      * Host suffixes whose SSH public keys the UI marks as coming from a
      * trusted source rather than merely a TLS-verified stranger. Only
      * meaningful when there IS an operator to vouch for them.

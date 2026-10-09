@@ -12,6 +12,7 @@
     "dashboardLabel": "Yundera Dashboard",
     "panelLabel": "Operator",
     "support": { "enabled": true, "email": "support@yundera.com" },
+    "feedback": { "enabled": true },
     "trustedPubkeyHostSuffixes": ["yundera.com"]
   },
   "domainProviders": {

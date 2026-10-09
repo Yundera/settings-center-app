@@ -31,6 +31,11 @@ const BYPASS_PREFIXES = [
                          //   work on a box that lost every credential, so no
                          //   session can be required; the signed, encrypted
                          //   bundle is the authentication (backend/identity/)
+  '/api/feedback/',      // Maison's feedback sink (feedback/ingest.ts). Called
+                         //   server-to-server on the pcs network, straight to
+                         //   admin-app, so it is deliberately NOT in the gate's
+                         //   ALLOWED_PATHS: no browser ever needs it. The bearer
+                         //   FEEDBACK_TOKEN is the authentication
   '/_next/',             // Next.js runtime
   '/favicon',
   '/logo',

@@ -42,6 +42,10 @@ up inside the container at `/app/data/brand.json` with no compose change.
     "support":        { "enabled": true,
                         "email": "support@yundera.com" },  // where reports are mailed;
                                                            // SERVER-SIDE ONLY, never in /api/brand
+    "feedback":       { "enabled": true,  // OPTIONAL; Maison's "Send feedback" sink.
+                        "email": "…" },   // absent ⇒ on, mailed to support.email;
+                                          // enabled:false ⇒ Maison hides the entry.
+                                          // SERVER-SIDE ONLY, like support.email
     "trustedPubkeyHostSuffixes": ["yundera.com"],
     "accountUrl":     "https://…"        // OPTIONAL; adds an Account-panel card
   },

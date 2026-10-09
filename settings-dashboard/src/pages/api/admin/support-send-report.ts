@@ -1,5 +1,4 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import nodemailer from 'nodemailer';
 import { gzipSync } from 'zlib';
 import { adminMiddleware } from "@/backend/auth/middleware";
 import { executeHostCommand } from "@/backend/cmd/HostExecutor";
@@ -7,6 +6,7 @@ import { getConfig } from "@/configuration/getConfigBackend";
 import { enableSupportAccess } from "@/backend/server/Support/SupportAccess";
 import { loadBrandFile } from "@/brand/loadBrandFile";
 import { yndPath } from "@/configuration/yndRoot";
+import { sendOperatorMail } from "@/backend/server/Support/operatorMail";
 
 const LOG_FILE = yndPath("log/yundera.log");
 const MAX_LOG_LINES = 5000;
@@ -54,8 +54,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             error: 'No support address configured — set SUPPORT_EMAIL, or operator.support.email in brand.json',
         });
     }
-    const smtpHost = getConfig('SMTP_HOST') || 'smtp';
-    const smtpPort = parseInt(getConfig('SMTP_PORT') || '587', 10);
     const domain = getConfig('DOMAIN') || 'unknown-pcs';
     const uid = getConfig('UID') || 'unknown';
 
@@ -111,16 +109,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     ].join('\n');
 
     try {
-        const transporter = nodemailer.createTransport({
-            host: smtpHost,
-            port: smtpPort,
-            secure: false,
-            tls: { rejectUnauthorized: false },
-            ignoreTLS: smtpPort === 25,
-        });
-
-        await transporter.sendMail({
-            from: `"PCS ${domain}" <noreply@${domain}>`,
+        await sendOperatorMail({
             to: supportEmail,
             subject: `[PCS Support] ${subject}`,
             text: fullText,

@@ -47,6 +47,14 @@ type Config = {
     SMTP_PORT: string;        // Local PCS smtp service port (default: 587)
     SUPPORT_EMAIL: string;    // Override support recipient (default: support@yundera.com)
 
+    // --- Feedback sink for Maison (pages/api/feedback/ingest.ts) -------------
+    // Bearer token Maison sends; template-root mints it and gives it to both
+    // containers. Unset ⇒ the route answers 404 and Maison shows no entry.
+    FEEDBACK_TOKEN: string;
+    // Override the feedback recipient (else brand operator.feedback.email,
+    // else operator.support.email).
+    FEEDBACK_EMAIL: string;
+
 } & BaseConfig;
 
 export function getConfig(key: keyof Config): string {
