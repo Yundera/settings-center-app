@@ -291,5 +291,12 @@
   "onboarding_next_help": "Bloqué ? La page Assistance vous permet de nous écrire en un clic.",
   "onboarding_start": "Commencer",
   "onboarding_back": "Continuer",
-  "feature_not_yet": "Pas encore disponible"
+  "feature_not_yet": "Pas encore disponible",
+  "onboarding_steps": "Étapes de la configuration",
+  "onboarding_step_account": "Votre compte",
+  "onboarding_step_ready": "Prêt",
+  "onboarding_next_apps_title": "Vos applications",
+  "onboarding_next_here_title": "Cette page",
+  "onboarding_next_help_title": "De l'aide",
+  "onboarding_to_settings": "Voir d'abord les réglages de mon serveur"
 }

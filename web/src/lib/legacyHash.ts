@@ -14,7 +14,7 @@ const moved: Record<string, { prefix: string; path: string }> = {
 const local: Record<string, string> = {
   support: '/support',
   'yundera-features': '/features',
-  health: '/health',
+  health: '/checkup',
   'system-information': '/',
   operator: '/',
 }

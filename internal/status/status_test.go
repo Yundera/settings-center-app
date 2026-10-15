@@ -1,6 +1,7 @@
 package status
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -81,6 +82,24 @@ func TestChannel(t *testing.T) {
 	} {
 		if got := Channel(in); got != want {
 			t.Errorf("Channel(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+// Issue pages are SPA paths behind the AppShield gate, which answers some
+// paths itself before proxying (/health, /login, /nhl-auth/, /AppShield/,
+// /.well-known/). A link there would land on the gate, not the page.
+func TestIssuePagesAvoidGateRoutes(t *testing.T) {
+	in := healthy()
+	in.SelfCheck.Completed = bp(false)
+	in.Updates.Enabled = bp(false)
+	in.Identity.TokenExpiry = now.Add(-time.Hour)
+	in.Storage.UsedBytes = 99
+	for _, is := range Compute(in).Issues {
+		p := is.Page
+		if p == "/health" || p == "/login" || strings.HasPrefix(p, "/login/") || strings.HasPrefix(p, "/nhl-auth/") ||
+			strings.HasPrefix(p, "/AppShield/") || strings.HasPrefix(p, "/.well-known/") {
+			t.Errorf("issue %s links to %s, a path the gate answers itself", is.Code, p)
 		}
 	}
 }

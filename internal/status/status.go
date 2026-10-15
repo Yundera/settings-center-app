@@ -125,11 +125,11 @@ func Compute(in Inputs) Summary {
 	case !*sc.Completed:
 		p := map[string]any{"passed": sc.Passed, "total": sc.Total, "failed": strings.Join(sc.Failed, ", "), "at": sc.EndedAt}
 		add("healthCheck", Tile{Level: Bad, Code: "health.failed", Params: p},
-			&Issue{Level: Bad, Code: "health.failed", Page: "/health", Params: p})
+			&Issue{Level: Bad, Code: "health.failed", Page: "/checkup", Params: p})
 	case in.Now.Sub(sc.EndedAt) > StaleSelfCheck:
 		p := map[string]any{"at": sc.EndedAt}
 		add("healthCheck", Tile{Level: Warn, Code: "health.stale", Params: p},
-			&Issue{Level: Warn, Code: "health.stale", Page: "/health", Params: p})
+			&Issue{Level: Warn, Code: "health.stale", Page: "/checkup", Params: p})
 	default:
 		code := "health.ok"
 		if sc.Running {

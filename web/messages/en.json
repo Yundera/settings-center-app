@@ -291,5 +291,12 @@
   "onboarding_next_help": "Stuck? The Support page lets you write to us in one click.",
   "onboarding_start": "Get started",
   "onboarding_back": "Continue",
-  "feature_not_yet": "Not available yet"
+  "feature_not_yet": "Not available yet",
+  "onboarding_steps": "Setup steps",
+  "onboarding_step_account": "Your account",
+  "onboarding_step_ready": "Ready",
+  "onboarding_next_apps_title": "Your apps",
+  "onboarding_next_here_title": "This page",
+  "onboarding_next_help_title": "Help",
+  "onboarding_to_settings": "See my server's settings first"
 }

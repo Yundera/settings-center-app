@@ -4,17 +4,21 @@
   import Features from './pages/Features.svelte'
   import Support from './pages/Support.svelte'
   import Tools from './pages/Tools.svelte'
-  import OnboardingGate from './onboarding/OnboardingGate.svelte'
+  import Onboarding from './onboarding/Onboarding.svelte'
+  import { readReturnTarget } from './onboarding/returnTarget'
   import Card from './lib/Card.svelte'
-  import { api, type Me } from './lib/api'
+  import { api, type Me, type OnboardingStatus } from './lib/api'
   import { logout } from './lib/gate'
   import { errorText } from './lib/t'
   import { m } from './lib/paraglide/messages.js'
   import { getLocale, locales, setLocale } from './lib/paraglide/runtime.js'
 
+  // Page paths must not be ones the AppShield gate answers itself, or the page
+  // never loads: /health (its liveness probe), /login, /nhl-auth/*,
+  // /AppShield/* and the /.well-known/* broker documents.
   const pages = [
     { path: '/', label: () => m.nav_overview(), component: Overview },
-    { path: '/health', label: () => m.nav_health(), component: Health },
+    { path: '/checkup', label: () => m.nav_health(), component: Health },
     { path: '/features', label: () => m.nav_features(), component: Features },
     { path: '/support', label: () => m.nav_support(), component: Support },
     { path: '/tools', label: () => m.nav_tools(), component: Tools },
@@ -28,10 +32,24 @@
 
   let me = $state<Me | null>(null)
   let meError = $state('')
+  // undefined = still asking; null = could not tell (never blocks the app).
+  let onboarding = $state<OnboardingStatus | null | undefined>(undefined)
   api
     .get<Me>('/api/me')
-    .then((v) => (me = v))
+    .then(async (v) => {
+      me = v
+      if (v.user.role !== 'admin') return
+      try {
+        onboarding = await api.get<OnboardingStatus>('/api/onboarding/status')
+        // Maison sent a settled owner here: straight back.
+        const back = readReturnTarget()
+        if (onboarding.claimed && onboarding.completed && back) location.replace(back)
+      } catch {
+        onboarding = null
+      }
+    })
     .catch((e) => (meError = errorText(e)))
+  const needsOnboarding = $derived(!!onboarding && (!onboarding.claimed || !onboarding.completed))
 
   function go(e: MouseEvent, to: string) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
@@ -52,6 +70,9 @@
   })
 </script>
 
+{#if me && needsOnboarding && onboarding}
+  <Onboarding {me} status={onboarding} ondone={(s) => (onboarding = s)} />
+{:else}
 <div class="brandbar" aria-hidden="true"></div>
 <header class="top">
   <div class="inner">
@@ -87,8 +108,7 @@
       <p>{m.not_admin_body({ name: me.user.fullName })}</p>
       <div class="row"><a class="button" href={me.links.maison}>{m.open_my_apps()}</a></div>
     </Card>
-  {:else if me}
-    <OnboardingGate />
+  {:else if me && onboarding !== undefined}
     {#key current.path}
       <current.component {me} />
     {/key}
@@ -101,6 +121,7 @@
   <span>Yundera</span>
   {#if me}<span class="subtle">v{me.version}</span>{/if}
 </footer>
+{/if}
 
 <style>
   .brandbar {

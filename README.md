@@ -20,12 +20,14 @@ mesh-console and auth-console. It replaced a Next.js/react-admin app (1.x) in 2.
 | Page | Shows | Acts |
 |---|---|---|
 | **Overview** `/` | Domain, public IP, a verdict, five tiles (health check, updates, connection to Yundera, storage, support access), what needs attention, shortcuts | Restart the server |
-| **Health check** `/health` | The latest self-check step by step, failures with their output, the schedule, the raw log | Run now, change the schedule |
+| **Health check** `/checkup` | The latest self-check step by step, failures with their output, the schedule, the raw log | Run now, change the schedule |
 | **Yundera features** `/features` | Yundera Login, the support key, platform updates — what each does and what turning it off costs; what cannot be switched off yet | Switch them (with lock-out guards); update channel; re-run onboarding |
 | **Support** `/support` | Whether Yundera support can sign in | Grant / revoke access; write to support with the log attached |
 | **All tools** `/tools` | What Maison, its backups, Kopia, auth-console, mesh-console and the Yundera dashboard are for, and when to go there | Links |
 
-Panels that moved out answer their old links: `#/access` and `#/account` go to
+Page paths avoid the ones the AppShield gate answers itself (`/health`,
+`/login`, `/nhl-auth/*`, `/AppShield/*`, `/.well-known/*`): a page there never
+reaches this app. Panels that moved out answer their old links: `#/access` and `#/account` go to
 auth-console, `#/domain` to mesh-console (`web/src/lib/legacyHash.ts`).
 
 ## How it works

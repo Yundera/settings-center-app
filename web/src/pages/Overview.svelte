@@ -42,7 +42,7 @@
   )
 
   const tiles: { name: TileName; title: () => string; page: string }[] = [
-    { name: 'healthCheck', title: () => m.tile_health(), page: '/health' },
+    { name: 'healthCheck', title: () => m.tile_health(), page: '/checkup' },
     { name: 'updates', title: () => m.tile_updates(), page: '/features' },
     { name: 'connection', title: () => m.tile_connection(), page: '/support' },
     { name: 'storage', title: () => m.tile_storage(), page: '/tools' },
