@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "check": "node scripts/check-messages.mjs && svelte-check --tsconfig ./tsconfig.json"
+    "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy localStorage preferredLanguage baseLocale --silent",
+    "check": "node scripts/check-messages.mjs && npm run i18n && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
     "@fontsource/comfortaa": "^5.1.0"
