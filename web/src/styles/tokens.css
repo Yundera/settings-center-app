@@ -1,0 +1,83 @@
+/* Yundera palette (pcs-dashboard vnasTheme.ts, the logo, the Dex theme), laid
+   out on the token names mesh-console and auth-console use so their components
+   port unchanged. Brand blue #27AAE1 is too light for text or white-on-blue
+   buttons, so --primary is a deeper step of it; the brand shades themselves
+   are --brand-* for decoration only. */
+:root {
+  --brand-blue: #27aae1;
+  --brand-pink: #ee2a7b;
+  --brand-navy: #294056;
+  --brand-cloud: #dcebf9;
+  --brand-gradient: linear-gradient(90deg, #27b4e1 0%, #3da4d5 25%, #8870ae 55%, #bf4a92 78%, #e13281 100%);
+
+  --primary: #1a7eb3;
+  --primary-hover: #156a97;
+  --primary-soft: #e3f3fb;
+
+  --surface: #ffffff;
+  --surface-2: #f3f8fc;
+  --surface-3: #dcebf9;
+  --surface-sunken: #f7fafd;
+  --page: #e7f0f7;
+  --border: #d3e2ee;
+  --border-strong: #a9c0d1;
+
+  --text: #294056;
+  --text-muted: #557189;
+  --text-subtle: #7f98a8;
+  --text-on-accent: #ffffff;
+
+  --ok-bg: #e2f5e6;
+  --ok-fg: #1d6b33;
+  --warn-bg: #fdf0d6;
+  --warn-fg: #8a4b06;
+  --bad-bg: #fde4ee;
+  --bad-fg: #b0174f;
+  --info-bg: #e6e9fa;
+  --info-fg: #3c4aa8;
+
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --shadow-card: 0 1px 2px rgb(41 64 86 / 0.06), 0 2px 8px rgb(41 64 86 / 0.05);
+
+  /* Comfortaa has no Hangul: Korean falls through to the system stack. */
+  --font-brand: 'Comfortaa', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', 'Noto Sans', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-base: 0.9rem;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #4fb3e3;
+    --primary-hover: #74c4ea;
+    --primary-soft: #133a57;
+
+    --surface: #112942;
+    --surface-2: #16324f;
+    --surface-3: #1d3d5e;
+    --surface-sunken: #0d2238;
+    --page: #072135;
+    --border: #24476b;
+    --border-strong: #3a6286;
+
+    --text: #e3eef7;
+    --text-muted: #9fb7c9;
+    --text-subtle: #7590a5;
+    --text-on-accent: #04192a;
+
+    --ok-bg: #123d2a;
+    --ok-fg: #8ee0a8;
+    --warn-bg: #43310f;
+    --warn-fg: #f6c97a;
+    --bad-bg: #4a1530;
+    --bad-fg: #ff9cc3;
+    --info-bg: #222c5c;
+    --info-fg: #b5bff5;
+
+    --shadow-card: none;
+    color-scheme: dark;
+  }
+}

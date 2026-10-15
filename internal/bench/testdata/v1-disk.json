@@ -1,0 +1,1 @@
+{"status":"ok","result":{"writeBps":376100665.09465027,"readBps":470696616.13132876,"writeSeconds":0.713733,"readSeconds":0.570294,"sizeBytes":268435456,"target":"/DATA/.bench.tmp","ranAt":"2026-10-15T10:57:55.945Z"},"ranAt":"2026-10-15T10:57:55.945Z","pendingSince":null,"error":null}

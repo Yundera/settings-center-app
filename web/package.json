@@ -1,0 +1,21 @@
+{
+  "name": "yundera-admin-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "node scripts/check-messages.mjs && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@fontsource/comfortaa": "^5.1.0"
+  },
+  "devDependencies": {
+    "@inlang/paraglide-js": "^2.0.0",
+    "@sveltejs/vite-plugin-svelte": "^4.0.4",
+    "svelte": "^5.19.0",
+    "svelte-check": "^4.1.4",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.14"
+  }
+}

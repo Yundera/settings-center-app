@@ -1,0 +1,273 @@
+[2026-10-15 03:00:04] [INFO] === Self-check starting ===
+[2026-10-15 03:00:04] [INFO] Reading self-check scripts from: /DATA/AppData/yundera/template/scripts/self-check/scripts-config.txt
+[2026-10-15 03:00:07] [INFO] === [2026-10-15 03:00:07] ensure-pcs-user.sh : starting ===
+[2026-10-15 03:00:08] [OUTPUT] ✓ User 'pcs' exist and has sudo privileges.
+[2026-10-15 03:00:08] [SUCCESS] === [2026-10-15 03:00:08] ensure-pcs-user.sh : success (1s) ===
+[2026-10-15 03:00:08] [INFO] === [2026-10-15 03:00:08] ensure-script-executable.sh : starting ===
+[2026-10-15 03:00:11] [OUTPUT] Total files changed: 69
+[2026-10-15 03:00:11] [SUCCESS] === [2026-10-15 03:00:11] ensure-script-executable.sh : success (3s) ===
+[2026-10-15 03:00:11] [INFO] === [2026-10-15 03:00:11] ensure-admin-user.sh : starting ===
+[2026-10-15 03:00:12] [OUTPUT] → Installed NOPASSWD sudoers entry for admin
+[2026-10-15 03:00:12] [OUTPUT] ✓ User 'admin' ready (key-only login, NOPASSWD sudo).
+[2026-10-15 03:00:12] [SUCCESS] === [2026-10-15 03:00:12] ensure-admin-user.sh : success (1s) ===
+[2026-10-15 03:00:12] [INFO] === [2026-10-15 03:00:12] ensure-support-key.sh : starting ===
+[2026-10-15 03:00:13] [OUTPUT] ✓ Support key present in /home/admin/.ssh/authorized_keys (SHA256:a/9cbsC/49HDq44ZL9q9ij7lD56w1y3PPJ6tcXDa/Bs)
+[2026-10-15 03:00:13] [SUCCESS] === [2026-10-15 03:00:13] ensure-support-key.sh : success (1s) ===
+[2026-10-15 03:00:13] [INFO] === [2026-10-15 03:00:13] ensure-template-sync.sh : starting ===
+[2026-10-15 03:00:13] [OUTPUT] → Using update URL: https://github.com/Yundera/template-root/archive/refs/heads/main.zip
+[2026-10-15 03:00:13] [OUTPUT] → Downloading template...
+[2026-10-15 03:00:14] [OUTPUT] → Setting executable permissions on migration scripts...
+[2026-10-15 03:00:14] [OUTPUT] → Checking migration setup...
+[2026-10-15 03:00:14] [OUTPUT]   migrations_dir (/tmp/tmp.0EGCh6aAHj/template-root-main/root/template/scripts/migrations): exists
+[2026-10-15 03:00:14] [OUTPUT]   migration_runner (/tmp/tmp.0EGCh6aAHj/template-root-main/root/template/scripts/tools/run-migrations.sh): executable
+[2026-10-15 03:00:14] [OUTPUT]   Found 6 migration scripts in directory
+[2026-10-15 03:00:15] [OUTPUT] ✓ 2026-08-27-10-rename-dex-internal-network.sh (skipped - already applied)
+[2026-10-15 03:00:15] [OUTPUT] ✓ 2026-09-14-10-move-root-backups-off-data.sh (skipped - already applied)
+[2026-10-15 03:00:15] [OUTPUT] 
+[2026-10-15 03:00:15] [OUTPUT] === 2026-09-16-10-adopt-template-subtree.always.sh ===
+[2026-10-15 03:00:15] [OUTPUT] Starting migration: 2026-09-16-10-adopt-template-subtree.always.sh
+[2026-10-15 03:00:15] [OUTPUT] Setting exec bits on /tmp/tmp.0EGCh6aAHj/template-root-main/root/template/scripts (the old sync script chmods the wrong directory)
+[2026-10-15 03:00:15] [OUTPUT] No legacy tree at /DATA/AppData/yundera/scripts — box is already on the subtree layout
+[2026-10-15 03:00:15] [OUTPUT] ✓ 2026-09-16-10-adopt-template-subtree.always.sh completed
+[2026-10-15 03:00:15] [OUTPUT] ✓ 2026-09-18-10-move-dex-frontend-into-dex.sh (skipped - already applied)
+[2026-10-15 03:00:15] [OUTPUT] ✓ 2026-10-01-10-move-state-into-stack-folders.sh (skipped - already applied)
+[2026-10-15 03:00:15] [OUTPUT] ✓ 2026-10-06-10-move-auth-secrets-into-auth-stack.sh (skipped - already applied)
+[2026-10-15 03:00:15] [OUTPUT] Migration summary: 1 completed, 5 skipped
+[2026-10-15 03:00:15] [OUTPUT] ✓ Migrations completed successfully
+[2026-10-15 03:00:19] [OUTPUT] → Syncing template subtree...
+[2026-10-15 03:00:21] [OUTPUT] Template revision: 2f0822e4e1aab6d822ffbb0dbf3817c24b1c2bb3
+[2026-10-15 03:00:22] [OUTPUT] ✓ Template sync completed successfully
+[2026-10-15 03:00:22] [SUCCESS] === [2026-10-15 03:00:22] ensure-template-sync.sh : success (9s) ===
+[2026-10-15 03:00:22] [INFO] === [2026-10-15 03:00:22] ensure-outbound-ip-family.sh : starting ===
+[2026-10-15 03:00:22] [SUCCESS] === [2026-10-15 03:00:22] ensure-outbound-ip-family.sh : success (0s) ===
+[2026-10-15 03:00:22] [INFO] === [2026-10-15 03:00:22] ensure-yundera-user-data.sh : starting ===
+[2026-10-15 03:00:22] [OUTPUT] Using configured OPERATOR_API: https://app.yundera.com/service/pcs
+[2026-10-15 03:00:23] [OUTPUT] Identity delivered by push, token valid until 2026-10-20 13:26 UTC
+[2026-10-15 03:00:23] [SUCCESS] === [2026-10-15 03:00:23] ensure-yundera-user-data.sh : success (1s) ===
+[2026-10-15 03:00:23] [INFO] === [2026-10-15 03:00:23] ensure-ubuntu-up-to-date.sh : starting ===
+[2026-10-15 03:00:33] [OUTPUT] All packages are up to date
+[2026-10-15 03:00:33] [SUCCESS] === [2026-10-15 03:00:33] ensure-ubuntu-up-to-date.sh : success (10s) ===
+[2026-10-15 03:00:33] [INFO] === [2026-10-15 03:00:33] ensure-common-tools-installed.sh : starting ===
+[2026-10-15 03:00:33] [OUTPUT] ✓ Common tools are installed
+[2026-10-15 03:00:33] [OUTPUT] ✓ yq is already installed
+[2026-10-15 03:00:33] [SUCCESS] === [2026-10-15 03:00:33] ensure-common-tools-installed.sh : success (0s) ===
+[2026-10-15 03:00:33] [INFO] === [2026-10-15 03:00:33] ensure-ssh.sh : starting ===
+[2026-10-15 03:00:34] [OUTPUT] → SSH activation model: socket (ssh.socket)
+[2026-10-15 03:00:35] [OUTPUT] Synchronizing state of ssh.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+[2026-10-15 03:00:35] [OUTPUT] Executing: /usr/lib/systemd/systemd-sysv-install disable ssh
+[2026-10-15 03:00:39] [OUTPUT] Disabling 'ssh.service', but its triggering units are still active:
+[2026-10-15 03:00:39] [OUTPUT] ssh.socket
+[2026-10-15 03:00:39] [OUTPUT] ✓ SSH is healthy (listener on :22, config valid, single activation model)
+[2026-10-15 03:00:39] [SUCCESS] === [2026-10-15 03:00:39] ensure-ssh.sh : success (6s) ===
+[2026-10-15 03:00:39] [INFO] === [2026-10-15 03:00:39] ensure-swap.sh : starting ===
+[2026-10-15 03:00:39] [OUTPUT] Swap configuration ensured: /swap.img with size 4G and swappiness set to 10.
+[2026-10-15 03:00:39] [SUCCESS] === [2026-10-15 03:00:39] ensure-swap.sh : success (0s) ===
+[2026-10-15 03:00:39] [INFO] === [2026-10-15 03:00:39] ensure-self-check-at-reboot.sh : starting ===
+[2026-10-15 03:00:39] [OUTPUT] @reboot cron job set to: /DATA/AppData/yundera/template/scripts/self-check-reboot.sh
+[2026-10-15 03:00:39] [SUCCESS] === [2026-10-15 03:00:39] ensure-self-check-at-reboot.sh : success (0s) ===
+[2026-10-15 03:00:39] [INFO] === [2026-10-15 03:00:39] ensure-nightly-self-check.sh : starting ===
+[2026-10-15 03:00:39] [OUTPUT] Nightly self-check cron set to: 0 3 * * *
+[2026-10-15 03:00:39] [SUCCESS] === [2026-10-15 03:00:39] ensure-nightly-self-check.sh : success (0s) ===
+[2026-10-15 03:00:39] [INFO] === [2026-10-15 03:00:39] ensure-logrotate.sh : starting ===
+[2026-10-15 03:00:40] [OUTPUT] → Configuring logrotate for yundera...
+[2026-10-15 03:00:40] [OUTPUT] ✓ Logrotate configured for yundera.log (daily rotation, 7 days retention)
+[2026-10-15 03:00:40] [SUCCESS] === [2026-10-15 03:00:40] ensure-logrotate.sh : success (1s) ===
+[2026-10-15 03:00:40] [INFO] === [2026-10-15 03:00:40] ensure-docker-installed.sh : starting ===
+[2026-10-15 03:00:44] [OUTPUT] ✓ Docker is properly installed and configured : Docker version 29.8.2, build 7fc2dff
+[2026-10-15 03:00:44] [SUCCESS] === [2026-10-15 03:00:44] ensure-docker-installed.sh : success (4s) ===
+[2026-10-15 03:00:44] [INFO] === [2026-10-15 03:00:44] ensure-backup-credentials.sh : starting ===
+[2026-10-15 03:00:44] [INFO] Box is in backup recovery - asking whether the space was reset
+[2026-10-15 03:00:44] [OUTPUT] Box is in backup recovery - asking whether the space was reset
+[2026-10-15 03:00:49] [SUCCESS] Backup credential refreshed (space 2dd6ab835d3d181a4d3b9b9a8b7ab2e3, expires 2027-01-13T01:00:47.090Z, writable true)
+[2026-10-15 03:00:49] [OUTPUT] Backup credential refreshed (space 2dd6ab835d3d181a4d3b9b9a8b7ab2e3, expires 2027-01-13T01:00:47.090Z, writable true)
+[2026-10-15 03:00:49] [SUCCESS] === [2026-10-15 03:00:49] ensure-backup-credentials.sh : success (5s) ===
+[2026-10-15 03:00:49] [INFO] === [2026-10-15 03:00:49] ensure-backup-config.sh : starting ===
+[2026-10-15 03:00:50] [INFO] Storage credentials changed - rewrote /DATA/AppData/kopia/engine/credentials.env
+[2026-10-15 03:00:50] [OUTPUT] Storage credentials changed - rewrote /DATA/AppData/kopia/engine/credentials.env
+[2026-10-15 03:00:50] [WARN] This box is marked as needing backup recovery - not touching the repository (key entry in Maison, or a reset from the dashboard)
+[2026-10-15 03:00:50] [OUTPUT] This box is marked as needing backup recovery - not touching the repository (key entry in Maison, or a reset from the dashboard)
+[2026-10-15 03:00:50] [SUCCESS] === [2026-10-15 03:00:50] ensure-backup-config.sh : success (1s) ===
+[2026-10-15 03:00:50] [INFO] === [2026-10-15 03:00:50] ensure-ipv6-interface.sh : starting ===
+[2026-10-15 03:00:50] [OUTPUT] → IPv6 interface ens19 not found. Skipping IPv6 interface configuration.
+[2026-10-15 03:00:50] [SUCCESS] === [2026-10-15 03:00:50] ensure-ipv6-interface.sh : success (0s) ===
+[2026-10-15 03:00:51] [INFO] === [2026-10-15 03:00:51] ensure-mesh-installed.sh : starting ===
+[2026-10-15 03:00:54] [INFO] Running the mesh self-check
+[2026-10-15 03:00:54] [OUTPUT] Running the mesh self-check
+[2026-10-15 03:00:54] [OUTPUT] === Mesh self-check starting ===
+[2026-10-15 03:00:54] [OUTPUT] === [2026-10-15 03:00:54] ensure-scripts-executable.sh : starting ===
+[2026-10-15 03:00:55] [OUTPUT] Marked 38 scripts executable
+[2026-10-15 03:00:55] [OUTPUT] === [2026-10-15 03:00:55] ensure-scripts-executable.sh : success (1s) ===
+[2026-10-15 03:00:55] [OUTPUT] === [2026-10-15 03:00:55] ensure-nightly-self-check.sh : starting ===
+[2026-10-15 03:00:55] [OUTPUT] Nightly self-check disabled (SELF_CHECK_CRON=disabled)
+[2026-10-15 03:00:55] [OUTPUT] === [2026-10-15 03:00:55] ensure-nightly-self-check.sh : success (0s) ===
+[2026-10-15 03:00:55] [OUTPUT] === [2026-10-15 03:00:55] ensure-logrotate.sh : starting ===
+[2026-10-15 03:00:55] [OUTPUT] Logrotate configured for /DATA/AppData/mesh/log/mesh.log (daily, 7 days retention)
+[2026-10-15 03:00:55] [OUTPUT] === [2026-10-15 03:00:55] ensure-logrotate.sh : success (0s) ===
+[2026-10-15 03:00:55] [OUTPUT] === [2026-10-15 03:00:55] ensure-docker-installed.sh : starting ===
+[2026-10-15 03:00:55] [OUTPUT] Docker is installed: Docker version 29.8.2, build 7fc2dff
+[2026-10-15 03:00:56] [OUTPUT] === [2026-10-15 03:00:56] ensure-docker-installed.sh : success (1s) ===
+[2026-10-15 03:00:56] [OUTPUT] === [2026-10-15 03:00:56] ensure-yq-installed.sh : starting ===
+[2026-10-15 03:00:56] [OUTPUT] yq is already installed: yq (https://github.com/mikefarah/yq/) version v4.44.1
+[2026-10-15 03:00:56] [OUTPUT] === [2026-10-15 03:00:56] ensure-yq-installed.sh : success (0s) ===
+[2026-10-15 03:00:56] [OUTPUT] === [2026-10-15 03:00:56] ensure-env-valid.sh : starting ===
+[2026-10-15 03:00:57] [OUTPUT] .env is valid
+[2026-10-15 03:00:57] [OUTPUT] === [2026-10-15 03:00:57] ensure-env-valid.sh : success (1s) ===
+[2026-10-15 03:00:57] [OUTPUT] === [2026-10-15 03:00:57] ensure-template-sync.sh : starting ===
+[2026-10-15 03:00:57] [OUTPUT] Downloading template from https://github.com/yundera/mesh-router-template-root/archive/refs/heads/main.tar.gz
+[2026-10-15 03:00:58] [OUTPUT] Running migrations from downloaded template...
+[2026-10-15 03:00:58] [OUTPUT] ✓ 2026-08-02-01-rename-env-keys.sh (skipped - already applied)
+[2026-10-15 03:00:58] [OUTPUT] ✓ 2026-08-02-02-rename-update-url.sh (skipped - already applied)
+[2026-10-15 03:00:58] [OUTPUT] ✓ 2026-08-02-03-authelia-maison.sh (skipped - already applied)
+[2026-10-15 03:00:58] [OUTPUT] ✓ 2026-08-02-04-move-app-dir.sh (skipped - already applied)
+[2026-10-15 03:00:58] [OUTPUT] 
+[2026-10-15 03:00:58] [OUTPUT] === 2026-09-07-01-heal-env-drift.always.sh ===
+[2026-10-15 03:00:58] [OUTPUT] No .env drift to heal
+[2026-10-15 03:00:58] [OUTPUT] ✓ 2026-09-07-01-heal-env-drift.always.sh completed
+[2026-10-15 03:00:58] [OUTPUT] 
+[2026-10-15 03:00:58] [OUTPUT] === 2026-09-07-10-drop-dex-internal-ipam.always.sh ===
+[2026-10-15 03:00:59] [OUTPUT] Network dex-internal still pins IPAM: 172.22.0.0/16 
+[2026-10-15 03:00:59] [OUTPUT] Deferring: still attached to:auth-registrar dex
+[2026-10-15 03:00:59] [OUTPUT] The stack recreate later in this cycle detaches them; this migration
+[2026-10-15 03:00:59] [OUTPUT] sweeps the network on a following self-check.
+[2026-10-15 03:00:59] [OUTPUT] ✓ 2026-09-07-10-drop-dex-internal-ipam.always.sh completed
+[2026-10-15 03:00:59] [OUTPUT] ✓ 2026-10-01-10-move-auth-state-into-auth-folder.sh (skipped - already applied)
+[2026-10-15 03:00:59] [OUTPUT] ✓ 2026-10-06-10-rehash-corrupt-dex-client-hash.sh (skipped - already applied)
+[2026-10-15 03:00:59] [OUTPUT] Migration summary: 2 completed, 6 skipped
+[2026-10-15 03:00:59] [OUTPUT] Template revision: 53f6ef1e27987c9443533c64bdc71262e288a4dd
+[2026-10-15 03:01:01] [OUTPUT] Template synced (compose + Caddyfile + scripts updated; script changes apply next run)
+[2026-10-15 03:01:01] [OUTPUT] === [2026-10-15 03:01:01] ensure-template-sync.sh : success (4s) ===
+[2026-10-15 03:01:01] [OUTPUT] === [2026-10-15 03:01:01] ensure-public-ip.sh : starting ===
+[2026-10-15 03:01:02] [OUTPUT] Public IP unchanged: 161.97.177.252 (interface mode)
+[2026-10-15 03:01:02] [OUTPUT] === [2026-10-15 03:01:02] ensure-public-ip.sh : success (1s) ===
+[2026-10-15 03:01:02] [OUTPUT] === [2026-10-15 03:01:02] ensure-email-synced.sh : starting ===
+[2026-10-15 03:01:03] [OUTPUT] EMAIL_SYNC=false; EMAIL is managed outside this template, skipping email sync
+[2026-10-15 03:01:03] [OUTPUT] === [2026-10-15 03:01:03] ensure-email-synced.sh : success (1s) ===
+[2026-10-15 03:01:03] [OUTPUT] === [2026-10-15 03:01:03] ensure-authelia.sh : starting ===
+[2026-10-15 03:01:04] [OUTPUT] Authelia config at /DATA/AppData/auth/authelia/configuration.yml is unchanged
+[2026-10-15 03:01:04] [OUTPUT] users_database.yml already seeded; admin email already pierre.henri@aptero.co
+[2026-10-15 03:01:04] [OUTPUT] Nothing Authelia reads at startup changed; not restarting it
+[2026-10-15 03:01:05] [OUTPUT] Authelia provisioning complete (data root: /DATA/AppData/auth/authelia)
+[2026-10-15 03:01:05] [OUTPUT] === [2026-10-15 03:01:05] ensure-authelia.sh : success (2s) ===
+[2026-10-15 03:01:05] [OUTPUT] === [2026-10-15 03:01:05] ensure-dex.sh : starting ===
+[2026-10-15 03:01:05] [OUTPUT] Added drop-in Dex connector(s) from authelia.yaml
+[2026-10-15 03:01:05] [OUTPUT] Added drop-in Dex connector(s) from yundera.yaml
+[2026-10-15 03:01:05] [OUTPUT] Rendered Dex config at /DATA/AppData/auth/dex/config.yaml (2 connector(s))
+[2026-10-15 03:01:05] [OUTPUT] Provisioned custom Dex frontend at /DATA/AppData/auth/dex/frontend
+[2026-10-15 03:01:06] [OUTPUT] Authelia is answering again after 0s
+[2026-10-15 03:01:08] [OUTPUT] Dex provisioning complete (data root: /DATA/AppData/auth/dex)
+[2026-10-15 03:01:08] [OUTPUT] === [2026-10-15 03:01:08] ensure-dex.sh : success (3s) ===
+[2026-10-15 03:01:08] [OUTPUT] === [2026-10-15 03:01:08] ensure-stack-pulled.sh : starting ===
+[2026-10-15 03:01:10] [OUTPUT]  Image ghcr.io/yundera/mesh-router-agent:1.1.1 Pulling 
+[2026-10-15 03:01:10] [OUTPUT]  Image ghcr.io/yundera/appshield:3.2.0 Pulling 
+[2026-10-15 03:01:10] [OUTPUT]  Image ghcr.io/yundera/mesh-router-caddy:1.2.6 Pulling 
+[2026-10-15 03:01:10] [OUTPUT]  Image ghcr.io/yundera/mail-gateway:1.1.0 Pulling 
+[2026-10-15 03:01:10] [OUTPUT]  Image ghcr.io/yundera/mesh-console:1.5.0 Pulling 
+[2026-10-15 03:01:10] [OUTPUT]  Image ghcr.io/yundera/mesh-router-tunnel:1.3.0 Pulling 
+[2026-10-15 03:01:12] [OUTPUT]  Image ghcr.io/yundera/mail-gateway:1.1.0 Pulled 
+[2026-10-15 03:01:13] [OUTPUT]  Image ghcr.io/yundera/appshield:3.2.0 Pulled 
+[2026-10-15 03:01:13] [OUTPUT]  Image ghcr.io/yundera/mesh-router-agent:1.1.1 Pulled 
+[2026-10-15 03:01:13] [OUTPUT]  Image ghcr.io/yundera/mesh-console:1.5.0 Pulled 
+[2026-10-15 03:01:13] [OUTPUT]  Image ghcr.io/yundera/mesh-router-caddy:1.2.6 Pulled 
+[2026-10-15 03:01:13] [OUTPUT]  Image ghcr.io/yundera/mesh-router-tunnel:1.3.0 Pulled 
+[2026-10-15 03:01:13] [OUTPUT] Images pulled
+[2026-10-15 03:01:13] [OUTPUT] === [2026-10-15 03:01:13] ensure-stack-pulled.sh : success (5s) ===
+[2026-10-15 03:01:13] [OUTPUT] === [2026-10-15 03:01:13] ensure-stack-up.sh : starting ===
+[2026-10-15 03:01:17] [OUTPUT]  Container mesh-console Running 
+[2026-10-15 03:01:17] [OUTPUT]  Container mesh-console-app Running 
+[2026-10-15 03:01:17] [OUTPUT]  Container mesh-router-tunnel Running 
+[2026-10-15 03:01:17] [OUTPUT]  Container mesh-router-agent Running 
+[2026-10-15 03:01:17] [OUTPUT]  Container mesh-router-caddy Running 
+[2026-10-15 03:01:17] [OUTPUT]  Container smtp Running 
+[2026-10-15 03:01:17] [OUTPUT] Containers started
+[2026-10-15 03:01:19] [OUTPUT] Stack is up
+[2026-10-15 03:01:19] [OUTPUT] === [2026-10-15 03:01:19] ensure-stack-up.sh : success (6s) ===
+[2026-10-15 03:01:19] [OUTPUT] === [2026-10-15 03:01:19] ensure-auth-stack.sh : starting ===
+[2026-10-15 03:01:20] [OUTPUT] Provisioned custom Dex frontend at /DATA/AppData/auth/dex/frontend
+[2026-10-15 03:01:21] [OUTPUT]  Image authelia/authelia:4.39.25 Pulling 
+[2026-10-15 03:01:23] [OUTPUT]  Image authelia/authelia:4.39.25 Pulled 
+[2026-10-15 03:01:23] [OUTPUT]  Image ghcr.io/yundera/mesh-auth:1.1.8 Pulling 
+[2026-10-15 03:01:24] [OUTPUT]  Image ghcr.io/yundera/mesh-auth:1.1.8 Pulled 
+[2026-10-15 03:01:24] [OUTPUT]  Image ghcr.io/yundera/appshield:3.2.0 Pulling 
+[2026-10-15 03:01:26] [OUTPUT]  Image ghcr.io/yundera/appshield:3.2.0 Pulled 
+[2026-10-15 03:01:26] [OUTPUT]  Image ghcr.io/yundera/auth-console:1.1.0 Pulling 
+[2026-10-15 03:01:27] [OUTPUT]  Image ghcr.io/yundera/auth-console:1.1.0 Pulled 
+[2026-10-15 03:01:27] [OUTPUT]  Image ghcr.io/dexidp/dex@sha256:af9469509350ff3f6ca70127175a58e5ab085b9d18740fa4a590d9f03f0a026b Pulling 
+[2026-10-15 03:01:29] [OUTPUT]  Image ghcr.io/dexidp/dex@sha256:af9469509350ff3f6ca70127175a58e5ab085b9d18740fa4a590d9f03f0a026b Pulled 
+[2026-10-15 03:01:33] [OUTPUT]  Container dex Running 
+[2026-10-15 03:01:33] [OUTPUT]  Container authelia Running 
+[2026-10-15 03:01:33] [OUTPUT]  Container auth-registrar Running 
+[2026-10-15 03:01:33] [OUTPUT]  Container auth-console Running 
+[2026-10-15 03:01:33] [OUTPUT]  Container auth-console-app Running 
+[2026-10-15 03:01:33] [OUTPUT] [auth] stack is up (/DATA/AppData/auth)
+[2026-10-15 03:01:34] [OUTPUT] Auth stack is up
+[2026-10-15 03:01:34] [OUTPUT] === [2026-10-15 03:01:34] ensure-auth-stack.sh : success (15s) ===
+[2026-10-15 03:01:34] [OUTPUT] === [2026-10-15 03:01:34] ensure-maison-stack.sh : starting ===
+[2026-10-15 03:01:34] [OUTPUT] Wrote /DATA/AppData/maison/.env.app
+[2026-10-15 03:01:34] [OUTPUT] Updated /DATA/AppData/maison/docker-compose.yml from template
+[2026-10-15 03:01:34] [OUTPUT] Updated /DATA/AppData/maison/README.md from template
+[2026-10-15 03:01:35] [OUTPUT]  Image ghcr.io/yundera/appshield:3.2.0 Pulling 
+[2026-10-15 03:01:36] [OUTPUT]  Image ghcr.io/yundera/appshield:3.2.0 Pulled 
+[2026-10-15 03:01:36] [OUTPUT]  Image ghcr.io/yundera/maison:1.1.60 Pulling 
+[2026-10-15 03:01:37] [OUTPUT]  419ac9f9137d Pulling fs layer 0B
+[2026-10-15 03:01:37] [OUTPUT]  0f7227f26e40 Pulling fs layer 0B
+[2026-10-15 03:01:37] [OUTPUT]  44136fa355b3 Already exists 0B
+[2026-10-15 03:01:37] [OUTPUT]  2dfd8a0d24b7 Download complete 0B
+[2026-10-15 03:01:37] [OUTPUT]  419ac9f9137d Downloading 171B
+[2026-10-15 03:01:37] [OUTPUT]  0f7227f26e40 Downloading 2.097MB
+[2026-10-15 03:01:37] [OUTPUT]  419ac9f9137d Download complete 0B
+[2026-10-15 03:01:37] [OUTPUT]  0f7227f26e40 Downloading 4.62MB
+[2026-10-15 03:01:37] [OUTPUT]  0f7227f26e40 Download complete 0B
+[2026-10-15 03:01:37] [OUTPUT]  0f7227f26e40 Extracting 1B
+[2026-10-15 03:01:37] [OUTPUT]  0f7227f26e40 Extracting 1B
+[2026-10-15 03:01:37] [OUTPUT]  0f7227f26e40 Extracting 1B
+[2026-10-15 03:01:38] [OUTPUT]  0f7227f26e40 Extracting 1B
+[2026-10-15 03:01:38] [OUTPUT]  419ac9f9137d Extracting 1B
+[2026-10-15 03:01:38] [OUTPUT]  0f7227f26e40 Pull complete 0B
+[2026-10-15 03:01:38] [OUTPUT]  419ac9f9137d Pull complete 0B
+[2026-10-15 03:01:38] [OUTPUT]  Image ghcr.io/yundera/maison:1.1.60 Pulled 
+[2026-10-15 03:01:39] [OUTPUT]  Container maison Running 
+[2026-10-15 03:01:39] [OUTPUT]  Container maison-app Recreate 
+[2026-10-15 03:01:41] [OUTPUT]  Container maison-app Recreated 
+[2026-10-15 03:01:41] [OUTPUT]  Container maison-app Starting 
+[2026-10-15 03:01:42] [OUTPUT]  Container maison-app Started 
+[2026-10-15 03:01:42] [OUTPUT] [maison] stack is up (/DATA/AppData/maison)
+[2026-10-15 03:01:50] [OUTPUT] === [2026-10-15 03:01:50] ensure-maison-stack.sh : success (16s) ===
+[2026-10-15 03:01:50] [OUTPUT] === [2026-10-15 03:01:50] ensure-root-domain.sh : starting ===
+[2026-10-15 03:01:50] [OUTPUT] Root domain serving 302 from maison:80
+[2026-10-15 03:01:50] [OUTPUT] === [2026-10-15 03:01:50] ensure-root-domain.sh : success (0s) ===
+[2026-10-15 03:01:50] [OUTPUT] === [2026-10-15 03:01:50] ensure-route-registered.sh : starting ===
+[2026-10-15 03:01:51] [OUTPUT] Routes registered with backend for R4nQt45b3YZBJ4NarWuphldqdrI2@yundera.com
+[2026-10-15 03:01:51] [OUTPUT] === [2026-10-15 03:01:51] ensure-route-registered.sh : success (1s) ===
+[2026-10-15 03:01:51] [OUTPUT] === Mesh self-check completed successfully ===
+[2026-10-15 03:01:51] [SUCCESS] === [2026-10-15 03:01:51] ensure-mesh-installed.sh : success (60s) ===
+[2026-10-15 03:01:51] [INFO] === [2026-10-15 03:01:51] ensure-env-vars-valid.sh : starting ===
+[2026-10-15 03:01:52] [OUTPUT] All required environment variables are valid
+[2026-10-15 03:01:52] [OUTPUT] Generated /DATA/AppData/yundera/.env (7 keys)
+[2026-10-15 03:01:52] [SUCCESS] === [2026-10-15 03:01:52] ensure-env-vars-valid.sh : success (1s) ===
+[2026-10-15 03:01:52] [INFO] === [2026-10-15 03:01:52] ensure-connector-yundera.sh : starting ===
+[2026-10-15 03:01:53] [INFO] Yundera Login connector up to date (client pcs-R4nQt45b3YZBJ4NarWuphldqdrI2)
+[2026-10-15 03:01:53] [OUTPUT] Yundera Login connector up to date (client pcs-R4nQt45b3YZBJ4NarWuphldqdrI2)
+[2026-10-15 03:01:53] [SUCCESS] === [2026-10-15 03:01:53] ensure-connector-yundera.sh : success (1s) ===
+[2026-10-15 03:01:53] [INFO] === [2026-10-15 03:01:53] ensure-user-compose-pulled.sh : starting ===
+[2026-10-15 03:01:55] [OUTPUT]  Image ghcr.io/yundera/settings-center-app:1.5.2 Pulling 
+[2026-10-15 03:01:56] [OUTPUT]  Image ghcr.io/yundera/settings-center-app:1.5.2 Pulled 
+[2026-10-15 03:01:56] [OUTPUT]  Image ghcr.io/yundera/appshield:3.2.0 Pulling 
+[2026-10-15 03:01:58] [OUTPUT]  Image ghcr.io/yundera/appshield:3.2.0 Pulled 
+[2026-10-15 03:01:58] [OUTPUT] User compose stack pulled successfully (attempt 1/10)
+[2026-10-15 03:01:58] [SUCCESS] === [2026-10-15 03:01:58] ensure-user-compose-pulled.sh : success (5s) ===
+[2026-10-15 03:01:58] [INFO] === [2026-10-15 03:01:58] ensure-user-compose-stack-up.sh : starting ===
+ Container admin-app Running 
+ Container admin Running 
+[2026-10-15 03:01:59] [OUTPUT]  Container admin-app Running 
+[2026-10-15 03:01:59] [OUTPUT]  Container admin Running 
+[2026-10-15 03:01:59] [OUTPUT] User compose stack is up successfully (attempt 1/5)
+[2026-10-15 03:01:59] [SUCCESS] === [2026-10-15 03:01:59] ensure-user-compose-stack-up.sh : success (1s) ===
+[2026-10-15 03:01:59] [INFO] === [2026-10-15 03:01:59] ensure-kopia-stack.sh : starting ===
+[2026-10-15 03:01:59] [INFO] No /DATA/AppData/kopia/engine/repository.config yet - skipping the kopia stack
+[2026-10-15 03:01:59] [OUTPUT] No /DATA/AppData/kopia/engine/repository.config yet - skipping the kopia stack
+[2026-10-15 03:01:59] [SUCCESS] === [2026-10-15 03:01:59] ensure-kopia-stack.sh : success (0s) ===
+[2026-10-15 03:01:59] [INFO] === [2026-10-15 03:01:59] ensure-maison-onboarding.sh : starting ===
+[2026-10-15 03:02:00] [OUTPUT] PCS is onboarded; Maison un-gated
+[2026-10-15 03:02:00] [INFO] PCS is onboarded; Maison un-gated
+[2026-10-15 03:02:00] [SUCCESS] === [2026-10-15 03:02:00] ensure-maison-onboarding.sh : success (1s) ===
+[2026-10-15 03:02:01] [INFO] === Self-check completed successfully ===

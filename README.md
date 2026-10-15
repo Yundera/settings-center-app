@@ -1,113 +1,108 @@
+# Yundera admin app (settings-center-app)
 
-[![Yundera](https://img.shields.io/badge/Yundera-aliceblue.svg?logo=data:image/svg%2bxml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48c3ZnIGlkPSJiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgMTUwLjAgMTYxLjUzOTQ5Ij48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImQiIHgxPSIyOC40MTMwOCIgeTE9IjI0LjM0NjM3IiB4Mj0iMTE5LjAzNTcxIiB5Mj0iMTE0Ljk2ODk5IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI%2BPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMjdiNGUxIi8%2BPHN0b3Agb2Zmc2V0PSIuMDkzNSIgc3RvcC1jb2xvcj0iIzNkYTRkNSIvPjxzdG9wIG9mZnNldD0iLjQxOTgzIiBzdG9wLWNvbG9yPSIjODg3MGFlIi8%2BPHN0b3Agb2Zmc2V0PSIuNjkwMjciIHN0b3AtY29sb3I9IiNiZjRhOTIiLz48c3RvcCBvZmZzZXQ9Ii44OTEwNyIgc3RvcC1jb2xvcj0iI2UxMzI4MSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2VlMmE3YiIvPjwvbGluZWFyR3JhZGllbnQ%2BPC9kZWZzPjxnIGlkPSJjIj48cGF0aCBkPSJNMTA3LjgxMDI1LDEwMC44NjA3M2w2LjQwOTQxLjA1OTYyYzE2LjY2NzU5LDAsMzAuMTc5MzctMTMuNTExNzEsMzAuMTc5MzctMzAuMTc5M3MtMTMuNTExNzgtMzAuMTc5My0zMC4xNzkzNy0zMC4xNzkzYy0xLjUxNTYxLDAtMy4wMDQyLjExNDc4LTQuNDU5ODQuMzMwNDUuMDY3MTItLjg2OTYyLjExMTk5LTEuNzQ1NDQuMTExOTktMi42MzIyOSwwLTE4LjY0NTA0LTE1LjExNDgtMzMuNzU5OTEtMzMuNzU5OTEtMzMuNzU5OTEtMTcuODM4NTIsMC0zMi40MzU0NiwxMy44MzgyOC0zMy42NjU5LDMxLjM2Mzc4LTEuNjk2OS0uMjcxNDMtMy40MzU3NC0uNDE3MTgtNS4yMDkxNy0uNDE3MTgtMTguMDgwMDYsMC0zMi43MzY4NCwxNC42NTY3OC0zMi43MzY4NCwzMi43MzY5MSwwLDE2LjY5MzE4LDEyLjU3MzI2LDMyLjQ3MzE4LDI4LjY0NDc2LDMyLjQ3MzE4bDcuNzEwMDcuMDcxNDUiIHN0eWxlPSJmaWxsOiNkY2ViZjk7IHN0cm9rZTp1cmwoI2QpOyBzdHJva2UtbGluZWNhcDpyb3VuZDsgc3Ryb2tlLWxpbmVqb2luOnJvdW5kOyBzdHJva2Utd2lkdGg6OXB4OyIvPjxwYXRoIGQ9Ik0xMDIuOTYxOCw3Ni4xMTcwOWwtMjYuNDg0NTQsMzIuMjM3NzRjLTEuMTQxNzEsMS4zODk3Mi0xLjc3MjIsMy4xMjkwMS0xLjc4NjIzLDQuOTI3NTJsLS4yNDE1MSwyMi45MjMyMSIgc3R5bGU9ImZpbGw6bm9uZTsgc3Ryb2tlOiMyOTQwNTY7IHN0cm9rZS1saW5lY2FwOnJvdW5kOyBzdHJva2UtbGluZWpvaW46cm91bmQ7IHN0cm9rZS13aWR0aDoxMHB4OyIvPjxsaW5lIHgxPSI2NS45NTk5IiB5MT0iOTkuODQ4NTIiIHgyPSI0NS45MzcyMiIgeTI9Ijc1LjQ3NjM3IiBzdHlsZT0iZmlsbDpub25lOyBzdHJva2U6IzI5NDA1Njsgc3Ryb2tlLWxpbmVjYXA6cm91bmQ7IHN0cm9rZS1saW5lam9pbjpyb3VuZDsgc3Ryb2tlLXdpZHRoOjEwcHg7Ii8%2BPGNpcmNsZSBjeD0iNzQuNDQ5NTEiIGN5PSIxNDcuNTMxNjkiIHI9IjguNDg5NjEiIHN0eWxlPSJmaWxsOm5vbmU7IHN0cm9rZTojMjk0MDU2OyBzdHJva2UtbGluZWNhcDpyb3VuZDsgc3Ryb2tlLWxpbmVqb2luOnJvdW5kOyBzdHJva2Utd2lkdGg6OXB4OyIvPjwvZz48L3N2Zz4%3D)](https://yundera.com)
-[![Build and Push Docker Image](https://github.com/Yundera/settings-center-app/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Yundera/settings-center-app/actions/workflows/docker-publish.yml)
+The Yundera layer of a Personal Cloud Server, at `admin-<domain>` (the Maison
+**Yundera** tile). For the box's owner it answers three questions — is my server
+healthy, is it up to date, and where do I find everything else — and holds the
+few things only Yundera does: the nightly health check, the Yundera features an
+owner may switch off, support access and reports, and the first-run onboarding
+wizard. For the Yundera control plane it serves the public routes it polls and
+pushes to.
 
-# App Dashboard
+It is written for people new to self-hosting: every page opens with what it is
+for, and every technical word has a "?" explanation. English and French today;
+another language is one more `web/messages/<locale>.json`.
 
-## Architecture
+Go + an embedded Svelte UI, ~35 MB image, ~10 MB resident — the same pattern as
+mesh-console and auth-console. It replaced a Next.js/react-admin app (1.x) in 2.0.
 
-The project holds a single application:
+## Pages
 
-1. **settings-dashboard**  
-   Path: `./settings-dashboard/`  
-   Documentation: [settings-dashboard readme](./settings-dashboard/readme.md)
+| Page | Shows | Acts |
+|---|---|---|
+| **Overview** `/` | Domain, public IP, a verdict, five tiles (health check, updates, connection to Yundera, storage, support access), what needs attention, shortcuts | Restart the server |
+| **Health check** `/health` | The latest self-check step by step, failures with their output, the schedule, the raw log | Run now, change the schedule |
+| **Yundera features** `/features` | Yundera Login, the support key, platform updates — what each does and what turning it off costs; what cannot be switched off yet | Switch them (with lock-out guards); update channel; re-run onboarding |
+| **Support** `/support` | Whether Yundera support can sign in | Grant / revoke access; write to support with the log attached |
+| **All tools** `/tools` | What Maison, its backups, Kopia, auth-console, mesh-console and the Yundera dashboard are for, and when to go there | Links |
 
-The shared react-admin scaffolding it used to import from the `dashboard-core`
-submodule now lives in `./settings-dashboard/src/core/`.
+Panels that moved out answer their old links: `#/access` and `#/account` go to
+auth-console, `#/domain` to mesh-console (`web/src/lib/legacyHash.ts`).
 
-## Getting Started
+## How it works
 
-### Installation
-
-Install project dependencies:
-```bash
-pnpm install
+```
+browser ─► admin (AppShield gate) ─► admin-app :80
+                                       │  X-AppShield-Assertion (HS256) verified per request
+                                       ├─ /yundera (read-only): log, .pcs.env, env files
+                                       ├─ /app/data: identity-state.json
+                                       └─ docker.sock ─► one-shot privileged runner
+                                                          nsenter -t 1 … template tools
 ```
 
-### Configuration
+- **Auth.** The gate owns sign-in. The app trusts only the signed assertion
+  (`internal/auth`), never `Remote-*` headers — every container on `pcs` can reach
+  it. `/api/*` needs a person in `admins`; `/api/me` and the onboarding status
+  need any signed-in person. No secret ⇒ nothing works.
+- **Host actions** (`internal/hostverb`, `internal/hostrun`) run in a sibling
+  container created from this image, in the host's namespaces. Each is a fixed
+  builder over the template's own tools (`self-check.sh`, `tools/feature-*.sh`,
+  `tools/onboarding.sh`, `tools/apply-identity.sh`, `tools/env-file-manager.sh`);
+  inputs are validated argv, secrets go on stdin.
+- **Status** (`internal/status`) is a pure function returning codes; the UI
+  owns the words (`web/messages`).
 
-Configure the following environment variables by referring to their respective documentation:
+### Public routes (contracts)
 
-1. Core Configuration  
-   Path: `./settings-dashboard/config/core.env.json`  
-   Documentation: [core.env.json documentation](./settings-dashboard/config/core.env.json.md)
+| Route | Consumer | Notes |
+|---|---|---|
+| `GET /api/health` | pcs-orchestrator (`parseAdminHealth`, `pcs list-health-check`) | RAM snapshot, refreshed every 5 min |
+| `GET /api/perf` | `pcs perf` / `list-perf` | host sample every 5 min |
+| `GET /api/bench/{disk,network}` | `pcs perf` | lazy, 10-min cooldown |
+| `GET /api/identity/key`, `POST /api/identity/push` | the orchestrator's identity push (`doc/identity-push.md`) | the bundle authenticates itself |
+| `GET/POST /api/feedback/ingest` | Maison's "Send feedback" | bearer `FEEDBACK_TOKEN` |
 
-### Development
+Their shapes are pinned by tests against responses captured from v1
+(`internal/*/testdata`), and the identity push against a JWE produced by the
+orchestrator's own code (`internal/identity/testdata/gen.mjs`).
 
-#### Option 1: Standard Development Server
+## Configuration
 
-Start the development server:
-```bash
-pnpm start
-```
+| Env | Default | |
+|---|---|---|
+| `IDENTITY_ASSERTION_SECRET` | — | shared with the gate; required |
+| `IDENTITY_ASSERTION_AUDIENCE` | `admin` | the gate's APP_NAME |
+| `APPSHIELD_GATE_URL` | `http://admin` | session revocation |
+| `COMPOSE_FOLDER_PATH` | `/DATA/AppData/yundera` | the Yundera root, host view |
+| `YUNDERA_DIR` | `/yundera` | the same tree, mounted read-only |
+| `SELF_CONTAINER` / `RUNNER_IMAGE` | `admin-app` / — | how the runner finds its image |
+| `DOMAIN`, `UID`, `PUBLIC_IP` | — | box identity |
+| `OPERATOR_API` | `https://app.yundera.com/service/pcs` | support key, identity issuer, dashboard link |
+| `SUPPORT_EMAIL`, `FEEDBACK_EMAIL` | `support@yundera.com` | recipients |
+| `FEEDBACK_TOKEN` | — | unset ⇒ feedback 404 |
+| `UPSTREAM_LOGOUT_URL` | — | ends the Authelia session at logout |
+| `SMTP_HOST` / `SMTP_PORT` | `smtp` / `587` | the mesh relay |
+| `DEV_IDENTITY`, `ADMIN_ENV=development` | — | fake admin, only without a secret |
 
-#### Option 2: Docker Environment (Recommended)
+`TRUST_ISSUER` (identity push), `UPDATE_URL`, `SELF_CHECK_CRON` and
+`ENSURE_SUPPORT_KEY` are read from `.pcs.env` on every request.
 
-Use Docker to simulate a PCS (Personal Cloud Server) environment, which is closer to the real deployment environment.
-This simulates a state just after a PCS has been created (with `.env` and `os-init.sh` executed).
+## Development
 
-```bash
-cd dev/run
-cp .env.example .env
-# edit .env — fill in UID, USER_JWT, DEFAULT_PWD, PROVIDER_STR, EMAIL
-docker compose up -d --build
-```
-
-Open `https://admin-dev.localhost/` once the stack is healthy. See [`dev/run/README.md`](./dev/run/README.md) for service architecture, the one-time Caddy CA trust step, and troubleshooting.
-
-**Notes:**
-
-- Authentication is delegated to Authelia via OIDC (auto-registered with `mesh-router-auth`). The dashboard mints its own short-lived app JWT after a successful OIDC callback.
-- For a clean reset, `docker compose down -v` from `dev/run/`.
-
-## Public Health Endpoint
-
-`GET /api/health` is unauthenticated and returns a small JSON snapshot from
-RAM only — no shell, no SSH, no file I/O on call. It exists so the Yundera
-control plane can poll each PCS roughly once a day to confirm the deployed
-version and that the last self-check did not report failures.
-
-```http
-GET /api/health
-```
-
-```json
-{
-  "version": "0.1.0",
-  "selfCheck": {
-    "ok": true,
-    "lastRunAt": "2026-04-29T03:00:12"
-  },
-  "lastRefreshedAt": "2026-04-29T03:05:00.000Z"
-}
-```
-
-- `selfCheck.ok` — `true` on success, `false` on failures, `null` if no
-  completion line has been observed yet.
-- `selfCheck.lastRunAt` — host-local timestamp from the self-check log
-  (no timezone).
-- `lastRefreshedAt` — UTC timestamp of the last successful cache refresh.
-
-The cache is owned by `settings-dashboard/src/backend/server/Health/Health.ts`
-and refreshed every 5 minutes by tailing
-`/DATA/AppData/casaos/apps/yundera/log/yundera.log` over SSH.
-
-## Deployment
-
-Build and publish using Dockflow:
+No local Go or Node needed:
 
 ```bash
-npx dockflow build
-npx dockflow publish
+docker run --rm -v "$PWD/web":/src -w /src node:22 sh -c 'npm ci && npm run check && npm run build'
+docker run --rm -v "$PWD":/src -w /src golang:1.25 sh -c 'go vet ./... && go test ./...'
+docker build -t settings-center-app:dev .
 ```
 
-## Project Structure
-```
-./
-├── settings-dashboard/          # Main dashboard application
-│   ├── config/
-│   │   ├── core.env.json
-│   ├── src/core/                # React-admin shell (loader, panels, i18n, layout)
-│   └── readme.md
-└── README.md*
-```
+`vite build` overwrites the tracked placeholder `internal/ui/dist/index.html`;
+restore it before committing. Run the image with `ADMIN_ENV=development
+DEV_IDENTITY=you` and a fixture tree mounted on `/yundera` to see the UI; host
+actions need the Docker socket and are best tried on a test PCS.
+
+## Release
+
+Tag `vX.Y.Z` → GitHub Actions publishes `ghcr.io/yundera/settings-center-app:X.Y.Z`
+(amd64 + arm64). The pin is the `admin-app` image in template-root's
+`root/docker-compose.yml`.

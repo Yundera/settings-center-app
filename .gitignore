@@ -1,52 +1,23 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Go
+/yundera-admin
+*.test
+*.out
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-.idea
+# Frontend
+web/node_modules/
+web/src/lib/paraglide/
+web/project.inlang/cache/
 
-# testing
-/coverage
+# Embedded build output (produced by `vite build`). The placeholder index.html
+# is tracked so `go build` / `go test` work before the UI has been built.
+/internal/ui/dist/*
+!/internal/ui/dist/index.html
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
 .DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# env files — local secrets, never committed. Whitelist *.example templates.
-.env*
-!.env.example
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-config/*.json
+*.log
+!internal/selfcheck/testdata/*.log
 .idea
-# Dev stack scaffolding (Caddyfile, Dockerfiles, .env.example, etc.) is now
-# committed under /dev/. Local secrets stay out via the .env* rule above.
-settings-dashboard/docker-update-status.json
-settings-dashboard/selfcheck-status.json
+.env*
 CLAUDE.md
 .claude/
 .pnpm-store/
