@@ -21,7 +21,17 @@ import (
 	"github.com/yundera/settings-center-app/internal/ui"
 )
 
+// subcommands run instead of the server: `yundera-admin <name> [args]`, for
+// the template's self-check to reuse this image's code before the app is up.
+var subcommands = map[string]func(args []string) int{}
+
 func main() {
+	if len(os.Args) > 1 {
+		if run, ok := subcommands[os.Args[1]]; ok {
+			os.Exit(run(os.Args[2:]))
+		}
+	}
+
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("yundera-admin: ")
 

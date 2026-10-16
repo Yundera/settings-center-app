@@ -69,6 +69,13 @@ Their shapes are pinned by tests against responses captured from v1
 (`internal/*/testdata`), and the identity push against a JWE produced by the
 orchestrator's own code (`internal/identity/testdata/gen.mjs`).
 
+The image also has one command besides the server: `yundera-admin identity-fetch [--api URL]
+[--issuer URL]`. It asks the orchestrator's doorbell for this box's identity with a one-time key, checks
+the reply exactly as a push, and prints it on stdout for `tools/apply-identity.sh`. Its exit code is 0
+when it got the identity, 3 when the operator had none for this address, and 1 on any failure.
+template-root's `ensure-yundera-user-data.sh` runs it with `--network host` before the stack exists
+(`doc/identity-push.md` › Doorbell reply).
+
 ### Onboarding
 
 One slide per topic, Back / Next / "Skip for now", then a closing card that
