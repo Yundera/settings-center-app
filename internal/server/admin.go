@@ -393,19 +393,11 @@ func (s *Server) handleFeaturesSet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "feature_toggle_failed", features.Describe(err))
 		return
 	}
+	s.refreshOnboarding()
 	writeJSON(w, http.StatusOK, state)
 }
 
 // ---- onboarding ----------------------------------------------------------------
-
-func (s *Server) handleOnboardingStatus(w http.ResponseWriter, r *http.Request) {
-	st, err := s.onboard.Status(bg(r))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "host_action_failed", onboarding.Describe(err))
-		return
-	}
-	writeJSON(w, http.StatusOK, st)
-}
 
 func (s *Server) handleOnboardingClaim(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -441,6 +433,7 @@ func (s *Server) handleOnboardingClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dropFeatureCache()
+	s.refreshOnboarding()
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -449,6 +442,7 @@ func (s *Server) handleOnboardingComplete(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "host_action_failed", onboarding.Describe(err))
 		return
 	}
+	s.refreshOnboarding()
 	writeJSON(w, http.StatusOK, map[string]bool{"completed": true})
 }
 
@@ -488,6 +482,7 @@ func (s *Server) handleOnboardingReset(w http.ResponseWriter, r *http.Request) {
 		out["warning"] = "sessions_not_revoked"
 	}
 	s.dropFeatureCache()
+	s.refreshOnboarding()
 	writeJSON(w, http.StatusOK, out)
 }
 

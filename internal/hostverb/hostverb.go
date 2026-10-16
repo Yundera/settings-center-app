@@ -209,6 +209,75 @@ func ValidateDisplayname(n string) error {
 	return nil
 }
 
+// BackupVerbs are tools/backup.sh's calls. init and recover read the owner's
+// backup password on stdin (one line); reset wipes the backup space, so the
+// script itself insists on --confirm.
+var BackupVerbs = map[string][]string{
+	"status":  {"status"},
+	"enable":  {"enable"},
+	"disable": {"disable"},
+	"init":    {"init"},
+	"recover": {"recover"},
+	"reset":   {"reset", "--confirm"},
+}
+
+// BackupTimeouts sit above backup.sh's own limits: Maison's CLI bounds init at
+// 4 min and recover at 16 (it pins every snapshot), reset polls the
+// orchestrator's wipe for up to ~150 s, enable/disable re-run self-check
+// scripts. Everything but status therefore runs as a background job
+// (internal/server), never inside one HTTP request.
+var BackupTimeouts = map[string]time.Duration{
+	"status":  time.Minute,
+	"enable":  5 * time.Minute,
+	"disable": 5 * time.Minute,
+	"init":    6 * time.Minute,
+	"recover": 18 * time.Minute,
+	"reset":   4 * time.Minute,
+}
+
+// Backup wraps tools/backup.sh. password is required for init and recover —
+// where it goes on stdin, never in argv — and refused for every other verb.
+func Backup(p Paths, verb, password string) (hostrun.Spec, error) {
+	if err := p.check(); err != nil {
+		return hostrun.Spec{}, err
+	}
+	args, ok := BackupVerbs[verb]
+	if !ok {
+		return hostrun.Spec{}, fmt.Errorf("unsupported backup call %q", verb)
+	}
+	spec := hostrun.Spec{Name: "backup-" + verb, Argv: append([]string{"bash", p.tool("backup.sh")}, args...), Timeout: BackupTimeouts[verb]}
+	switch verb {
+	case "init", "recover":
+		if err := ValidateBackupPassword(password); err != nil {
+			return hostrun.Spec{}, err
+		}
+		spec.Stdin = []byte(password + "\n")
+	default:
+		if password != "" {
+			return hostrun.Spec{}, fmt.Errorf("backup %s takes no password", verb)
+		}
+	}
+	return spec, nil
+}
+
+// BackupPasswordMin is Maison's own minimum for an encryption password.
+const BackupPasswordMin = 16
+
+// ErrBackupPasswordShort is the one rule the UI explains separately.
+var ErrBackupPasswordShort = fmt.Errorf("backup password must be at least %d characters", BackupPasswordMin)
+
+// ValidateBackupPassword mirrors Maison's rules (and keeps the password one
+// stdin line).
+func ValidateBackupPassword(pw string) error {
+	if strings.ContainsAny(pw, "\r\n\x00") {
+		return errors.New("backup password must not contain line breaks")
+	}
+	if len([]rune(pw)) < BackupPasswordMin {
+		return ErrBackupPasswordShort
+	}
+	return nil
+}
+
 // ApplyIdentity writes a verified identity bundle. lines is KEY=VALUE text,
 // already shape-checked by internal/identity; it goes on stdin only.
 func ApplyIdentity(p Paths, lines []byte) (hostrun.Spec, error) {

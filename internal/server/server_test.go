@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -26,12 +27,20 @@ import (
 const secret = "test-secret"
 
 type fakeHost struct {
+	// mu: the onboarding refresh runs verbs from its own goroutine.
+	mu    sync.Mutex
 	calls []hostrun.Spec
 	reply map[string]string // verb name -> stdout
+	fail  map[string]string // verb name -> stderr of a failed run
 }
 
 func (f *fakeHost) Run(_ context.Context, s hostrun.Spec) (*hostrun.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls = append(f.calls, s)
+	if msg, ok := f.fail[s.Name]; ok {
+		return &hostrun.Result{ExitCode: 1, Stderr: msg}, nil
+	}
 	if out, ok := f.reply[s.Name]; ok {
 		return &hostrun.Result{Stdout: out}, nil
 	}
@@ -58,13 +67,14 @@ func fixture(t *testing.T) (*Server, http.Handler, *fakeHost, *fakeMail) {
 		YunderaDir: dir, YunderaHostRoot: "/DATA/AppData/yundera", DataDir: t.TempDir(),
 		AssertionSecret: secret, AssertionAudience: "admin", GateURL: "http://127.0.0.1:1",
 		Domain: "alice.nsl.sh", UID: "uid1", OperatorAPI: "http://127.0.0.1:1",
-		FeedbackToken: "fb-token",
+		FeedbackToken: "fb-token", OnboardingCheckToken: "ob-token",
 	}
-	host := &fakeHost{reply: map[string]string{
+	host := &fakeHost{fail: map[string]string{}, reply: map[string]string{
 		"feature-yundera-login":    `{"id":"yundera-login","enabled":true}`,
 		"feature-support-key":      `{"id":"support-key","enabled":true}`,
 		"feature-platform-updates": `{"id":"platform-updates","enabled":true}`,
 		"onboarding-status":        `{"claimed":true,"completed":true,"username":"alice"}`,
+		"backup-status":            `{"enabled":true,"state":"ready","engine":"kopia","spaceId":"s1"}`,
 		"env-set":                  "",
 		"ensure-nightly":           "",
 	}}
@@ -103,6 +113,7 @@ var adminRoutes = []struct{ method, path string }{
 	{"GET", "/api/selfcheck/schedule"}, {"POST", "/api/selfcheck/schedule"}, {"GET", "/api/update-channel"},
 	{"POST", "/api/update-channel"}, {"GET", "/api/features"}, {"POST", "/api/features"},
 	{"POST", "/api/onboarding/claim"}, {"POST", "/api/onboarding/complete"}, {"POST", "/api/onboarding/reset"},
+	{"POST", "/api/onboarding/skip"}, {"POST", "/api/backup"}, {"GET", "/api/backup/job"},
 	{"GET", "/api/support"}, {"POST", "/api/support"}, {"POST", "/api/support/report"}, {"POST", "/api/reboot"},
 }
 
@@ -291,5 +302,267 @@ func TestPublicRoutesCoverGateAllowedPaths(t *testing.T) {
 		if w := do(h, "GET", probe, "", nil); w.Code == http.StatusUnauthorized {
 			t.Errorf("%s (from ALLOWED_PATHS %q) answers 401", probe, p)
 		}
+	}
+}
+
+// set changes the fake's answers once no refresh is reading them.
+func (f *fakeHost) set(name, stdout string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reply[name] = stdout
+}
+
+func (f *fakeHost) named(name string) []hostrun.Spec {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []hostrun.Spec
+	for _, c := range f.calls {
+		if c.Name == name {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+type checkAnswer struct {
+	Show bool   `json:"show"`
+	URL  string `json:"url"`
+}
+
+func check(t *testing.T, h http.Handler) checkAnswer {
+	t.Helper()
+	w := do(h, "GET", "/api/onboarding/check", "", map[string]string{"Authorization": "Bearer ob-token"})
+	var out checkAnswer
+	if w.Code != http.StatusOK || w.Header().Get("Cache-Control") != "no-store" || json.Unmarshal(w.Body.Bytes(), &out) != nil {
+		t.Fatalf("check: %d %s", w.Code, w.Body)
+	}
+	return out
+}
+
+func TestOnboardingCheck(t *testing.T) {
+	s, h, host, _ := fixture(t)
+	if w := do(h, "GET", "/api/onboarding/check", "", nil); w.Code != http.StatusUnauthorized {
+		t.Fatalf("no bearer: %d", w.Code)
+	}
+	if w := do(h, "GET", "/api/onboarding/check", "", map[string]string{"Authorization": "Bearer fb-token"}); w.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong bearer: %d", w.Code)
+	}
+	// A settled box (claimed, backups ready): nothing to show. The first call
+	// fills the cache itself.
+	if a := check(t, h); a.Show || a.URL != "https://admin-alice.nsl.sh/" {
+		t.Fatalf("settled = %+v", a)
+	}
+	// Answered from RAM: further checks run nothing on the host.
+	before := len(host.named("onboarding-status"))
+	for range 5 {
+		check(t, h)
+	}
+	if n := len(host.named("onboarding-status")); n != before {
+		t.Fatalf("check ran onboarding.sh %d more times", n-before)
+	}
+
+	host.set("backup-status", `{"enabled":true,"state":"needs-secret","engine":"kopia","spaceId":"s1"}`)
+	<-s.refreshOnboarding()
+	if a := check(t, h); !a.Show {
+		t.Fatalf("needs-secret = %+v", a)
+	}
+	host.set("backup-status", `{"enabled":false,"state":"disabled","engine":"kopia","spaceId":"s1"}`)
+	<-s.refreshOnboarding()
+	if a := check(t, h); a.Show {
+		t.Fatalf("disabled = %+v", a)
+	}
+	host.set("onboarding-status", `{"claimed":false,"completed":false,"username":""}`)
+	<-s.refreshOnboarding()
+	if a := check(t, h); !a.Show {
+		t.Fatalf("unclaimed = %+v", a)
+	}
+
+	// backup.sh failing is no reason to send Maison's visitors here; the UI
+	// still shows the slide as unavailable.
+	host.set("onboarding-status", `{"claimed":true,"completed":true,"username":"alice"}`)
+	host.mu.Lock()
+	host.fail["backup-status"] = "ERROR: boom"
+	host.mu.Unlock()
+	<-s.refreshOnboarding()
+	if a := check(t, h); a.Show {
+		t.Fatalf("backup.sh failing = %+v", a)
+	}
+	w := do(h, "GET", "/api/onboarding/status", "", map[string]string{auth.HeaderAssertion: mint(t, []string{"admins"}, "oidc")})
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"backup":{"enabled":false,"state":"unavailable"}`) || !strings.Contains(w.Body.String(), `{"id":"backup","state":"pending"}`) {
+		t.Fatalf("status with backup.sh failing: %d %s", w.Code, w.Body)
+	}
+
+	s2, h2, _, _ := fixture(t)
+	s2.cfg.OnboardingCheckToken = ""
+	if w := do(h2, "GET", "/api/onboarding/check", "", map[string]string{"Authorization": "Bearer ob-token"}); w.Code != http.StatusNotFound {
+		t.Fatalf("unconfigured: %d", w.Code)
+	}
+}
+
+func TestOnboardingSkipAndReminder(t *testing.T) {
+	s, h, host, _ := fixture(t)
+	clock := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return clock }
+	host.set("backup-status", `{"enabled":true,"state":"needs-recovery","engine":"kopia","spaceId":"s1"}`)
+	admin := map[string]string{auth.HeaderAssertion: mint(t, []string{"admins"}, "oidc"), CSRFHeader: "1"}
+
+	type status struct {
+		Slides []struct {
+			ID, State string
+			SkippedAt *time.Time
+		}
+		Backup struct{ State string }
+	}
+	read := func() status {
+		t.Helper()
+		w := do(h, "GET", "/api/onboarding/status", "", admin)
+		var out status
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil || len(out.Slides) != 2 {
+			t.Fatalf("status: %d %s", w.Code, w.Body)
+		}
+		return out
+	}
+	st := read()
+	if st.Slides[0].ID != "account" || st.Slides[0].State != "done" || st.Slides[1].ID != "backup" || st.Slides[1].State != "pending" || st.Backup.State != "needs-recovery" {
+		t.Fatalf("before skip = %+v", st)
+	}
+	if !check(t, h).Show {
+		t.Fatal("pending backup slide not shown")
+	}
+
+	if w := do(h, "POST", "/api/onboarding/skip", `{"slide":"nope"}`, admin); w.Code != http.StatusBadRequest {
+		t.Fatalf("unknown slide: %d", w.Code)
+	}
+	if w := do(h, "POST", "/api/onboarding/skip", `{"slide":"backup"}`, admin); w.Code != 200 {
+		t.Fatalf("skip: %d %s", w.Code, w.Body)
+	}
+	raw, err := os.ReadFile(filepath.Join(s.cfg.DataDir, "onboarding-skips.json"))
+	if err != nil || !strings.Contains(string(raw), `"backup": "2026-10-16T09:00:00Z"`) {
+		t.Fatalf("skip store = %s %v", raw, err)
+	}
+	st = read()
+	if st.Slides[1].State != "skipped" || st.Slides[1].SkippedAt == nil || !st.Slides[1].SkippedAt.Equal(clock) {
+		t.Fatalf("after skip = %+v", st.Slides[1])
+	}
+	if check(t, h).Show {
+		t.Fatal("skipped slide still shown")
+	}
+
+	clock = clock.Add(71 * time.Hour)
+	if check(t, h).Show {
+		t.Fatal("reminder came back before 72h")
+	}
+	clock = clock.Add(time.Hour)
+	if !check(t, h).Show {
+		t.Fatal("reminder not back after 72h")
+	}
+	if st := read(); st.Slides[1].State != "pending" || st.Slides[1].SkippedAt == nil {
+		t.Fatalf("after 72h = %+v", st.Slides[1])
+	}
+
+	// The skip store survives a restart.
+	s2 := newServer(s.cfg, Options{Runner: host, Mailer: &fakeMail{}})
+	if at, ok := s2.skips.All()["backup"]; !ok || !at.Equal(time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)) {
+		t.Fatalf("reloaded skips = %v", s2.skips.All())
+	}
+}
+
+func TestBackupAction(t *testing.T) {
+	srv, h, host, _ := fixture(t)
+	admin := map[string]string{auth.HeaderAssertion: mint(t, []string{"admins"}, "oidc"), CSRFHeader: "1"}
+	const pw = "correct horse battery staple"
+
+	for body, code := range map[string]string{
+		`{"action":"probe"}`:                                 "unknown_action",
+		`{"action":"init","password":"short"}`:               "too_short",
+		`{"action":"init","password":"sixteen chars ok\nx"}`: "invalid_backup_password",
+		`{"action":"reset"}`:                                 "confirm_required",
+	} {
+		w := do(h, "POST", "/api/backup", body, admin)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"`+code+`"`) {
+			t.Errorf("%s: %d %s", body, w.Code, w.Body)
+		}
+	}
+	if len(host.calls) != 0 {
+		t.Fatalf("host actions ran for refused requests: %+v", host.calls)
+	}
+
+	// Long actions run as a background job: 202 now, the result on /api/backup/job.
+	job := func(t *testing.T, s *Server) backupJob {
+		t.Helper()
+		s.jobs.mu.Lock()
+		done := s.jobs.done
+		s.jobs.mu.Unlock()
+		<-done
+		w := do(h, "GET", "/api/backup/job", "", admin)
+		var out backupJob
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil {
+			t.Fatalf("job: %d %s", w.Code, w.Body)
+		}
+		return out
+	}
+	if w := do(h, "GET", "/api/backup/job", "", admin); !strings.Contains(w.Body.String(), `"job":"idle"`) {
+		t.Fatalf("job before any: %s", w.Body)
+	}
+
+	host.set("backup-init", `{"enabled":true,"state":"ready","engine":"kopia","spaceId":"s1"}`)
+	w := do(h, "POST", "/api/backup", `{"action":"init","password":"`+pw+`"}`, admin)
+	if w.Code != http.StatusAccepted || !strings.Contains(w.Body.String(), `"job":"running"`) {
+		t.Fatalf("init: %d %s", w.Code, w.Body)
+	}
+	if j := job(t, srv); j.Job != "done" || j.Action != "init" || j.Backup == nil || j.Backup.State != "ready" {
+		t.Fatalf("init job = %+v", j)
+	}
+	calls := host.named("backup-init")
+	if len(calls) != 1 || string(calls[0].Stdin) != pw+"\n" || strings.Contains(strings.Join(calls[0].Argv, " "), "horse") {
+		t.Fatalf("init call = %+v", calls)
+	}
+
+	host.mu.Lock()
+	host.fail["backup-recover"] = "ERROR: Error: the key does not open this repository [wrong_key]"
+	host.fail["backup-reset"] = "ERROR: RESET_RATE_LIMIT: too many resets today for this account; try again tomorrow"
+	host.mu.Unlock()
+	if w := do(h, "POST", "/api/backup", `{"action":"recover","password":"`+pw+`"}`, admin); w.Code != http.StatusAccepted {
+		t.Fatalf("recover: %d %s", w.Code, w.Body)
+	}
+	if j := job(t, srv); j.Job != "failed" || j.Code != "wrong_key" || j.Backup != nil {
+		t.Fatalf("wrong key job = %+v", j)
+	}
+	if w := do(h, "POST", "/api/backup", `{"action":"reset","confirm":true}`, admin); w.Code != http.StatusAccepted {
+		t.Fatalf("reset: %d %s", w.Code, w.Body)
+	}
+	if j := job(t, srv); j.Code != "rate_limited" {
+		t.Fatalf("rate limited job = %+v", j)
+	}
+	if calls := host.named("backup-reset"); len(calls) != 1 || strings.Join(calls[0].Argv[2:], " ") != "reset --confirm" {
+		t.Fatalf("reset call = %+v", calls)
+	}
+
+	// One job at a time.
+	srv.jobs.mu.Lock()
+	srv.jobs.cur = backupJob{Job: "running", Action: "recover"}
+	srv.jobs.mu.Unlock()
+	if w := do(h, "POST", "/api/backup", `{"action":"disable"}`, admin); w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), `"code":"backup_busy"`) {
+		t.Fatalf("second job: %d %s", w.Code, w.Body)
+	}
+	srv.jobs.mu.Lock()
+	srv.jobs.cur = backupJob{Job: "done"}
+	srv.jobs.mu.Unlock()
+
+	// A password sent with a verb that takes none is dropped, not passed on.
+	host.set("backup-disable", `{"enabled":false,"state":"disabled","engine":"kopia","spaceId":"s1"}`)
+	if w := do(h, "POST", "/api/backup", `{"action":"disable","password":"`+pw+`"}`, admin); w.Code != http.StatusAccepted {
+		t.Fatalf("disable: %d %s", w.Code, w.Body)
+	}
+	if j := job(t, srv); j.Backup == nil || j.Backup.State != "disabled" {
+		t.Fatalf("disable job = %+v", j)
+	}
+	if calls := host.named("backup-disable"); len(calls) != 1 || calls[0].Stdin != nil {
+		t.Fatalf("disable call = %+v", calls)
+	}
+
+	// status stays synchronous.
+	if w := do(h, "POST", "/api/backup", `{"action":"status"}`, admin); w.Code != 200 || !strings.Contains(w.Body.String(), `"state":"ready"`) || strings.Contains(w.Body.String(), "s1") {
+		t.Fatalf("status: %d %s", w.Code, w.Body)
 	}
 }

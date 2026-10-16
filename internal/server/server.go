@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/yundera/settings-center-app/internal/auth"
+	"github.com/yundera/settings-center-app/internal/backup"
 	"github.com/yundera/settings-center-app/internal/bench"
 	"github.com/yundera/settings-center-app/internal/config"
 	"github.com/yundera/settings-center-app/internal/envfile"
@@ -51,7 +52,15 @@ type Server struct {
 	identity *identity.Receiver
 	features features.Service
 	onboard  onboarding.Service
+	backup   backup.Service
 	support  *support.Service
+
+	// skips are the onboarding's "Skip for now" times; onb the slide state
+	// Maison's check reads (onboarding.go). now is swapped by tests.
+	skips *onboarding.Skips
+	onb   onbCache
+	jobs  backupJobs
+	now   func() time.Time
 
 	// featCache holds the last features read for the Overview, which polls;
 	// any feature write drops it.
@@ -78,11 +87,12 @@ func New(cfg config.Config, uiFS fs.FS, stop <-chan struct{}) http.Handler {
 	s := newServer(cfg, Options{Runner: run, Mailer: mail.SMTP{Addr: cfg.SMTPAddr, Domain: cfg.Domain}})
 	s.health.Start(stop)
 	s.metrics.Start(stop)
+	s.startOnboardingRefresh(stop)
 	return s.routes(uiFS)
 }
 
 func newServer(cfg config.Config, opt Options) *Server {
-	s := &Server{cfg: cfg, run: opt.Runner, mail: opt.Mailer}
+	s := &Server{cfg: cfg, run: opt.Runner, mail: opt.Mailer, now: time.Now}
 	s.authn = auth.Authenticator{Secret: []byte(cfg.AssertionSecret), Audience: cfg.AssertionAudience}
 	if cfg.AssertionSecret == "" && cfg.DevIdentity != "" && cfg.Env == "development" {
 		log.Printf("WARNING: DEV_IDENTITY=%q — every request is treated as that admin", cfg.DevIdentity)
@@ -96,6 +106,8 @@ func newServer(cfg config.Config, opt Options) *Server {
 	s.bench = bench.New(s.run)
 	s.features = features.Service{Run: s.run, Paths: s.paths}
 	s.onboard = onboarding.Service{Run: s.run, Paths: s.paths}
+	s.backup = backup.Service{Run: s.run, Paths: s.paths}
+	s.skips = &onboarding.Skips{Path: filepath.Join(cfg.DataDir, "onboarding-skips.json"), Now: func() time.Time { return s.now() }}
 	s.support = &support.Service{Run: s.run, OperatorAPI: cfg.OperatorAPI}
 	s.identity = identity.NewReceiver(&identity.Receiver{
 		Keys:          identity.NewKeyStore(),
@@ -129,9 +141,10 @@ func (s *Server) routes(uiFS fs.FS) http.Handler {
 	r.Use(middleware.RealIP, middleware.Recoverer, securityHeaders)
 
 	// Public: the gate's ALLOWED_PATHS (api/health, api/perf, api/bench,
-	// api/identity) plus api/feedback, which Maison reaches directly over pcs
-	// and which authenticates with its own bearer. Keep this list a SUPERSET of
-	// ALLOWED_PATHS (server_test.go checks it against template-root).
+	// api/identity) plus api/feedback and api/onboarding/check, which Maison
+	// reaches directly over pcs and which authenticate with their own bearer.
+	// Keep this list a SUPERSET of ALLOWED_PATHS (server_test.go checks it
+	// against template-root); the check is deliberately NOT in ALLOWED_PATHS.
 	r.Get("/api/health", s.handleHealth)
 	r.Get("/api/perf", s.handlePerf)
 	r.Get("/api/bench/disk", s.handleBenchDisk)
@@ -139,6 +152,7 @@ func (s *Server) routes(uiFS fs.FS) http.Handler {
 	r.HandleFunc("/api/identity/key", s.identity.HandleKey)
 	r.HandleFunc("/api/identity/push", s.identity.HandlePush)
 	r.HandleFunc("/api/feedback/ingest", s.handleFeedback)
+	r.Get("/api/onboarding/check", s.handleOnboardingCheck)
 
 	r.Route("/api", func(api chi.Router) {
 		api.Use(s.authn.RequireUser)
@@ -162,6 +176,9 @@ func (s *Server) routes(uiFS fs.FS) http.Handler {
 			a.Post("/onboarding/claim", s.handleOnboardingClaim)
 			a.Post("/onboarding/complete", s.handleOnboardingComplete)
 			a.Post("/onboarding/reset", s.handleOnboardingReset)
+			a.Post("/onboarding/skip", s.handleOnboardingSkip)
+			a.Post("/backup", s.handleBackup)
+			a.Get("/backup/job", s.handleBackupJob)
 			a.Get("/support", s.handleSupportGet)
 			a.Post("/support", s.handleSupportSet)
 			a.Post("/support/report", s.handleSupportReport)

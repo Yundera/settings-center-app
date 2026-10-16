@@ -149,10 +149,43 @@ export interface Feature {
   error?: string
 }
 
+export type SlideId = 'account' | 'backup'
+
+/** pending: wants the owner now; skipped: "Skip for now", back 3 days later. */
+export interface Slide {
+  id: SlideId
+  state: 'pending' | 'done' | 'skipped'
+  skippedAt?: string
+}
+
+export type BackupState = 'needs-secret' | 'needs-recovery' | 'ready' | 'disabled' | 'unavailable'
+
+export interface BackupStatus {
+  enabled: boolean
+  state: BackupState
+  engine?: string
+}
+
+export type BackupAction = 'status' | 'enable' | 'disable' | 'init' | 'recover' | 'reset'
+
+/** A long backup action runs on the server; POST /api/backup answers 202 with it. */
+export interface BackupJob {
+  job: 'idle' | 'running' | 'done' | 'failed'
+  action?: BackupAction
+  startedAt?: string
+  endedAt?: string
+  backup?: BackupStatus
+  code?: string
+  error?: string
+}
+
 export interface OnboardingStatus {
   claimed: boolean
   completed: boolean
   username: string
+  slides: Slide[]
+  backup: BackupStatus
+  backupJob?: BackupJob
 }
 
 export interface Support {

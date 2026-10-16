@@ -56,6 +56,10 @@ type Config struct {
 	FeedbackToken string
 	FeedbackEmail string
 
+	// OnboardingCheckToken authenticates Maison's GET /api/onboarding/check
+	// (its managed `onboarding` setting carries the same secret). Empty ⇒ 404.
+	OnboardingCheckToken string
+
 	// UpstreamLogoutURL ends the local-account (Authelia) session on logout,
 	// before the gate's own logout.
 	UpstreamLogoutURL string
@@ -70,26 +74,27 @@ const DefaultSupportEmail = "support@yundera.com"
 
 func FromEnv() Config {
 	return Config{
-		Addr:              def(os.Getenv("LISTEN_ADDR"), ":80"),
-		YunderaDir:        def(os.Getenv("YUNDERA_DIR"), "/yundera"),
-		YunderaHostRoot:   strings.TrimRight(def(os.Getenv("COMPOSE_FOLDER_PATH"), "/DATA/AppData/yundera"), "/"),
-		DataDir:           def(os.Getenv("DATA_DIR"), "/app/data"),
-		AssertionSecret:   strings.TrimSpace(os.Getenv("IDENTITY_ASSERTION_SECRET")),
-		AssertionAudience: def(os.Getenv("IDENTITY_ASSERTION_AUDIENCE"), "admin"),
-		GateURL:           strings.TrimRight(def(os.Getenv("APPSHIELD_GATE_URL"), "http://admin"), "/"),
-		DevIdentity:       strings.TrimSpace(os.Getenv("DEV_IDENTITY")),
-		Env:               def(os.Getenv("ADMIN_ENV"), "production"),
-		SelfContainer:     def(os.Getenv("SELF_CONTAINER"), "admin-app"),
-		RunnerImage:       strings.TrimSpace(os.Getenv("RUNNER_IMAGE")),
-		Domain:            strings.TrimSpace(os.Getenv("DOMAIN")),
-		UID:               strings.TrimSpace(os.Getenv("UID")),
-		PublicIP:          strings.TrimSpace(os.Getenv("PUBLIC_IP")),
-		OperatorAPI:       strings.TrimRight(def(os.Getenv("OPERATOR_API"), DefaultOperatorAPI), "/"),
-		SMTPAddr:          net.JoinHostPort(def(os.Getenv("SMTP_HOST"), "smtp"), def(os.Getenv("SMTP_PORT"), "587")),
-		SupportEmail:      strings.TrimSpace(os.Getenv("SUPPORT_EMAIL")),
-		FeedbackToken:     strings.TrimSpace(os.Getenv("FEEDBACK_TOKEN")),
-		FeedbackEmail:     strings.TrimSpace(os.Getenv("FEEDBACK_EMAIL")),
-		UpstreamLogoutURL: strings.TrimSpace(os.Getenv("UPSTREAM_LOGOUT_URL")),
+		Addr:                 def(os.Getenv("LISTEN_ADDR"), ":80"),
+		YunderaDir:           def(os.Getenv("YUNDERA_DIR"), "/yundera"),
+		YunderaHostRoot:      strings.TrimRight(def(os.Getenv("COMPOSE_FOLDER_PATH"), "/DATA/AppData/yundera"), "/"),
+		DataDir:              def(os.Getenv("DATA_DIR"), "/app/data"),
+		AssertionSecret:      strings.TrimSpace(os.Getenv("IDENTITY_ASSERTION_SECRET")),
+		AssertionAudience:    def(os.Getenv("IDENTITY_ASSERTION_AUDIENCE"), "admin"),
+		GateURL:              strings.TrimRight(def(os.Getenv("APPSHIELD_GATE_URL"), "http://admin"), "/"),
+		DevIdentity:          strings.TrimSpace(os.Getenv("DEV_IDENTITY")),
+		Env:                  def(os.Getenv("ADMIN_ENV"), "production"),
+		SelfContainer:        def(os.Getenv("SELF_CONTAINER"), "admin-app"),
+		RunnerImage:          strings.TrimSpace(os.Getenv("RUNNER_IMAGE")),
+		Domain:               strings.TrimSpace(os.Getenv("DOMAIN")),
+		UID:                  strings.TrimSpace(os.Getenv("UID")),
+		PublicIP:             strings.TrimSpace(os.Getenv("PUBLIC_IP")),
+		OperatorAPI:          strings.TrimRight(def(os.Getenv("OPERATOR_API"), DefaultOperatorAPI), "/"),
+		SMTPAddr:             net.JoinHostPort(def(os.Getenv("SMTP_HOST"), "smtp"), def(os.Getenv("SMTP_PORT"), "587")),
+		SupportEmail:         strings.TrimSpace(os.Getenv("SUPPORT_EMAIL")),
+		FeedbackToken:        strings.TrimSpace(os.Getenv("FEEDBACK_TOKEN")),
+		FeedbackEmail:        strings.TrimSpace(os.Getenv("FEEDBACK_EMAIL")),
+		OnboardingCheckToken: strings.TrimSpace(os.Getenv("ONBOARDING_CHECK_TOKEN")),
+		UpstreamLogoutURL:    strings.TrimSpace(os.Getenv("UPSTREAM_LOGOUT_URL")),
 	}
 }
 

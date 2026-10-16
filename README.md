@@ -5,7 +5,7 @@ The Yundera layer of a Personal Cloud Server, at `admin-<domain>` (the Maison
 healthy, is it up to date, and where do I find everything else — and holds the
 few things only Yundera does: the nightly health check, the Yundera features an
 owner may switch off, support access and reports, and the first-run onboarding
-wizard. For the Yundera control plane it serves the public routes it polls and
+(one slide per topic: the owner account, backups). For the Yundera control plane it serves the public routes it polls and
 pushes to.
 
 It is written for people new to self-hosting: every page opens with what it is
@@ -48,8 +48,9 @@ browser ─► admin (AppShield gate) ─► admin-app :80
 - **Host actions** (`internal/hostverb`, `internal/hostrun`) run in a sibling
   container created from this image, in the host's namespaces. Each is a fixed
   builder over the template's own tools (`self-check.sh`, `tools/feature-*.sh`,
-  `tools/onboarding.sh`, `tools/apply-identity.sh`, `tools/env-file-manager.sh`);
-  inputs are validated argv, secrets go on stdin.
+  `tools/onboarding.sh`, `tools/backup.sh`, `tools/apply-identity.sh`,
+  `tools/env-file-manager.sh`); inputs are validated argv, secrets (the account
+  and backup passwords, the identity bundle) go on stdin.
 - **Status** (`internal/status`) is a pure function returning codes; the UI
   owns the words (`web/messages`).
 
@@ -62,10 +63,38 @@ browser ─► admin (AppShield gate) ─► admin-app :80
 | `GET /api/bench/{disk,network}` | `pcs perf` | lazy, 10-min cooldown |
 | `GET /api/identity/key`, `POST /api/identity/push` | the orchestrator's identity push (`doc/identity-push.md`) | the bundle authenticates itself |
 | `GET/POST /api/feedback/ingest` | Maison's "Send feedback" | bearer `FEEDBACK_TOKEN` |
+| `GET /api/onboarding/check` | Maison, on every page load (its managed `onboarding` setting) | bearer `ONBOARDING_CHECK_TOKEN`; `{"show","url"}` from RAM; **not** in the gate's ALLOWED_PATHS |
 
 Their shapes are pinned by tests against responses captured from v1
 (`internal/*/testdata`), and the identity push against a JWE produced by the
 orchestrator's own code (`internal/identity/testdata/gen.mjs`).
+
+### Onboarding
+
+One slide per topic, Back / Next / "Skip for now", then a closing card that
+marks it completed (`tools/onboarding.sh mark-completed`):
+
+| Slide | Done when | Acts through |
+|---|---|---|
+| `account` | the box is claimed (a local owner account exists) | `onboarding.sh run`; Yundera Login via `POST /api/features`, switched off only after the claim |
+| `backup` | `backup.sh status` reports `ready` or `disabled` | `POST /api/backup` → `backup.sh status\|enable\|disable\|init\|recover\|reset --confirm` |
+
+Backup states: `needs-secret` (empty space, choose a password → `init`),
+`needs-recovery` (old backups found → `recover` with the old password, or
+`reset` to wipe the space and choose a new one), `ready`, `disabled`,
+`unavailable` (skippable, points to support). Backup passwords are ≥16
+characters, on stdin only. Every action but `status` outlasts an HTTP request
+(recover can take ~16 min), so `POST /api/backup` answers 202 and runs it as
+a background job — one at a time, 409 `backup_busy` otherwise — whose result
+the UI polls on `GET /api/backup/job`.
+
+A skipped slide is stored in `${DATA_DIR}/onboarding-skips.json`
+(`{"<slide>": "<RFC3339>"}`) and becomes pending again 72 h later. While any
+slide is pending, `GET /api/onboarding/check` answers
+`{"show": true, "url": "https://admin-<domain>/"}` and Maison 303s the owner
+here with `?return=<its URL>`. The answer comes from a snapshot refreshed every
+minute and right after any onboarding, feature or backup change, so the check
+never runs a host verb inline; a `backup.sh` failure never turns it on.
 
 ## Configuration
 
@@ -81,6 +110,7 @@ orchestrator's own code (`internal/identity/testdata/gen.mjs`).
 | `OPERATOR_API` | `https://app.yundera.com/service/pcs` | support key, identity issuer, dashboard link |
 | `SUPPORT_EMAIL`, `FEEDBACK_EMAIL` | `support@yundera.com` | recipients |
 | `FEEDBACK_TOKEN` | — | unset ⇒ feedback 404 |
+| `ONBOARDING_CHECK_TOKEN` | — | unset ⇒ onboarding check 404 (Maison then never redirects) |
 | `UPSTREAM_LOGOUT_URL` | — | ends the Authelia session at logout |
 | `SMTP_HOST` / `SMTP_PORT` | `smtp` / `587` | the mesh relay |
 | `DEV_IDENTITY`, `ADMIN_ENV=development` | — | fake admin, only without a secret |

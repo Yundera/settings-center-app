@@ -43,13 +43,20 @@
         onboarding = await api.get<OnboardingStatus>('/api/onboarding/status')
         // Maison sent a settled owner here: straight back.
         const back = readReturnTarget()
-        if (onboarding.claimed && onboarding.completed && back) location.replace(back)
+        if (!wantsOnboarding(onboarding) && back) location.replace(back)
       } catch {
         onboarding = null
       }
     })
     .catch((e) => (meError = errorText(e)))
-  const needsOnboarding = $derived(!!onboarding && (!onboarding.claimed || !onboarding.completed))
+  // The slides run while one is pending (not done, not skipped in the last
+  // 3 days), and once more for the closing card after a claim. Finishing them
+  // dismisses them for this visit, whatever the server says next.
+  function wantsOnboarding(o: OnboardingStatus): boolean {
+    return (o.slides ?? []).some((s) => s.state === 'pending') || (o.claimed && !o.completed)
+  }
+  let dismissed = $state(false)
+  const needsOnboarding = $derived(!dismissed && !!onboarding && wantsOnboarding(onboarding))
 
   function go(e: MouseEvent, to: string) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
@@ -71,7 +78,7 @@
 </script>
 
 {#if me && needsOnboarding && onboarding}
-  <Onboarding {me} status={onboarding} ondone={(s) => (onboarding = s)} />
+  <Onboarding {me} status={onboarding} ondone={(s) => ((onboarding = s), (dismissed = true))} />
 {:else}
 <div class="brandbar" aria-hidden="true"></div>
 <header class="top">

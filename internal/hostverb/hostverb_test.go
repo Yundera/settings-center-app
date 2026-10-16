@@ -3,6 +3,7 @@ package hostverb
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 var p = Paths{Scripts: "/DATA/AppData/yundera/template/scripts", Root: "/DATA/AppData/yundera"}
@@ -171,5 +172,64 @@ func TestSupportVerbs(t *testing.T) {
 	}
 	if _, err := SupportEnable("admin", key+"\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJH5/bxj6fGPqTV1m7eF3r/Zp evil"); err == nil {
 		t.Error("multi-line key accepted")
+	}
+}
+
+func TestBackup(t *testing.T) {
+	v, err := Backup(p, "reset", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(v.Argv, "|") != "bash|/DATA/AppData/yundera/template/scripts/tools/backup.sh|reset|--confirm" || v.Stdin != nil {
+		t.Fatalf("reset = %+v", v)
+	}
+	for _, ok := range []string{"status", "enable", "disable"} {
+		v, err := Backup(p, ok, "")
+		if err != nil || v.Argv[len(v.Argv)-1] != ok || v.Name != "backup-"+ok {
+			t.Errorf("%s: %+v %v", ok, v, err)
+		}
+		if _, err := Backup(p, ok, "a long enough password"); err == nil {
+			t.Errorf("%s accepted a password", ok)
+		}
+	}
+	for _, bad := range append(hostile, "", "reset --confirm", "probe", "init kopia") {
+		if _, err := Backup(p, bad, "a long enough password"); err == nil {
+			t.Errorf("verb %q accepted", bad)
+		}
+	}
+}
+
+func TestBackupPasswordOnStdinOnly(t *testing.T) {
+	const pw = "correct horse battery staple"
+	for _, verb := range []string{"init", "recover"} {
+		v, err := Backup(p, verb, pw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(v.Stdin) != pw+"\n" {
+			t.Fatalf("%s stdin = %q", verb, v.Stdin)
+		}
+		if v.Timeout < 6*time.Minute {
+			t.Fatalf("%s timeout %v is below Maison's own limit", verb, v.Timeout)
+		}
+		for _, a := range v.Argv {
+			if strings.Contains(a, "horse") {
+				t.Fatalf("password leaked into argv: %q", v.Argv)
+			}
+		}
+		if strings.Join(v.Argv, "|") != "bash|/DATA/AppData/yundera/template/scripts/tools/backup.sh|"+verb {
+			t.Fatalf("argv = %q", v.Argv)
+		}
+		for _, bad := range []string{"", "fifteen chars!!", "sixteen chars ok\nx", "sixteen chars ok\rx", "sixteen chars ok\x00"} {
+			if _, err := Backup(p, verb, bad); err == nil {
+				t.Errorf("%s password %q accepted", verb, bad)
+			}
+		}
+	}
+	if err := ValidateBackupPassword("ééééééééééééééé"); err != ErrBackupPasswordShort {
+		t.Errorf("15 runes: %v", err)
+	}
+	if err := ValidateBackupPassword("éééééééééééééééé"); err != nil {
+		t.Errorf("16 runes refused: %v", err)
 	}
 }

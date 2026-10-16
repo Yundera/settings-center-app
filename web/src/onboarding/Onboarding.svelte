@@ -1,7 +1,7 @@
 <script lang="ts">
-  import Explain from '../lib/Explain.svelte'
-  import { api, type Me, type OnboardingStatus } from '../lib/api'
-  import { errorText } from '../lib/t'
+  import AccountSlide from './slides/AccountSlide.svelte'
+  import BackupSlide from './slides/BackupSlide.svelte'
+  import { api, type BackupStatus, type Me, type OnboardingStatus, type Slide, type SlideId } from '../lib/api'
   import { readReturnTarget } from './returnTarget'
   import { m } from '../lib/paraglide/messages.js'
   import { getLocale, locales, setLocale } from '../lib/paraglide/runtime.js'
@@ -10,10 +10,12 @@
   // owner's first contact with their server, right after the Yundera sign-in,
   // and uses the same cloud background so the two read as one journey.
   //
-  // Step 1 claims the box (tools/onboarding.sh run) for an unclaimed server.
-  // Step 2 welcomes a claimed-but-not-welcomed one and says what comes next;
-  // finishing marks it completed. Maison sends an unclaimed owner here with
-  // ?return=<its URL>; once settled they go straight back (returnTarget.ts).
+  // One slide per topic (slides/), Back / Next / "Skip for now", then a
+  // closing card that marks the onboarding completed. It opens on the first
+  // slide still pending; a skipped slide comes back 3 days later (the server
+  // keeps the times, internal/onboarding). Maison sends the owner here with
+  // ?return=<its URL> while a slide is pending; once settled they go straight
+  // back (returnTarget.ts).
   let {
     me,
     status,
@@ -23,38 +25,66 @@
   const localeNames: Record<string, string> = { en: 'English', fr: 'Français', ko: '한국어' }
   const returnTo = readReturnTarget()
 
-  // A starting copy on purpose: from here the page tracks the claim itself.
+  // A starting copy on purpose: from here the page tracks the slides itself.
   // svelte-ignore state_referenced_locally
-  let current = $state<OnboardingStatus>({ ...status })
-  let username = $state('')
-  let displayname = $state(m.onboarding_default_name())
-  let password = $state('')
-  let confirm = $state('')
+  let current = $state<OnboardingStatus>({ ...status, slides: status.slides.map((s) => ({ ...s })) })
+  // The closing card is one step past the last slide.
+  const total = $derived(current.slides.length + 1)
+  // Open on the first pending slide; with none (only the closing card is
+  // left, e.g. the tab was closed right after the claim), on the closing card.
+  // svelte-ignore state_referenced_locally
+  const firstPending = status.slides.findIndex((s) => s.state === 'pending')
+  // svelte-ignore state_referenced_locally
+  let step = $state(firstPending >= 0 ? firstPending : status.slides.length)
   let busy = $state(false)
-  let error = $state('')
-  let generated = $state('')
-  let copied = $state(false)
 
-  const step = $derived(current.claimed ? 2 : 1)
-  const mismatch = $derived(confirm !== '' && password !== confirm)
-  const canSubmit = $derived(
-    /^[a-z_][a-z0-9_-]{0,31}$/.test(username) && displayname.trim() !== '' && password.length >= 8 && password === confirm && !busy,
-  )
+  const slide = $derived<Slide | null>(step < current.slides.length ? current.slides[step] : null)
+  const skipped = $derived(current.slides.some((s) => s.state !== 'done'))
 
-  async function claim(e: SubmitEvent) {
-    e.preventDefault()
+  function mark(id: SlideId, state: Slide['state'], skippedAt?: string) {
+    current.slides = current.slides.map((s) => (s.id === id ? { ...s, state, skippedAt: skippedAt ?? s.skippedAt } : s))
+  }
+
+  function onclaimed(s: { claimed: boolean; completed: boolean; username: string }) {
+    current.claimed = s.claimed
+    current.completed = s.completed
+    current.username = s.username
+    if (s.claimed) mark('account', 'done')
+  }
+
+  function onbackup(b: BackupStatus) {
+    current.backup = b
+    const settled = b.state === 'ready' || b.state === 'disabled'
+    const was = current.slides.find((s) => s.id === 'backup')
+    if (settled) mark('backup', 'done')
+    else if (was?.state === 'done') mark('backup', 'pending')
+  }
+
+  function next() {
+    if (step < total - 1) step++
+    scrollTo(0, 0)
+  }
+
+  async function skip() {
+    if (!slide) return
     busy = true
-    error = ''
     try {
-      const res = await api.post<OnboardingStatus & { password?: string }>('/api/onboarding/claim', { username, displayname, password })
-      if (res.password) generated = res.password
-      current = { claimed: res.claimed, completed: res.completed, username: res.username }
-      password = confirm = ''
-    } catch (err) {
-      error = errorText(err)
+      const r = await api.post<{ skippedAt: string }>('/api/onboarding/skip', { slide: slide.id })
+      mark(slide.id, 'skipped', r.skippedAt)
+    } catch {
+      // Not worth blocking on: the slide simply comes back sooner.
+      mark(slide.id, 'skipped')
     } finally {
       busy = false
     }
+    next()
+  }
+
+  // Backups unavailable: skip the slide so the gate lets the owner reach the
+  // Support page, then go there.
+  async function toSupport() {
+    await skip()
+    await finish('/support')
   }
 
   async function finish(to?: string) {
@@ -62,22 +92,15 @@
     try {
       await api.post('/api/onboarding/complete')
     } catch {
-      // Not worth blocking on: the page simply shows again next time.
+      // Not worth blocking on: the closing card simply shows again next time.
     }
-    const done = { ...current, completed: true }
+    const done: OnboardingStatus = { ...current, completed: true }
     if (to) location.assign(to)
     else if (returnTo) location.replace(returnTo)
     else ondone(done)
   }
 
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(generated)
-      copied = true
-    } catch {
-      copied = false
-    }
-  }
+  const label = (id: SlideId) => (id === 'account' ? m.onboarding_step_account() : m.onboarding_step_backup())
 </script>
 
 <div class="screen">
@@ -93,45 +116,22 @@
   <main>
     <section class="panel">
       <ol class="steps" aria-label={m.onboarding_steps()}>
-        <li class:active={step === 1} class:done={step > 1}><span>1</span>{m.onboarding_step_account()}</li>
-        <li class:active={step === 2}><span>2</span>{m.onboarding_step_ready()}</li>
+        {#each current.slides as sl, i (sl.id)}
+          <li class:active={step === i} class:done={sl.state === 'done'} class:skipped={sl.state === 'skipped'}>
+            <span>{sl.state === 'done' ? '✓' : i + 1}</span><em>{label(sl.id)}</em>
+          </li>
+        {/each}
+        <li class:active={step === total - 1}><span>{total}</span><em>{m.onboarding_step_ready()}</em></li>
       </ol>
 
-      {#if step === 1}
-        <h1>{m.onboarding_title()}</h1>
-        <p class="lead">{m.onboarding_intro()}</p>
-        <form class="stack" onsubmit={claim}>
-          <label class="field">
-            {m.onboarding_username()}
-            <input bind:value={username} oninput={() => (username = username.toLowerCase())} autocomplete="username" autocapitalize="off" spellcheck="false" required />
-            <span class="hint">{m.onboarding_username_hint()}</span>
-          </label>
-          <label class="field">
-            {m.onboarding_displayname()}
-            <input bind:value={displayname} maxlength="64" required />
-          </label>
-          <label class="field">
-            <span>{m.onboarding_password()} <Explain>{m.explain_password()}</Explain></span>
-            <input type="password" bind:value={password} autocomplete="new-password" required minlength="8" />
-            <span class="hint">{m.onboarding_password_hint()}</span>
-          </label>
-          <label class="field">
-            {m.onboarding_confirm()}
-            <input type="password" bind:value={confirm} autocomplete="new-password" required />
-            {#if mismatch}<span class="hint error">{m.onboarding_mismatch()}</span>{/if}
-          </label>
-          {#if error}<p class="error">{error}</p>{/if}
-          <button class="primary wide" disabled={!canSubmit}>{busy ? m.working() : m.onboarding_create()}</button>
-        </form>
+      {#if slide?.id === 'account'}
+        <AccountSlide status={current} {onclaimed} />
+      {:else if slide?.id === 'backup'}
+        <BackupSlide backup={current.backup} onchange={onbackup} onsupport={toSupport} />
       {:else}
-        <h1>{m.onboarding_ready_title()}</h1>
-        {#if generated}
-          <div class="secret">
-            <p>{m.onboarding_generated()}</p>
-            <div class="row"><code class="pw">{generated}</code><button onclick={copy}>{copied ? m.copied() : m.copy()}</button></div>
-          </div>
-        {/if}
-        <p class="lead">{m.onboarding_ready_body({ username: current.username })}</p>
+        <h1>{m.onboarding_done_title()}</h1>
+        <p class="lead">{current.claimed ? m.onboarding_ready_body({ username: current.username }) : m.onboarding_done_body()}</p>
+        {#if skipped}<p class="later">{m.onboarding_done_skipped()}</p>{/if}
         <ul class="next">
           <li><strong>{m.onboarding_next_apps_title()}</strong> {m.onboarding_next_apps()}</li>
           <li><strong>{m.onboarding_next_here_title()}</strong> {m.onboarding_next_here()}</li>
@@ -145,6 +145,20 @@
             <button class="link" disabled={busy} onclick={() => finish()}>{m.onboarding_to_settings()}</button>
           {/if}
         </div>
+      {/if}
+
+      {#if slide}
+        <nav class="nav">
+          <button type="button" disabled={busy || step === 0} onclick={() => (step--, scrollTo(0, 0))}>{m.onboarding_prev()}</button>
+          {#if slide.state === 'done'}
+            <button type="button" class="primary" disabled={busy} onclick={next}>{m.onboarding_next()}</button>
+          {:else}
+            <button type="button" class="link" disabled={busy} onclick={skip}>{m.onboarding_skip()}</button>
+          {/if}
+        </nav>
+        {#if slide.state !== 'done'}<p class="skiphint">{m.onboarding_skip_hint()}</p>{/if}
+      {:else if step > 0}
+        <nav class="nav"><button type="button" disabled={busy} onclick={() => (step--, scrollTo(0, 0))}>{m.onboarding_prev()}</button></nav>
       {/if}
     </section>
   </main>
@@ -206,11 +220,11 @@
     height: 5px;
     background: var(--brand-gradient);
   }
-  h1 {
+  .panel :global(h1) {
     font-size: 1.6rem;
     margin: 0.25rem 0 0.5rem;
   }
-  .lead {
+  .panel :global(.lead) {
     color: var(--text-muted);
     margin: 0 0 1.25rem;
   }
@@ -250,30 +264,44 @@
     background: var(--ok-bg);
     color: var(--ok-fg);
   }
-  .wide {
+  .steps li.skipped span {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+  }
+  .steps em {
+    font-style: normal;
+  }
+  @media (max-width: 420px) {
+    .steps li:not(.active) em {
+      display: none;
+    }
+  }
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+  .skiphint {
+    margin: 0.5rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-subtle);
+    text-align: right;
+  }
+  .later {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    border-radius: 12px;
+    padding: 0.6rem 0.9rem;
+    margin: 0 0 1rem;
+  }
+  .panel :global(.wide) {
     width: 100%;
     justify-content: center;
     padding: 0.7rem 1rem;
     font-size: 1rem;
-  }
-  .secret {
-    background: var(--warn-bg);
-    color: var(--warn-fg);
-    border-radius: 12px;
-    padding: 0.75rem 0.9rem;
-    margin-bottom: 1rem;
-  }
-  .secret p {
-    margin: 0 0 0.5rem;
-  }
-  .pw {
-    font-size: 1rem;
-    padding: 0.3rem 0.6rem;
-    background: var(--surface);
-    color: var(--text);
-    border-radius: 8px;
-    user-select: all;
-    overflow-wrap: anywhere;
   }
   .next {
     margin: 0 0 1.5rem;
