@@ -275,8 +275,6 @@
   "onboarding_intro": "Let's create the owner account: it's the account that manages this server, independently of Yundera. Choose a username and a password you will remember.",
   "onboarding_username": "Username",
   "onboarding_username_hint": "Lowercase letters, digits, - and _. It can't be changed later.",
-  "onboarding_displayname": "Your name",
-  "onboarding_default_name": "Administrator",
   "onboarding_password": "Password",
   "explain_password": "This password protects your server even if Yundera Login is turned off one day. Write it down somewhere safe: Yundera doesn't know it and can't send it back to you.",
   "onboarding_password_hint": "At least 8 characters.",

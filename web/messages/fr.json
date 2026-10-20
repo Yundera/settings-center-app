@@ -275,8 +275,6 @@
   "onboarding_intro": "Créons le compte propriétaire : c'est le compte qui gère ce serveur, indépendamment de Yundera. Choisissez un identifiant et un mot de passe dont vous vous souviendrez.",
   "onboarding_username": "Identifiant",
   "onboarding_username_hint": "Lettres minuscules, chiffres, - et _. Il ne pourra plus être modifié.",
-  "onboarding_displayname": "Votre nom",
-  "onboarding_default_name": "Administrateur",
   "onboarding_password": "Mot de passe",
   "explain_password": "Ce mot de passe protège votre serveur même si Yundera Login est un jour désactivé. Notez-le en lieu sûr : Yundera ne le connaît pas et ne peut pas vous le renvoyer.",
   "onboarding_password_hint": "Au moins 8 caractères.",

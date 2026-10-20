@@ -413,6 +413,11 @@ func (s *Server) handleOnboardingClaim(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_username", "username must start with a lowercase letter or underscore and contain only lowercase letters, digits, - or _ (max 32)")
 		return
 	}
+	// The onboarding form no longer asks for a name: the owner account is
+	// always shown as "Administrator" unless a caller sends one.
+	if strings.TrimSpace(body.Displayname) == "" {
+		body.Displayname = "Administrator"
+	}
 	if err := hostverb.ValidateDisplayname(strings.TrimSpace(body.Displayname)); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_displayname", err.Error())
 		return

@@ -19,7 +19,6 @@
   } = $props()
 
   let username = $state('')
-  let displayname = $state(m.onboarding_default_name())
   let password = $state('')
   let pwValid = $state(false)
   let busy = $state(false)
@@ -39,7 +38,7 @@
     .then((r) => (login = r.features.find((f) => f.id === 'yundera-login')?.enabled ?? null))
     .catch(() => (login = null))
 
-  const canSubmit = $derived(/^[a-z_][a-z0-9_-]{0,31}$/.test(username) && displayname.trim() !== '' && pwValid && !busy)
+  const canSubmit = $derived(/^[a-z_][a-z0-9_-]{0,31}$/.test(username) && pwValid && !busy)
 
   async function claim(e: SubmitEvent) {
     e.preventDefault()
@@ -48,7 +47,6 @@
     try {
       const res = await api.post<{ claimed: boolean; completed: boolean; username: string; password?: string }>('/api/onboarding/claim', {
         username,
-        displayname,
         password,
       })
       if (res.password) generated = res.password
@@ -94,10 +92,6 @@
       {m.onboarding_username()}
       <input bind:value={username} oninput={() => (username = username.toLowerCase())} autocomplete="username" autocapitalize="off" spellcheck="false" required />
       <span class="hint">{m.onboarding_username_hint()}</span>
-    </label>
-    <label class="field">
-      {m.onboarding_displayname()}
-      <input bind:value={displayname} maxlength="64" required />
     </label>
     <PasswordField bind:value={password} bind:valid={pwValid} min={8} label={m.onboarding_password()} disabled={busy}>
       {#snippet explain()}<Explain>{m.explain_password()}</Explain>{/snippet}
