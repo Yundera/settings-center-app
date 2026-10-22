@@ -192,7 +192,7 @@ func (d *Docker) Run(ctx context.Context, s Spec) (*Result, error) {
 	created, err := d.cli.ContainerCreate(ctx, cfg, &container.HostConfig{
 		Privileged:  true,
 		PidMode:     "host",
-		NetworkMode: "none",
+		NetworkMode: d.networkMode(s),
 		AutoRemove:  s.Detached,
 	}, nil, nil, name)
 	if err != nil {
@@ -271,6 +271,19 @@ func (d *Docker) Run(ctx context.Context, s Spec) (*Result, error) {
 	var stdout, stderr bytes.Buffer
 	_, _ = stdcopy.StdCopy(&stdout, &stderr, rc)
 	return &Result{ExitCode: code, Stdout: stdout.String(), Stderr: tail(stderr.String(), 8000)}, nil
+}
+
+// networkMode picks the runner's network. The verb nsenters the host's network
+// namespace, so the runner's own is never used — but "none" (or "host") still
+// gets an endpoint, and its connect/disconnect events make caddy-docker-proxy
+// rebuild the box's whole config. Joining this container's namespace creates no
+// endpoint and no event. A detached verb keeps "none": it is meant to outlive
+// this container (a self-check recreates it), so it must not depend on it.
+func (d *Docker) networkMode(s Spec) container.NetworkMode {
+	if s.Detached || d.self == "" {
+		return "none"
+	}
+	return container.NetworkMode("container:" + d.self)
 }
 
 // Unavailable is the Runner used when there is no socket.

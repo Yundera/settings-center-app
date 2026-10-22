@@ -20,9 +20,15 @@ import (
 // onbRefreshEvery in the background and right after anything that can change
 // it (a claim, a feature switch, a backup action, a reset). The skip times are
 // applied at read time, so a reminder comes back on the minute it is due.
+//
+// The background tick only catches what changes outside this app (a support
+// reset, a nightly self-check moving the backup state), so it is slow on
+// purpose. Each reading starts two runner containers, and every container
+// lifecycle makes caddy-docker-proxy regenerate the box's whole config:
+// at one minute this kept a 3-vCPU box (yunderalabs, 2026-10-22) at load 8.
 
 const (
-	onbRefreshEvery = time.Minute
+	onbRefreshEvery = 15 * time.Minute
 	onbGatherLimit  = 2 * time.Minute
 	// onbCheckWait bounds the one check that finds no snapshot yet (just after
 	// a start): Maison gives up after ~1.5 s and serves its page anyway.
