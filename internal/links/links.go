@@ -2,7 +2,7 @@
 // host the browser used to reach this one.
 //
 // Every console on a PCS is `<prefix>-<base>`, where <base> is the domain
-// (alice.nsl.sh) or the dashed public IP under nip.io / sslip.io. The prefixes
+// (alice.nsl.sh) or the dashed public IP under ip.<zone>, nip.io or sslip.io. The prefixes
 // are literals in each stack's caddy labels, never env, so swapping `admin-`
 // for another prefix is the one rule that works for all three host forms — the
 // same trick v1's forwardMovedPanels used.

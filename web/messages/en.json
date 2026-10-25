@@ -168,7 +168,7 @@
   "feature_mail_title": "Email sending",
   "feature_mail_what": "Password-reset and notification emails — your server's and your apps' — are sent through Yundera's mail service.",
   "feature_mail_cost": "Not optional yet, and it comes with the domain. Using your own mail server isn't possible yet.",
-  "feature_sslip_title": "Backup address (sslip.io / nip.io)",
+  "feature_sslip_title": "Backup address (sslip.io)",
   "feature_sslip_what": "A second way to reach your apps, based on your server's public address. Useful if the main domain can't be reached.",
   "feature_sslip_cost": "Not optional yet: many apps keep this address in their own settings.",
   "feature_appupdates_title": "Automatic app updates",

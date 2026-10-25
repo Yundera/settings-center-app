@@ -168,7 +168,7 @@
   "feature_mail_title": "Envoi d'e-mails",
   "feature_mail_what": "Les e-mails de réinitialisation de mot de passe et de notification — ceux de votre serveur et de vos applications — passent par le service de messagerie de Yundera.",
   "feature_mail_cost": "Pas encore optionnel, et lié au domaine. Utiliser votre propre serveur de messagerie n'est pas encore possible.",
-  "feature_sslip_title": "Adresse de secours (sslip.io / nip.io)",
+  "feature_sslip_title": "Adresse de secours (sslip.io)",
   "feature_sslip_what": "Un deuxième moyen de joindre vos applications, basé sur l'adresse publique de votre serveur. Utile si le domaine principal est injoignable.",
   "feature_sslip_cost": "Pas encore optionnel : beaucoup d'applications gardent cette adresse dans leurs propres réglages.",
   "feature_appupdates_title": "Mises à jour automatiques des applications",
