@@ -71,7 +71,7 @@ func (e Env) Get(keys ...string) string {
 	return ""
 }
 
-// Dash turns an IP into the form used in sslip.io / nip.io hostnames, as
+// Dash turns an IP into the form used in ip.<zone> / sslip.io hostnames, as
 // ensure-public-ip.sh derives PUBLIC_IP_DASH.
 func Dash(ip string) string {
 	return strings.NewReplacer(".", "-", ":", "-").Replace(ip)
