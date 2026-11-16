@@ -43,7 +43,8 @@ func (s *Server) domain() string {
 }
 
 func (s *Server) links(r *http.Request) links.Links {
-	return links.For(links.Base(r.Host, s.domain()), s.cfg.DashboardURL())
+	base, dot := links.Base(r.Host, s.domain())
+	return links.For(base, dot, s.cfg.DashboardURL())
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {

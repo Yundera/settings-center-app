@@ -26,8 +26,10 @@ export function forwardLegacyHash(): boolean {
   const [, panel, query = ''] = m
   const host = location.hostname
   const target = moved[panel]
-  if (target && host.startsWith('admin-')) {
-    location.replace(`${location.protocol}//${target.prefix}-${host.slice('admin-'.length)}${target.path}${query}`)
+  // Same box, same form: admin-<base> → <prefix>-<base>, admin.<base> → <prefix>.<base>.
+  const sep = host.startsWith('admin-') ? '-' : host.startsWith('admin.') ? '.' : null
+  if (target && sep) {
+    location.replace(`${location.protocol}//${target.prefix}${sep}${host.slice('admin'.length + 1)}${target.path}${query}`)
     return true
   }
   const path = local[panel] ?? '/'

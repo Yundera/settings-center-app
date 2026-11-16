@@ -2,10 +2,12 @@
 // host the browser used to reach this one.
 //
 // Every console on a PCS is `<prefix>-<base>`, where <base> is the domain
-// (alice.nsl.sh) or the dashed public IP under ip.<zone>, nip.io or sslip.io. The prefixes
-// are literals in each stack's caddy labels, never env, so swapping `admin-`
-// for another prefix is the one rule that works for all three host forms — the
-// same trick v1's forwardMovedPanels used.
+// (alice.nsl.sh) or the dashed public IP under ip.<zone>, nip.io or sslip.io,
+// and, for the domain, also `<prefix>.<base>` (the dot form, inside the user's
+// zone). The prefixes are literals in each stack's caddy labels, never env, so
+// swapping `admin` for another prefix, keeping the separator the browser used,
+// is the one rule that works for every host form — the same trick v1's
+// forwardMovedPanels used.
 package links
 
 import (
@@ -29,21 +31,31 @@ type Links struct {
 
 var hostRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
 
-// Base returns the box base for host, or fallback when host is not one of
-// ours (a direct hit on admin-app over pcs, a dev run on localhost).
-func Base(host, fallback string) string {
+// Base returns the box base for host and whether the browser used the dot form
+// (`admin.<base>`), or fallback (dash) when host is not one of ours (a direct
+// hit on admin-app over pcs, a dev run on localhost).
+func Base(host, fallback string) (base string, dot bool) {
 	h := strings.ToLower(strings.TrimSpace(host))
 	if hh, _, err := net.SplitHostPort(h); err == nil {
 		h = hh
 	}
 	if b, ok := strings.CutPrefix(h, "admin-"); ok && hostRe.MatchString(b) && strings.Contains(b, ".") {
-		return b
+		return b, false
 	}
-	return strings.ToLower(fallback)
+	if b, ok := strings.CutPrefix(h, "admin."); ok && hostRe.MatchString(b) && strings.Contains(b, ".") {
+		return b, true
+	}
+	return strings.ToLower(fallback), false
 }
 
-func For(base, dashboard string) Links {
-	sub := func(prefix string) string { return "https://" + prefix + "-" + base }
+// For builds the box's console links on base, in the form the browser used:
+// `<prefix>.<base>` when dot, else `<prefix>-<base>`.
+func For(base string, dot bool, dashboard string) Links {
+	sep := "-"
+	if dot {
+		sep = "."
+	}
+	sub := func(prefix string) string { return "https://" + prefix + sep + base }
 	return Links{
 		Base:          base,
 		Root:          "https://" + base,
