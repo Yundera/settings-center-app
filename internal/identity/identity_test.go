@@ -366,3 +366,27 @@ func TestKeyRoute(t *testing.T) {
 		t.Fatal("private component served")
 	}
 }
+
+func TestBundleLinesOptionalBackupSpace(t *testing.T) {
+	b := Bundle{"UID": "u", "DOMAIN": "d", "EMAIL": "", "DOMAIN_UID": "x", "USER_JWT": "a.b.c", "PROVIDER_STR": "p"}
+	if strings.Contains(string(b.Lines()), "BACKUP_SPACE_ID") {
+		t.Fatalf("absent optional key written: %q", b.Lines())
+	}
+	b["BACKUP_SPACE_ID"] = "none"
+	if !strings.HasSuffix(string(b.Lines()), "PROVIDER_STR=p\nBACKUP_SPACE_ID=none\n") {
+		t.Fatalf("lines = %q", b.Lines())
+	}
+	for _, v := range []string{"none", "0123456789abcdef0123456789abcdef"} {
+		if !shapes["BACKUP_SPACE_ID"].MatchString(v) {
+			t.Errorf("%q rejected", v)
+		}
+	}
+	for _, v := range []string{"", "NONE", "../x", "0123", "abc def"} {
+		if shapes["BACKUP_SPACE_ID"].MatchString(v) {
+			t.Errorf("%q accepted", v)
+		}
+	}
+	if !identityChangedRe.MatchString("Applied\nbackup-space-changed\n") {
+		t.Error("backup-space-changed does not start a self-check")
+	}
+}

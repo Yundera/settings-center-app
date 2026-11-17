@@ -164,7 +164,7 @@ func (rc *Receiver) HandlePush(w http.ResponseWriter, r *http.Request) {
 	}
 	suffix := ""
 	if changed {
-		suffix = ", domain identity changed: self-check started"
+		suffix = ", identity or backup binding changed: self-check started"
 	}
 	log.Printf("identity: applied a pushed identity (iat %d)%s", v.Iat, suffix)
 	w.Header().Set("Cache-Control", "no-store")
@@ -188,7 +188,10 @@ func (rc *Receiver) hostAddresses(ctx context.Context) (map[string]bool, error) 
 	return out, nil
 }
 
-var identityChangedRe = regexp.MustCompile(`(?m)^identity-changed$`)
+// apply-identity.sh prints identity-changed when the domain identity moved, and
+// backup-space-changed when the box's backup-space binding did. Either starts a
+// self-check: the mesh re-registers, or the backup credential is fetched again.
+var identityChangedRe = regexp.MustCompile(`(?m)^(identity-changed|backup-space-changed)$`)
 
 func (rc *Receiver) apply(ctx context.Context, v *Verified) (changed bool, err error) {
 	p := rc.Paths()

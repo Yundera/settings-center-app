@@ -28,6 +28,12 @@ func reject(format string, a ...any) error { return Rejected{fmt.Sprintf(format,
 // Keys are the bundle fields, in the order apply-identity.sh is fed them.
 var Keys = []string{"UID", "DOMAIN", "EMAIL", "DOMAIN_UID", "USER_JWT", "PROVIDER_STR"}
 
+// OptionalKeys may be absent; when present they are checked like the rest and
+// fed to apply-identity.sh after Keys. BACKUP_SPACE_ID is the box's backup-space
+// binding (a spaceId, or "none" once the user unbound it); an orchestrator
+// older than it does not send it.
+var OptionalKeys = []string{"BACKUP_SPACE_ID"}
+
 // Every value ends up in an env file through a shell script, so each one has a
 // strict shape: no quotes, whitespace or `$`. EMAIL may legitimately be empty.
 var shapes = map[string]*regexp.Regexp{
@@ -37,6 +43,7 @@ var shapes = map[string]*regexp.Regexp{
 	"DOMAIN_UID":   regexp.MustCompile(`^[A-Za-z0-9_.@-]{1,200}$`),
 	"USER_JWT":     regexp.MustCompile(`^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$`),
 	"PROVIDER_STR": regexp.MustCompile(`^https://[A-Za-z0-9.-]+,[A-Za-z0-9_.@-]+,[A-Za-z0-9]+$`),
+	"BACKUP_SPACE_ID": regexp.MustCompile(`^([0-9a-f]{16,64}|none)$`),
 }
 
 type Bundle map[string]string
@@ -46,6 +53,11 @@ func (b Bundle) Lines() []byte {
 	var s strings.Builder
 	for _, k := range Keys {
 		s.WriteString(k + "=" + b[k] + "\n")
+	}
+	for _, k := range OptionalKeys {
+		if v, ok := b[k]; ok {
+			s.WriteString(k + "=" + v + "\n")
+		}
 	}
 	return []byte(s.String())
 }
@@ -142,6 +154,17 @@ func Open(ctx context.Context, jwe string, take func(string) *ecdh.PrivateKey, i
 	b := Bundle{}
 	for _, k := range Keys {
 		v, ok := raw[k].(string)
+		if !ok || len(v) > 4096 || !shapes[k].MatchString(v) {
+			return nil, reject("bad %s", k)
+		}
+		b[k] = v
+	}
+	for _, k := range OptionalKeys {
+		rv, present := raw[k]
+		if !present {
+			continue
+		}
+		v, ok := rv.(string)
 		if !ok || len(v) > 4096 || !shapes[k].MatchString(v) {
 			return nil, reject("bad %s", k)
 		}
